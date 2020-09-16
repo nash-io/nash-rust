@@ -1,0 +1,5 @@
+mutation CancelOrder($payload: CancelOrderParams!, $signature: Signature!){
+  cancelOrder(payload: $payload, signature: $signature){
+  	orderId
+  }
+}

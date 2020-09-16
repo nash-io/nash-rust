@@ -1,0 +1,56 @@
+query GetTicker($marketName: MarketName!){
+	getTicker(marketName: $marketName){
+    id,
+    aVolume24h {
+      amount,
+      currency
+    },
+    bVolume24h {
+      amount,
+      currency
+    },
+    bestAskPrice {
+      amount,
+      currencyA,
+      currencyB
+    },
+    bestAskSize {
+      amount,
+      currency
+    },
+    bestBidPrice {
+      amount,
+      currencyA,
+      currencyB
+    },
+    bestBidSize {
+      amount,
+      currency
+    },
+    highPrice24h {
+      amount,
+      currencyA,
+      currencyB
+    },
+    lastPrice {
+      amount,
+      currencyA,
+      currencyB
+    },
+    lowPrice24h {
+      amount,
+      currencyA,
+      currencyB
+    },
+    priceChange24h{
+      amount,
+      currencyA,
+      currencyB
+    },
+    volume24h {
+      amount,
+      currency
+    }
+    marketName,
+  }
+}

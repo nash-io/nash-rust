@@ -1,0 +1,17 @@
+mutation PlaceLimitOrder(
+    $payload: PlaceLimitOrderParams!
+    $signature: Signature!
+    $affiliate: AffiliateDeveloperCode
+) {
+    placeLimitOrder(payload: $payload, signature: $signature, affiliateDeveloperCode:$affiliate) {
+        id
+        status
+        ordersTillSignState,
+        buyOrSell,
+        market {
+            name
+        },
+        placedAt,
+        type
+    }
+}

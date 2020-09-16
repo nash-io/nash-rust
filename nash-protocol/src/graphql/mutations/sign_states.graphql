@@ -1,0 +1,22 @@
+mutation SignStates($payload: SignStatesParams!, $signature: Signature!){
+  signStates(payload: $payload, signature: $signature){
+    recycledOrders {
+      blockchain,
+      message
+    },
+   serverSignedStates{
+     blockchain,
+     message
+  },
+  states {
+    address,
+    balance{
+      amount
+      currency
+    },
+    blockchain,
+    message,
+    nonce
+  }
+  }
+}

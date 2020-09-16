@@ -1,0 +1,79 @@
+query GetAccountOrder($payload: GetAccountOrderParams!){
+  getAccountOrder(payload: $payload){
+    amount {
+      amount,
+      currency
+    },
+    amountExecuted {
+      amount,
+      currency
+    },
+    amountRemaining {
+      amount,
+      currency
+    },
+    avgExecutedPrice {
+      amount,
+      currencyA,
+      currencyB
+    },
+    buyOrSell,
+    placedAt,
+    cancelAt,
+    cancellationPolicy,
+    cancellationReason,
+    id,
+    limitPrice {
+      amount,
+      currencyA,
+      currencyB
+    },
+    stopPrice {
+      amount,
+      currencyA,
+      currencyB
+    },
+    market{
+      name,
+      id
+    },
+    status,
+    type,
+    trades {
+      id,
+      accountSide,
+      makerOrderId,
+      takerOrderId,
+      makerReceived {
+        amount,
+        currency
+      },
+      takerReceived {
+        amount,
+        currency
+      }
+      amount {
+        amount,
+        currency
+      },
+      executedAt,
+      makerFee {
+        amount,
+        currency
+      },
+      takerFee {
+        amount,
+        currency
+      },
+      market {
+        name
+      },
+      direction,
+      limitPrice {
+        amount
+        currencyA,
+        currencyB
+      },
+    }
+  }
+}

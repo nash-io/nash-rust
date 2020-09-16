@@ -1,0 +1,68 @@
+//! The `State` struct captures all mutable state within protocol, such as asset nonces
+//! r-values, blockchain keys, and so on.
+
+use crate::errors::{ProtocolError, Result};
+use crate::types::{Asset, Market};
+use std::collections::HashMap;
+
+use super::signer::Signer;
+
+//****************************************//
+//  Protocol state representation         //
+//****************************************//
+
+/// Client state shared across the protocol.
+#[derive(Debug)]
+pub struct State {
+    // Inside here we will have an explicit definition of all mutable
+    // protocol state. To see how any particular protocol request modifies
+    // state, can look at the impl of `process_response`.
+    // `signer` is an wrapper around keys used by the client for signing
+    pub signer: Option<Signer>,
+    // incrementing `asset_nonces` are used to invalidate old state in the channel
+    // here we keep track of the latest nonce for each asset
+    pub asset_nonces: HashMap<String, Vec<u32>>,
+    // list of markets pulled from nash
+    pub markets: Option<Vec<Market>>,
+    // list of assets supported for trading in nash
+    pub assets: Option<Vec<Asset>>,
+    // remaining orders before state signing is required
+    pub remaining_orders: u64,
+    // optional affiliate code, will recieve a share of fees generated
+    pub affiliate_code: Option<String>, // FIXME: move r-pool from global indexmap here
+}
+
+impl State {
+    pub fn new(keys_path: Option<&str>) -> Result<Self> {
+        let signer = match keys_path {
+            Some(path) => Some(Signer::new(path)?),
+            None => None,
+        };
+        Ok(Self {
+            signer,
+            remaining_orders: 0,
+            affiliate_code: None,
+            markets: None,
+            assets: None,
+            asset_nonces: HashMap::new(),
+        })
+    }
+
+    pub fn from_key_data(secret: &str, session: &str) -> Result<Self> {
+        let signer = Some(Signer::from_data(secret, session)?);
+        Ok(Self {
+            signer,
+            remaining_orders: 0,
+            affiliate_code: None,
+            markets: None,
+            assets: None,
+            asset_nonces: HashMap::new(),
+        })
+    }
+
+    pub fn signer(&mut self) -> Result<&mut Signer> {
+        self.signer
+            .as_mut()
+            .ok_or(ProtocolError("Signer not initiated"))
+    }
+}

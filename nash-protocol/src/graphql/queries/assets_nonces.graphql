@@ -1,0 +1,9 @@
+query GetAssetsNonces(
+    $payload: GetAssetsNoncesParams!
+    $signature: Signature!
+  ) {
+    getAssetsNonces(payload: $payload, signature: $signature) {
+      asset
+      nonces
+    }
+  }

@@ -1,0 +1,17 @@
+query ListAccountBalances($payload: ListAccountBalancesParams!){
+  listAccountBalances(payload: $payload){
+    asset {
+      name,
+      symbol
+    },
+    available {
+      amount
+    },
+    pending {
+      amount
+    },
+    personal {
+      amount
+    }
+  }
+}

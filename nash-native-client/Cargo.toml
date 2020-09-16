@@ -1,0 +1,25 @@
+[package]
+name = "nash-native-client"
+version = "0.1.1"
+authors = ["Ethan Fast <ethan@nash.io>"]
+edition = "2018"
+
+[lib]
+name = "nash_native_client"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["rust_gmp"]
+rust_gmp = ["nash-protocol/rust_gmp"]
+num_bigint = ["nash-protocol/num_bigint"]
+
+[dependencies]
+nash-protocol = { version = "*", path = "../nash-protocol", default-features = false }
+tokio-tungstenite = {version = "0.11", features=["tls"]}
+tokio = {version = "0.2.22", features=["full", "rt-threaded", "time"]}
+tokio-native-tls = {version = "0.1"}
+serde = "1.0"
+serde_json = "1.0"
+futures = "0.3.4"
+futures-util = "0.3"
+chrono = "0.4"

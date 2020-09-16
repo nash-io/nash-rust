@@ -1,0 +1,3 @@
+mutation DhFillPool($blockchain: Blockchain!, $dhPublics: [Base16]!){
+    dhFillPool(blockchain: $blockchain, dhPublics: $dhPublics)
+}

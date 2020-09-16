@@ -1,0 +1,12 @@
+subscription SubscribeTrades($marketName: MarketName!){
+  newTrades(marketName: $marketName){
+    amount{
+      amount, currency
+    },
+    direction,
+    limitPrice{
+      amount, currencyA, currencyB
+    },
+    executedAt
+  }
+}

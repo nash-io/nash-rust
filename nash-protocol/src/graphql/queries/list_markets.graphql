@@ -1,0 +1,20 @@
+query ListMarkets{
+  listMarkets{
+  	aAsset {
+      name,
+      symbol
+    },
+    bAsset {
+      name,
+      symbol
+    },
+    id,
+    minTradeSize,
+    minTradeSizeB,
+    minTradeIncrement,
+    minTradeIncrementB,
+    status,
+    primary,
+    name
+  }
+}

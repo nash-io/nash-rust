@@ -1,0 +1,30 @@
+query ListCandles($before: DateTime, $chronological: Boolean, $interval:CandleInterval, $limit: Int, $marketName: MarketName!, $rangeStart: DateTime, $rangeStop: DateTime){
+	listCandles(before: $before, chronological: $chronological, interval: $interval, limit: $limit, marketName: $marketName, rangeStart: $rangeStart, rangeStop: $rangeStop){
+    next,
+    market {
+      name
+    },
+    candles {
+      aVolume {
+        amount
+      },
+      bVolume {
+        amount
+      },
+      closePrice {
+        amount
+      },
+      highPrice {
+        amount
+      },
+      interval,
+      intervalStartingAt,
+      lowPrice {
+        amount
+      },
+      openPrice {
+        amount
+      }
+    }
+  }
+}

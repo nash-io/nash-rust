@@ -1,0 +1,20 @@
+subscription UpdatedOrderbook($marketName: MarketName!){
+  updatedOrderBook(marketName: $marketName){
+    asks {
+      amount{
+        amount, currency
+      },
+      price {
+        amount
+      }
+    },
+    bids {
+      amount{
+        amount, currency
+      },
+      price {
+        amount
+      }
+    }
+  }
+}

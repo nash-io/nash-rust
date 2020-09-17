@@ -1,14 +1,14 @@
 //! These traits describe the high level behavior of the Nash protocol. Clients can use them
 //! to provide a generic implementation across requests
 use super::{ProtocolHook, ResponseOrError, State};
-
 use crate::errors::ProtocolError;
 use crate::errors::Result;
 use std::fmt::Debug;
-
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 //****************************************//
 //  Nash protocol trait                   //
@@ -157,7 +157,7 @@ where
 /// asset nonces once that is available on the backend.
 #[async_trait]
 pub trait NashProtocolSubscription: Clone {
-    type SubscriptionResponse: Sync;
+    type SubscriptionResponse: Sync + Serialize + DeserializeOwned;
     /// Convert the protocol request to GraphQL from communication with Nash server
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value>;
     /// Convert JSON response from incoming subscription data into protocol's associated type

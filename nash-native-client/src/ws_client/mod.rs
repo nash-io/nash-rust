@@ -2,3 +2,4 @@
 
 pub mod absinthe;
 pub mod client;
+pub mod stream;

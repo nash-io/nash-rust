@@ -6,6 +6,7 @@ use crate::errors::{ProtocolError, Result};
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -25,7 +26,7 @@ impl Blockchain {
 /// Assets are the units of value that can be traded in a market
 /// We also use this type as a root for encodings for smart contract
 /// operations defined in super::sc_payloads
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Asset {
     ETH,
     BAT,
@@ -119,7 +120,7 @@ impl Asset {
 
 /// Assets can potentially have different precisions across markets.
 /// This keeps track of what precision we are dealing with
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AssetofPrecision {
     pub asset: Asset,
     pub precision: u32,
@@ -156,7 +157,7 @@ impl Asset {
 }
 
 /// A specific amount of an asset being traded
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetAmount {
     pub asset: AssetofPrecision,
     pub amount: Amount,
@@ -175,7 +176,7 @@ impl AssetAmount {
 
 /// This type encodes all the information necessary for a client operating
 /// over the protocol to understand a market.
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Market {
     // FIXME: probably more things here?
     pub asset_a: AssetofPrecision,
@@ -258,14 +259,14 @@ impl Market {
 
 /// Buy or sell type for Nash protocol. We don't use the one generated automatically
 /// from the GraphQL schema as it does not implement necessary traits like Clone
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BuyOrSell {
     Buy,
     Sell,
 }
 
 /// Type of order execution in Nash ME
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
     Market,
     Limit,
@@ -376,7 +377,7 @@ type FeeRate = OrderRate;
 /// being traded. For example, in the ETH/USD market, ETH has a precision
 /// of 4. In an A/B market, amount is always in units of A.
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Amount {
     pub precision: u32,
     pub value: BigDecimal,
@@ -498,7 +499,7 @@ pub enum OrderStatus {
 }
 
 /// Representation of executed trade
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SubscriptionTrade {
     pub amount: AssetAmount,
     pub order_type: BuyOrSell,
@@ -570,7 +571,7 @@ pub struct Order {
 }
 
 /// Compressed representation for Order as returned by Orderbook queries and subscriptions
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrderbookOrder {
     pub price: String,
     pub amount: AssetAmount,

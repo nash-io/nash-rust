@@ -178,6 +178,8 @@ pub struct Client {
     message_broker: MessageBroker,
     state: Arc<Mutex<State>>,
     timeout: u64,
+    global_subscription_sender: UnboundedSender<serde_json::Value>,
+    pub(crate) global_subscription_receiver: UnboundedReceiver<serde_json::Value>
 }
 
 impl Client {
@@ -256,6 +258,8 @@ impl Client {
         // start a heartbeat loop
         spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
 
+        let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
+
         Ok(Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
             ws_incoming_reciever,
@@ -264,6 +268,8 @@ impl Client {
             message_broker,
             state: Arc::new(Mutex::new(state)),
             timeout,
+            global_subscription_sender,
+            global_subscription_receiver
         })
     }
 
@@ -371,7 +377,7 @@ impl Client {
     /// Entry point for running Nash protocol subscriptions.
     /// This returns a `Map` over a `Stream` where the map returns a `Future` that
     /// will resolve with the response parsed appropriately
-    pub async fn subscribe_protocol<T: NashProtocolSubscription + Sync + 'static>(
+    pub async fn subscribe_protocol<T>(
         &self,
         request: T,
     ) -> Result<
@@ -385,7 +391,11 @@ impl Client {
                 >,
             >,
         >,
-    > {
+    > 
+    where
+        T: NashProtocolSubscription + Sync + 'static,
+        <T as nash_protocol::protocol::NashProtocolSubscription>::SubscriptionResponse: serde::Serialize
+    {
         let query = request.graphql(self.state.clone()).await?;
         // a subscription starts with a normal request
         let subscription_response = self
@@ -412,6 +422,7 @@ impl Client {
         // Create a copy of the Request and Arc<Mutex<State>> that will be moved into the Map struct
         let request = request.clone();
         let state = self.state.clone();
+        let global_subscription_sender = self.global_subscription_sender.clone();
         Ok(callback_channel.map(Box::new(move |response| {
             // Now create another copy of them that will be move into the Future
             // I don't think we can use a reference for the request here due to
@@ -427,6 +438,11 @@ impl Client {
                         .process_subscription_response(sub_response, state)
                         .await?;
                 }
+                let as_json_string = serde_json::to_string(&sub_response).map_err(|_| {
+                    ProtocolError("Could not serialize subscription response to string")
+                })?;
+                let as_json = serde_json::from_str(&as_json_string).expect("impossible to fail in subscription");
+                global_subscription_sender.send(as_json);
                 Ok(sub_response)
             })
         })))

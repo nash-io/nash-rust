@@ -1,6 +1,6 @@
 use super::super::super::{DataResponse, ResponseOrError};
 use super::types::{SubscribeOrderbook, SubscribeOrderbookResponse};
-use crate::types::OrderbookOrder;
+use crate::types::{OrderbookOrder, Market};
 use crate::errors::Result;
 use crate::graphql::updated_orderbook;
 
@@ -14,18 +14,20 @@ impl SubscribeOrderbook {
             ResponseOrError::Response(data) => {
                 let response = data.data;
                 let book = response.updated_order_book;
+                let market_name = book.market.name;
+                let market = Market::from_str(&market_name)?;
                 let mut asks = Vec::new();
                 let mut bids = Vec::new();
                 for ask in book.asks {
                     asks.push(OrderbookOrder {
                         price: ask.price.amount.to_string(),
-                        amount: self.market.asset_a.with_amount(&ask.amount.amount)?,
+                        amount: market.asset_a.with_amount(&ask.amount.amount)?,
                     });
                 }
                 for bid in book.bids {
                     bids.push(OrderbookOrder {
                         price: bid.price.amount.to_string(),
-                        amount: self.market.asset_a.with_amount(&bid.amount.amount)?,
+                        amount: market.asset_a.with_amount(&bid.amount.amount)?,
                     });
                 }
                 Ok(ResponseOrError::Response(DataResponse {

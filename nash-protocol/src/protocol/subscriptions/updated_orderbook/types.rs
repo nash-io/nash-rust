@@ -3,17 +3,17 @@ use super::super::super::{
 };
 use crate::errors::Result;
 use crate::types::{Market, OrderbookOrder};
-
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbook {
     pub market: Market,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SubscribeOrderbookResponse {
     pub bids: Vec<OrderbookOrder>,
     pub asks: Vec<OrderbookOrder>

@@ -154,27 +154,57 @@ impl MessageBroker {
     }
 }
 
-fn global_subscription_loop<T: NashProtocolSubscription + Send + 'static>(
+fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>(
     mut callback_channel: UnboundedReceiver<AbsintheWSResponse>, 
-    user_callback_sender: UnboundedSender<AbsintheWSResponse>,
+    user_callback_sender: UnboundedSender<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
     global_subscription_sender: UnboundedSender<SubscriptionResponse>,
-    request: T
+    request: T,
+    state: Arc<Mutex<State>>
 ) {
     tokio::spawn(async move {
         loop {
             let response = callback_channel.next().await;
+            // is there a valid incoming payload?
             if let Some(response) = response {
-                if let Err(_e) = user_callback_sender.send(response.clone()) {
-                    break;
-                }
+                // can the payload json be parsed?
                 if let Ok(json_payload) = response.subscription_json_payload() {
+                    // First do normal subscription logic
+                    let sub_response = request.subscription_response_from_json(json_payload.clone());
+                    if let Ok(sub_response) = sub_response {
+                        if let Some(sub_response) = sub_response.response() {
+                            if let Err(e) = request
+                                .process_subscription_response(sub_response, state.clone())
+                                .await {
+                                    // kill process due to failure to process subscription response
+                                    break;
+                                }
+                        } else {
+                            // kill process due to failure to process the subscription response
+                            break;
+                        }
+                        if let Err(_e) = user_callback_sender.send(sub_response) {
+                            // kill process due to failure to send
+                            break;
+                        }
+                    } else {
+                        // kill process due to unprocessable Value as subscription
+                        break;
+                    }
+                    // Now do GLOBAL subscription logic
                     if let Ok(wrapped) = request.wrap_response_as_any_subscription(json_payload){
                         if let Err(e) = global_subscription_sender.send(wrapped) {
                             break;
                         }
+                    } else {
+                        // kill proccess due to unprocessable global subscription payload
+                        break;
                     }
+                } else {
+                    // Kill process due to unparsable absinthe payload
+                    break;
                 }
             } else {
+                // kill process due to closed channel
                 break;
             }
         }
@@ -408,18 +438,7 @@ impl Client {
     pub async fn subscribe_protocol<T>(
         &self,
         request: T,
-    ) -> Result<
-        StreamMap<
-            UnboundedReceiver<AbsintheWSResponse>,
-            Box<
-                dyn Fn(
-                    AbsintheWSResponse,
-                ) -> Pin<
-                    Box<dyn Future<Output = Result<ResponseOrError<T::SubscriptionResponse>>>>,
-                >,
-            >,
-        >,
-    > 
+    ) -> Result<UnboundedReceiver<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>> 
     where
         T: NashProtocolSubscription + Send + Sync + 'static
     {
@@ -432,7 +451,7 @@ impl Client {
             .await
             .ok_or(ProtocolError("Could not get subscription response"))?;
         // create a channel where associated data will be pushed back
-        let (for_broker, mut callback_channel) = unbounded_channel();
+        let (for_broker, callback_channel) = unbounded_channel();
         let broker_link = self.message_broker.link.clone();
         // use subscription id on the response we got back from the subscription query
         // to register incoming data with the broker
@@ -457,32 +476,11 @@ impl Client {
             callback_channel, 
             user_callback_sender, 
             global_subscription_sender.clone(), 
-            request.clone()
+            request.clone(),
+            state.clone()
         );
 
-        Ok(user_callback_receiver.map(Box::new(move |response| {
-            // Now create another copy of them that will be move into the Future
-            // I don't think we can use a reference for the request here due to
-            // conflicting lifetimes
-            let request = request.clone();
-            let state = state.clone();
-            let global_subscription_sender = global_subscription_sender.clone();
-            Box::pin(async move {
-                // For some dumb reason, Absinthe encodes subscription responses differently
-                let json_payload = response.subscription_json_payload()?;
-                let sub_response = request.subscription_response_from_json(json_payload.clone())?;
-                let wrapped = request.wrap_response_as_any_subscription(json_payload)?;
-                if let Some(sub_response) = sub_response.response() {
-                    request
-                        .process_subscription_response(sub_response, state)
-                        .await?;
-                }
-                global_subscription_sender.send(wrapped).map_err(|_| {
-                    ProtocolError("Failed to send subscription data to global stream")
-                })?;
-                Ok(sub_response)
-            })
-        })))
+        Ok(user_callback_receiver)
     }
 
     async fn request(
@@ -798,9 +796,9 @@ mod tests {
                 })
                 .await
                 .unwrap();
-            let next_item = response.next().await.unwrap().await.unwrap();
+            let next_item = response.next().await.unwrap();
             println!("{:?}", next_item);
-            let next_item = response.next().await.unwrap().await.unwrap();
+            let next_item = response.next().await.unwrap();
             println!("{:?}", next_item);
         };
         runtime.block_on(async_block);

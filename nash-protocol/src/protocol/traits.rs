@@ -158,7 +158,7 @@ where
 /// asset nonces once that is available on the backend.
 #[async_trait]
 pub trait NashProtocolSubscription: Clone {
-    type SubscriptionResponse: Sync;
+    type SubscriptionResponse: Send + Sync;
     /// Convert the protocol request to GraphQL from communication with Nash server
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value>;
     /// Convert JSON response from incoming subscription data into protocol's associated type

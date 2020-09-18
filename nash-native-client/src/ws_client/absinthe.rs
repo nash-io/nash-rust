@@ -60,7 +60,7 @@ impl AbsintheWSRequest {
 /// apart because ResponsePayload only needs to be Deserializable, and
 /// this is important for some of the GraphQL type implementations
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct AbsintheWSResponse {
     ref_join_id: Option<AbsintheInt>,
     ref_id: Option<AbsintheInt>,
@@ -140,7 +140,7 @@ impl AbsintheInt {
 // We can similarly create an enum for the responses. This is important to
 // have a single type for responses we will push back up over the channel.
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ResponsePayload {
     SubSetup(SubscriptionSetupResponse), // for subscription setup
@@ -170,24 +170,24 @@ impl ResponsePayload {
 }
 
 // here is format for query response
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct QueryResponse {
     pub response: serde_json::Value,
     pub status: String,
 }
 
 // here is format for subscription response
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct SubscriptionResponse {
     result: serde_json::Value,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionSetup {
     subscription_id: String,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct SubscriptionSetupResponse {
     response: SubscriptionSetup,
     status: String,

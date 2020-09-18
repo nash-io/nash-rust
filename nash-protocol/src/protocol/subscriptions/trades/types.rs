@@ -6,19 +6,9 @@ use crate::types::{Market, SubscriptionTrade};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use super::super::SubscriptionResponse;
-
-#[derive(Clone, Debug)]
-pub struct SubscribeTrades {
-    pub market: Market,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TradesResponse {
-    pub market: Market,
-    pub trades: Vec<SubscriptionTrade>,
-}
+use super::request::SubscribeTrades;
+use super::response::TradesResponse;
 
 #[async_trait]
 impl NashProtocolSubscription for SubscribeTrades {

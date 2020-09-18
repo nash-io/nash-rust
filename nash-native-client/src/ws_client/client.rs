@@ -100,12 +100,11 @@ pub enum BrokerAction {
 }
 
 struct MessageBroker {
-    link: UnboundedSender<BrokerAction>,
-    global_subscription_sender: UnboundedSender<SubscriptionResponse>
+    link: UnboundedSender<BrokerAction>
 }
 
 impl MessageBroker {
-    pub fn new(global_subscription_sender: UnboundedSender<SubscriptionResponse>) -> Self {
+    pub fn new() -> Self {
         let (link, mut internal_reciever) = unbounded_channel();
         tokio::spawn(async move {
             let mut request_map = HashMap::new();
@@ -131,8 +130,6 @@ impl MessageBroker {
                                         // Kill process on error
                                         break;
                                     }
-                                    // let json_payload =
-                                    // if let Err(_ignore) = global_subscription_sender.send()
                                 }
                             }
                             // otherwise check if it is a response to a registered request
@@ -153,8 +150,35 @@ impl MessageBroker {
                 }
             }
         });
-        Self { link, global_subscription_sender }
+        Self { link }
     }
+}
+
+fn global_subscription_loop<T: NashProtocolSubscription + Send + 'static>(
+    mut callback_channel: UnboundedReceiver<AbsintheWSResponse>, 
+    user_callback_sender: UnboundedSender<AbsintheWSResponse>,
+    global_subscription_sender: UnboundedSender<SubscriptionResponse>,
+    request: T
+) {
+    tokio::spawn(async move {
+        loop {
+            let response = callback_channel.next().await;
+            if let Some(response) = response {
+                if let Err(_e) = user_callback_sender.send(response.clone()) {
+                    break;
+                }
+                if let Ok(json_payload) = response.subscription_json_payload() {
+                    if let Ok(wrapped) = request.wrap_response_as_any_subscription(json_payload){
+                        if let Err(e) = global_subscription_sender.send(wrapped) {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+    });
 }
 
 pub enum Environment {
@@ -245,7 +269,7 @@ impl Client {
 
         let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
 
-        let message_broker = MessageBroker::new(global_subscription_sender.clone());
+        let message_broker = MessageBroker::new();
 
         // This will loop over WS connection, send things out, and route things in
         spawn_sender_loop(
@@ -397,8 +421,7 @@ impl Client {
         >,
     > 
     where
-        T: NashProtocolSubscription + Sync + 'static,
-        <T as nash_protocol::protocol::NashProtocolSubscription>::SubscriptionResponse: serde::Serialize
+        T: NashProtocolSubscription + Send + Sync + 'static
     {
         let query = request.graphql(self.state.clone()).await?;
         // a subscription starts with a normal request
@@ -409,7 +432,7 @@ impl Client {
             .await
             .ok_or(ProtocolError("Could not get subscription response"))?;
         // create a channel where associated data will be pushed back
-        let (for_broker, callback_channel) = unbounded_channel();
+        let (for_broker, mut callback_channel) = unbounded_channel();
         let broker_link = self.message_broker.link.clone();
         // use subscription id on the response we got back from the subscription query
         // to register incoming data with the broker
@@ -426,8 +449,18 @@ impl Client {
         // Create a copy of the Request and Arc<Mutex<State>> that will be moved into the Map struct
         let request = request.clone();
         let state = self.state.clone();
+
         let global_subscription_sender = self.global_subscription_sender.clone();
-        Ok(callback_channel.map(Box::new(move |response| {
+        let (user_callback_sender, user_callback_receiver) = unbounded_channel();
+
+        global_subscription_loop(
+            callback_channel, 
+            user_callback_sender, 
+            global_subscription_sender.clone(), 
+            request.clone()
+        );
+
+        Ok(user_callback_receiver.map(Box::new(move |response| {
             // Now create another copy of them that will be move into the Future
             // I don't think we can use a reference for the request here due to
             // conflicting lifetimes
@@ -517,8 +550,8 @@ mod tests {
     use nash_protocol::protocol::place_order::types::LimitOrderRequest;
     use nash_protocol::protocol::sign_all_states::SignAllStates;
     use nash_protocol::protocol::sign_states::types::SignStatesRequest;
-    use nash_protocol::protocol::subscriptions::trades::types::SubscribeTrades;
-    use nash_protocol::protocol::subscriptions::updated_orderbook::types::SubscribeOrderbook;
+    use nash_protocol::protocol::subscriptions::trades::request::SubscribeTrades;
+    use nash_protocol::protocol::subscriptions::updated_orderbook::request::SubscribeOrderbook;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, Market, OrderCancellationPolicy, OrderStatus,
         OrderType,

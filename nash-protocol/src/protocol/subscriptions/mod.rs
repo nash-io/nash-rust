@@ -5,6 +5,6 @@ use super::graphql::ResponseOrError;
 
 #[derive(Debug)]
 pub enum SubscriptionResponse {
-    UpdatedOrderbook(ResponseOrError<updated_orderbook::types::SubscribeOrderbookResponse>),
-    NewTrade(ResponseOrError<trades::types::TradesResponse>)
+    UpdatedOrderbook(ResponseOrError<updated_orderbook::response::SubscribeOrderbookResponse>),
+    NewTrade(ResponseOrError<trades::response::TradesResponse>)
 }

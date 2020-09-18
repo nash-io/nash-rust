@@ -1,9 +1,15 @@
 use super::super::super::ResponseOrError;
-use super::types::{SubscribeTrades, TradesResponse};
 use crate::errors::Result;
 use crate::graphql;
-use crate::types::{BuyOrSell, SubscriptionTrade};
+use crate::types::{BuyOrSell, SubscriptionTrade, Market};
 use graphql::subscribe_trades;
+use super::request::SubscribeTrades;
+
+#[derive(Clone, Debug)]
+pub struct TradesResponse {
+    pub market: Market,
+    pub trades: Vec<SubscriptionTrade>,
+}
 
 impl SubscribeTrades {
     pub fn response_from_graphql(

@@ -20,6 +20,7 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{connect_async, stream::Stream, WebSocketStream};
 
 use nash_protocol::errors::{ProtocolError, Result};
+use nash_protocol::protocol::subscriptions::SubscriptionResponse;
 
 use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheWSResponse};
 
@@ -100,10 +101,11 @@ pub enum BrokerAction {
 
 struct MessageBroker {
     link: UnboundedSender<BrokerAction>,
+    global_subscription_sender: UnboundedSender<SubscriptionResponse>
 }
 
 impl MessageBroker {
-    pub fn new() -> Self {
+    pub fn new(global_subscription_sender: UnboundedSender<SubscriptionResponse>) -> Self {
         let (link, mut internal_reciever) = unbounded_channel();
         tokio::spawn(async move {
             let mut request_map = HashMap::new();
@@ -129,6 +131,8 @@ impl MessageBroker {
                                         // Kill process on error
                                         break;
                                     }
+                                    // let json_payload =
+                                    // if let Err(_ignore) = global_subscription_sender.send()
                                 }
                             }
                             // otherwise check if it is a response to a registered request
@@ -149,7 +153,7 @@ impl MessageBroker {
                 }
             }
         });
-        Self { link }
+        Self { link, global_subscription_sender }
     }
 }
 
@@ -178,8 +182,8 @@ pub struct Client {
     message_broker: MessageBroker,
     state: Arc<Mutex<State>>,
     timeout: u64,
-    global_subscription_sender: UnboundedSender<serde_json::Value>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<serde_json::Value>
+    global_subscription_sender: UnboundedSender<SubscriptionResponse>,
+    pub(crate) global_subscription_receiver: UnboundedReceiver<SubscriptionResponse>
 }
 
 impl Client {
@@ -239,7 +243,9 @@ impl Client {
         let (ws_outgoing_sender, ws_outgoing_reciever) = unbounded_channel();
         let (ws_incoming_sender, ws_incoming_reciever) = unbounded_channel();
 
-        let message_broker = MessageBroker::new();
+        let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
+
+        let message_broker = MessageBroker::new(global_subscription_sender.clone());
 
         // This will loop over WS connection, send things out, and route things in
         spawn_sender_loop(
@@ -257,8 +263,6 @@ impl Client {
 
         // start a heartbeat loop
         spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
-
-        let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
 
         Ok(Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
@@ -429,20 +433,20 @@ impl Client {
             // conflicting lifetimes
             let request = request.clone();
             let state = state.clone();
+            let global_subscription_sender = global_subscription_sender.clone();
             Box::pin(async move {
                 // For some dumb reason, Absinthe encodes subscription responses differently
                 let json_payload = response.subscription_json_payload()?;
-                let sub_response = request.subscription_response_from_json(json_payload)?;
+                let sub_response = request.subscription_response_from_json(json_payload.clone())?;
+                let wrapped = request.wrap_response_as_any_subscription(json_payload)?;
                 if let Some(sub_response) = sub_response.response() {
                     request
                         .process_subscription_response(sub_response, state)
                         .await?;
                 }
-                let as_json_string = serde_json::to_string(&sub_response).map_err(|_| {
-                    ProtocolError("Could not serialize subscription response to string")
+                global_subscription_sender.send(wrapped).map_err(|_| {
+                    ProtocolError("Failed to send subscription data to global stream")
                 })?;
-                let as_json = serde_json::from_str(&as_json_string).expect("impossible to fail in subscription");
-                global_subscription_sender.send(as_json);
                 Ok(sub_response)
             })
         })))
@@ -761,11 +765,29 @@ mod tests {
                 })
                 .await
                 .unwrap();
-            println!("{:?}", response);
             let next_item = response.next().await.unwrap().await.unwrap();
             println!("{:?}", next_item);
             let next_item = response.next().await.unwrap().await.unwrap();
             println!("{:?}", next_item);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn sub_orderbook_via_client_stream() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let mut response = client
+                .subscribe_protocol(SubscribeOrderbook {
+                    market: Market::btc_usdc(),
+                })
+                .await
+                .unwrap();
+            let (item, client) = client.into_future().await;
+            println!("{:?}", item.unwrap());
+            let (item, _) = client.into_future().await;
+            println!("{:?}", item.unwrap());
         };
         runtime.block_on(async_block);
     }

@@ -9,6 +9,7 @@ use futures::lock::Mutex;
 use std::sync::Arc;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use super::subscriptions::SubscriptionResponse;
 
 //****************************************//
 //  Nash protocol trait                   //
@@ -173,4 +174,5 @@ pub trait NashProtocolSubscription: Clone {
     ) -> Result<()> {
         Ok(())
     }
+    fn wrap_response_as_any_subscription(&self, response: serde_json::Value) -> Result<SubscriptionResponse>;
 }

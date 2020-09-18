@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use super::super::SubscriptionResponse;
 
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbook {
@@ -33,4 +34,8 @@ impl NashProtocolSubscription for SubscribeOrderbook {
         let as_graphql = json_to_type_or_error(response)?;
         self.response_from_graphql(as_graphql)
     }
+    fn wrap_response_as_any_subscription(&self, response: serde_json::Value) -> Result<SubscriptionResponse> {
+        let response = self.subscription_response_from_json(response)?;
+        Ok(SubscriptionResponse::UpdatedOrderbook(response))
+    } 
 }

@@ -97,7 +97,7 @@ pub enum BrokerAction {
 }
 
 struct MessageBroker {
-    link: UnboundedSender<BrokerAction>
+    link: UnboundedSender<BrokerAction>,
 }
 
 impl MessageBroker {
@@ -152,11 +152,13 @@ impl MessageBroker {
 }
 
 fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>(
-    mut callback_channel: UnboundedReceiver<AbsintheWSResponse>, 
-    user_callback_sender: UnboundedSender<Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>>,
+    mut callback_channel: UnboundedReceiver<AbsintheWSResponse>,
+    user_callback_sender: UnboundedSender<
+        Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
+    >,
     global_subscription_sender: UnboundedSender<Result<SubscriptionResponse>>,
     request: T,
-    state: Arc<Mutex<State>>
+    state: Arc<Mutex<State>>,
 ) {
     tokio::spawn(async move {
         loop {
@@ -165,33 +167,38 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
             if let Some(response) = response {
                 // can the payload json be parsed?
                 if let Ok(json_payload) = response.subscription_json_payload() {
-
                     // First do normal subscription logic
-                    let output = match request.subscription_response_from_json(json_payload.clone()) {
+                    let output = match request.subscription_response_from_json(json_payload.clone())
+                    {
                         Ok(response) => {
                             match response {
-                                ResponseOrError::Error(err_resp) => Ok(ResponseOrError::Error(err_resp)),
+                                ResponseOrError::Error(err_resp) => {
+                                    Ok(ResponseOrError::Error(err_resp))
+                                }
                                 response => {
                                     // this unwrap below is safe because previous match case checks for error
                                     let sub_response = response.response().unwrap();
-                                    match request.process_subscription_response(sub_response, state.clone()).await {
+                                    match request
+                                        .process_subscription_response(sub_response, state.clone())
+                                        .await
+                                    {
                                         Ok(_) => Ok(response),
-                                        Err(e) => Err(e)
+                                        Err(e) => Err(e),
                                     }
                                 }
                             }
-                        },
-                        Err(e) => Err(e)
+                        }
+                        Err(e) => Err(e),
                     };
                     // If callback_channel fails, kill process
                     if let Err(_e) = user_callback_sender.send(output) {
                         break;
                     }
-                    
+
                     // Now do global subscription logic. If global channel fails, also kill process
-                    if let Err(_e) = global_subscription_sender.send(
-                        request.wrap_response_as_any_subscription(json_payload)
-                    ) {
+                    if let Err(_e) = global_subscription_sender
+                        .send(request.wrap_response_as_any_subscription(json_payload))
+                    {
                         break;
                     }
                 } else {
@@ -209,7 +216,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
 pub enum Environment {
     Production,
     Sandbox,
-    Dev(&'static str)
+    Dev(&'static str),
 }
 
 impl Environment {
@@ -217,9 +224,9 @@ impl Environment {
         match self {
             Self::Production => "app.nash.io",
             Self::Sandbox => "sandbox.nash.io",
-            Self::Dev(s) => s
+            Self::Dev(s) => s,
         }
-    } 
+    }
 }
 
 /// Interface for interacting with a websocket connection
@@ -232,7 +239,7 @@ pub struct Client {
     state: Arc<Mutex<State>>,
     timeout: u64,
     global_subscription_sender: UnboundedSender<Result<SubscriptionResponse>>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<SubscriptionResponse>>
+    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<SubscriptionResponse>>,
 }
 
 impl Client {
@@ -322,7 +329,7 @@ impl Client {
             state: Arc::new(Mutex::new(state)),
             timeout,
             global_subscription_sender,
-            global_subscription_receiver
+            global_subscription_receiver,
         })
     }
 
@@ -431,9 +438,13 @@ impl Client {
     pub async fn subscribe_protocol<T>(
         &self,
         request: T,
-    ) -> Result<UnboundedReceiver<Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>>> 
+    ) -> Result<
+        UnboundedReceiver<
+            Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
+        >,
+    >
     where
-        T: NashProtocolSubscription + Send + Sync + 'static
+        T: NashProtocolSubscription + Send + Sync + 'static,
     {
         let query = request.graphql(self.state.clone()).await?;
         // a subscription starts with a normal request
@@ -462,11 +473,11 @@ impl Client {
         let (user_callback_sender, user_callback_receiver) = unbounded_channel();
 
         global_subscription_loop(
-            callback_channel, 
-            user_callback_sender, 
-            global_subscription_sender.clone(), 
+            callback_channel,
+            user_callback_sender,
+            global_subscription_sender.clone(),
             request.clone(),
-            self.state.clone()
+            self.state.clone(),
         );
 
         Ok(user_callback_receiver)
@@ -822,7 +833,7 @@ mod tests {
                     amount: "0.02".to_string(),
                     price: "800".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilTime(
-                        Utc.ymd(2020, 12, 16).and_hms(0, 0, 0)
+                        Utc.ymd(2020, 12, 16).and_hms(0, 0, 0),
                     ),
                     allow_taker: true,
                 })
@@ -831,9 +842,7 @@ mod tests {
             println!("{:?}", response);
             let order_id = response.response().unwrap().order_id.clone();
             let response = client
-                .run(GetAccountOrderRequest {
-                    order_id
-                })
+                .run(GetAccountOrderRequest { order_id })
                 .await
                 .unwrap();
             println!("{:?}", response);

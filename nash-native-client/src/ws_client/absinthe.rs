@@ -361,7 +361,9 @@ mod tests {
     use nash_protocol::graphql;
     use nash_protocol::protocol::asset_nonces::types::AssetNoncesResponse;
     use nash_protocol::protocol::ResponseOrError;
-    use nash_protocol::protocol::{dh_fill_pool::types::DhFillPoolResponse, try_response_from_json};
+    use nash_protocol::protocol::{
+        dh_fill_pool::types::DhFillPoolResponse, try_response_from_json,
+    };
 
     #[test]
     fn test_empty() {
@@ -389,11 +391,13 @@ mod tests {
             "[\"1\",\"3\",\"__absinthe__:control\",\"phx_reply\",{\"response\":{\"data\":{\"getAssetsNonces\":[{\"asset\":\"usdc\",\"nonces\":[33]},{\"asset\":\"eth\",\"nonces\":[33]}]}},\"status\":\"ok\"}]"
         ).unwrap();
         println!("{:?}", res);
-        let assets_nonces: ResponseOrError<AssetNoncesResponse> =
-        try_response_from_json::<AssetNoncesResponse, graphql::get_assets_nonces::ResponseData>(
-                res.json_payload().unwrap(),
-            )
-            .unwrap();
+        let assets_nonces: ResponseOrError<AssetNoncesResponse> = try_response_from_json::<
+            AssetNoncesResponse,
+            graphql::get_assets_nonces::ResponseData,
+        >(
+            res.json_payload().unwrap()
+        )
+        .unwrap();
         println!("{:?}", assets_nonces);
     }
 }

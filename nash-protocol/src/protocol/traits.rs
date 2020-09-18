@@ -7,8 +7,6 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 use super::subscriptions::SubscriptionResponse;
 
 //****************************************//

@@ -2,7 +2,6 @@ use super::super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocolSubscription, ResponseOrError, State,
 };
 use crate::errors::Result;
-use crate::types::{Market, SubscriptionTrade};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;

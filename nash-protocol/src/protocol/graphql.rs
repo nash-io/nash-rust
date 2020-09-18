@@ -58,7 +58,7 @@ pub enum ErrorOrData<T> {
 }
 
 /// Wrapper type to account for GraphQL errors
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 pub enum ResponseOrError<T> {
     Response(DataResponse<T>),
@@ -128,7 +128,7 @@ impl<T> ResponseOrError<T> {
 }
 
 /// Inner wrapper on valid GraphQL response data
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct DataResponse<T> {
     pub data: T,
 }
@@ -140,12 +140,12 @@ impl<T> DataResponse<T> {
 }
 
 /// Inner wrapper on error GraphQL response data
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct ErrorResponse {
     pub errors: Vec<Error>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Error {
     pub message: String,
 }

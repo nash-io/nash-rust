@@ -1,5 +1,5 @@
 use crate::errors::Result;
-use crate::types::{AssetAmount, Market, OrderbookOrder};
+use crate::types::{Market, OrderbookOrder};
 
 use async_trait::async_trait;
 use futures::lock::Mutex;

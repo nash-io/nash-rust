@@ -15,7 +15,7 @@ name = "nash_protocol"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bigdecimal = "0.1"
+bigdecimal = {version = "0.1", features = ["serde"]}
 base64 = "0.12"
 bs58 = { version = "0.3", features = ["check"] }
 byteorder = "1.3"

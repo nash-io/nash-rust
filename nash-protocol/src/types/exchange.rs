@@ -310,9 +310,7 @@ impl Rate {
             // FIXME: this could be wrong
             Self::MaxOrderRate | Self::MaxFeeRate => {
                 // FIXME: be bytes could be wrong for NEO
-                BigDecimal::parse_bytes(&self.to_be_bytes()?[..], 16).ok_or(ProtocolError(
-                    "Failed to convert MaxOrderRate to BigDecimal",
-                ))?
+                BigDecimal::from_str("0.0025").unwrap()
             }
             Self::MinOrderRate | Self::MinFeeRate => 0.into(),
         };
@@ -326,6 +324,12 @@ impl Rate {
                 "Cannot invert a Rate that is not an OrderRate",
             )),
         }
+    }
+
+    /// Subtract fee from user by adjusting the order rate downwards
+    pub fn subtract_fee(&self, fee: BigDecimal) -> Result<OrderRate> {
+        let as_order_rate = OrderRate {inner: self.to_bigdecimal()? };
+        Ok(as_order_rate.subtract_fee(fee))
     }
 }
 
@@ -367,6 +371,12 @@ impl OrderRate {
     /// Return a new `BigDecimal` based on `OrderRate`
     pub fn to_bigdecimal(&self) -> BigDecimal {
         self.inner.clone()
+    }
+
+    /// Subtract fee from user by adjusting the order rate downwards
+    pub fn subtract_fee(&self, fee: BigDecimal) -> Self {
+        let fee_multiplier = BigDecimal::from(1) - fee;
+        OrderRate { inner: &self.inner * &fee_multiplier }
     }
 }
 

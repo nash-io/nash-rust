@@ -2,18 +2,26 @@
  * Functions for MPC-based API keys used by both server and client
  */
 
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use amcl::nist256::big::MODBYTES;
 use bigints::traits::{Converter, NumberTests};
 use bigints::BigInt;
+#[cfg(feature = "k256")]
+use k256::{EncodedPoint as k256_EncodedPoint, SecretKey};
+#[cfg(feature = "secp256k1")]
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
+use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use p256::{AffinePoint, EncodedPoint as p256_EncodedPoint};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
+#[cfg(feature = "secp256k1")]
 use zeroize::Zeroizing;
 
 /// paillier key size is 2048 bit (minimum recommended key length as of 02/2020)
@@ -46,7 +54,7 @@ pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r
     let mut dh_publics: Vec<Secp256r1Point> = Vec::new();
     for _ in 0..n {
         let dh_secret = Secp256r1Scalar::new_random();
-        let dh_public = base * &dh_secret;
+        let dh_public = base.clone() * &dh_secret;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -64,7 +72,7 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
     let mut dh_publics: Vec<Secp256k1Point> = Vec::new();
     for _ in 0..n {
         let dh_secret = Secp256k1Scalar::new_random();
-        let dh_public = base * &dh_secret;
+        let dh_public = base.clone() * &dh_secret;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -122,25 +130,38 @@ pub fn verify(
     Ok(rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone()))
 }
 
+#[cfg(feature = "secp256k1")]
+fn publickey_from_secretkey_r1(secret_key_int: &BigInt) -> Result<String, ()> {
+    let secret_key = Zeroizing::<Secp256k1Scalar>::new(ECScalar::from(secret_key_int));
+    let base: Secp256k1Point = ECPoint::generator();
+    let pk = base * secret_key.deref();
+    Ok("0".to_string()
+        + &BigInt::from_bytes(&pk.get_element().serialize_uncompressed()).to_str_radix(16))
+}
+#[cfg(feature = "k256")]
+fn publickey_from_secretkey_r1(secret_key_int: &BigInt) -> Result<String, ()> {
+    let sk = SecretKey::from_bytes(&secret_key_int.to_bytes()).unwrap();
+    Ok("0".to_string()
+        + &BigInt::from_bytes(&k256_EncodedPoint::from_secret_key(&sk, false).as_bytes())
+            .to_str_radix(16))
+}
+
 /// derive public key from secret key, in uncompressed format as expected by ME
 pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, ()> {
     if curve == Curve::Secp256k1 {
-        let secret_key = Zeroizing::<Secp256k1Scalar>::new(ECScalar::from(secret_key_int));
-        let base: Secp256k1Point = ECPoint::generator();
-        let pk = base * secret_key.deref();
-        Ok("0".to_string()
-            + &BigInt::from_bytes(&pk.get_element().serialize_uncompressed()).to_str_radix(16))
+        publickey_from_secretkey_r1(secret_key_int)
     } else if curve == Curve::Secp256r1 {
-        let secret_key = Zeroizing::<Secp256r1Scalar>::new(ECScalar::from(secret_key_int));
-        let pk = Secp256r1Point::generator() * secret_key.deref();
-        let mut b: [u8; 2 * MODBYTES as usize + 1] = [0; 2 * MODBYTES as usize + 1];
-        pk.get_element().tobytes(&mut b, false);
-        let mut s = String::new();
-        for byte in b.iter() {
-            s += &format!("{:02x}", byte);
-        }
+        let sk: Secp256r1Scalar = ECScalar::from(secret_key_int);
+        // need this back and forth conversion to get an uncompressed point
+        let tmp = AffinePoint::from_encoded_point(&p256_EncodedPoint::from(
+            &(Secp256r1Point::generator() * sk).get_element(),
+        ))
+        .unwrap();
         // add leading zeros if necessary
-        Ok(format!("{:0>66}", s))
+        Ok(format!(
+            "{:0>130}",
+            BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes()).to_hex()
+        ))
     } else {
         Err(())
     }
@@ -226,9 +247,12 @@ mod tests {
         correct_key_proof_rho, create_hash, dh_init_secp256k1, dh_init_secp256r1, i2osp,
         publickey_from_secretkey, verify, Curve,
     };
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::Secp256k1Point;
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::Secp256k1Point;
     use crate::curves::secp256_r1::Secp256r1Point;
-    use crate::curves::traits::ECPoint;
+    use crate::curves::traits::{ECPoint, ECScalar};
     use bigints::traits::Converter;
     use bigints::BigInt;
     #[cfg(feature = "num_bigint")]
@@ -286,8 +310,8 @@ mod tests {
     fn test_dh_init_r1() {
         let (secret1, public1) = dh_init_secp256r1(1).unwrap();
         let (secret2, public2) = dh_init_secp256r1(1).unwrap();
-        assert_ne!(secret1, secret2);
-        assert_ne!(public1, public2);
+        assert_ne!(secret1[0].to_big_int(), secret2[0].to_big_int());
+        assert_ne!(public1[0], public2[0]);
     }
 
     #[test]

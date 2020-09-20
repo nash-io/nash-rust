@@ -4,3 +4,9 @@ members = [
 "nash-native-client",
 "mpc-wallet/mpc-wallet-lib",
 ]
+
+exclude = [
+"mpc-wallet/mpc-wallet-wasm",
+"mpc-wallet/mpc-wallet-elixir",
+"mpc-wallet/mpc-wallet-nodejs/native",
+]

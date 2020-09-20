@@ -6,7 +6,6 @@ use mpc_wallet_lib::bigints::traits::Converter;
 use mpc_wallet_lib::bigints::BigInt;
 use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use mpc_wallet_lib::curves::traits::ECScalar;
 use mpc_wallet_lib::paillier::EncryptionKey;
 use mpc_wallet_lib::{client, common};
 use neon::prelude::register_module;
@@ -141,30 +140,11 @@ export! {
         ))
         .unwrap()
     }
-
-    /// Generate signature for given message hash under given secret key
-    /// Input: secret_key: full secret key, msg_hash: message hash
-    /// Output: (r, s): ECDSA signature
-    fn sign(secret_key_str: String, msg_hash_str: String) -> String {
-        let secret_key_int = match BigInt::from_hex(&secret_key_str) {
-            Ok(v) => v,
-            Err(_) => {
-                return serde_json::to_string(&(false, &"error deserializing secret_key")).unwrap()
-            }
-        };
-        let secret_key: Secp256k1Scalar = ECScalar::from(&secret_key_int);
-        let msg_hash = match BigInt::from_hex(&msg_hash_str) {
-            Ok(v) => v,
-            Err(_) => return serde_json::to_string(&(false, &"error deserializing msg_hash")).unwrap(),
-        };
-        let (r, s) = client::sign(&secret_key, &msg_hash);
-        serde_json::to_string(&(&true, &format!("{:0>64}", r.to_hex()), &format!("{:0>64}", s.to_hex()))).unwrap()
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size, sign};
+    use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size};
     use mpc_wallet_lib::common::Curve;
 
     #[test]
@@ -357,36 +337,6 @@ mod tests {
 
         let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
         assert_eq!(msg, "error deserializing msg_hash");
-        assert!(!success);
-    }
-
-    #[test]
-    fn test_sign_ok() {
-        let result = sign(
-            "4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1".to_string(),
-            "100000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
-        );
-        let (success, _, _): (bool, String, String) = serde_json::from_str(&result).unwrap();
-        assert!(success);
-    }
-
-    #[test]
-    fn test_sign_wrong_sk() {
-        let result = sign(
-            "z794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1".to_string(),
-            "100000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
-        );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert!(!success);
-    }
-
-    #[test]
-    fn test_sign_wrong_hash() {
-        let result = sign(
-            "4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1".to_string(),
-            "\\00000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
-        );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 }

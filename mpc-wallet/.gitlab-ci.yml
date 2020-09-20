@@ -27,10 +27,8 @@ test-mpc-wallet-wasm:
   script:
     - cd mpc-wallet-wasm
     - cargo build --release
-    - cargo build --features rust_gmp --no-default-features --release
-    - cargo build --features num_bigint --no-default-features --release
     - cargo test --release
-    - cargo test --no-default-features --features rust_gmp --release
+    - cargo build --no-default-features --features num_bigint --release
     - cargo test --no-default-features --features num_bigint --release
     - wasm-pack build --release --target bundler
     - wasm-opt -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
@@ -46,18 +44,24 @@ test-bigints:
     - cargo test --release
     - cargo build --no-default-features --features num_bigint --release
     - cargo test --no-default-features --features num_bigint --release
-    - cargo build --no-default-features --features rust-gmp --release
-    - cargo test --no-default-features --features rust-gmp --release
+    - cargo build --no-default-features --features rust_gmp --release
+    - cargo test --no-default-features --features rust_gmp --release
 
 test-mpc-wallet-lib:
   <<: *rust-template
   stage: test
   script:
     - cd mpc-wallet-lib
+    - cargo build --features rust_gmp --release
+    - cargo test --features rust_gmp --release
+    - cargo build --no-default-features --features rust_gmp --features wasm --release
+    - cargo test --no-default-features --features rust_gmp --features wasm --release
     - cargo build --no-default-features --features rust_gmp --release
     - cargo test --no-default-features --features rust_gmp --release
-    - cargo build --no-default-features --features num_bigint --release
-    - cargo test --no-default-features --features num_bigint --release
+    - cargo build --no-default-features --features num_bigint --features k256 --release
+    - cargo test --no-default-features --features num_bigint --features k256 --release
+    - cargo build --no-default-features --features num_bigint --features wasm --release
+    - cargo test --no-default-features --features num_bigint --features wasm --release
 
 test-mpc-wallet-elixir:
   <<: *rust-template

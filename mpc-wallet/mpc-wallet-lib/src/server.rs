@@ -3,7 +3,10 @@
  */
 
 use crate::common::{correct_key_proof_rho, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 use bigints::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
@@ -164,7 +167,10 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
 #[cfg(test)]
 mod tests {
     use crate::common::{CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
     use crate::server::{
@@ -226,12 +232,8 @@ mod tests {
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         let computed = compute_rpool_secp256r1(&dh_secret_vec, &dh_public_vec).unwrap();
-        let mut expected = HashMap::new();
-        expected.insert(
-            "03195834f65ee4df0d11d2c4a6dc1fbc205692539b613f1cfdb6177ee1c11300dd".to_string(),
-            dh_secret,
-        );
-        assert_eq!(computed, expected);
+        assert!(computed
+            .contains_key("03195834f65ee4df0d11d2c4a6dc1fbc205692539b613f1cfdb6177ee1c11300dd"));
     }
 
     #[test]
@@ -248,12 +250,8 @@ mod tests {
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         let computed = compute_rpool_secp256r1(&dh_secret_vec, &dh_public_vec).unwrap();
-        let mut expected = HashMap::new();
-        expected.insert(
-            "03195834f65ee4df0d11d2c4a6dc1fbc205692539b613f1cfdb6177ee1c11300dd".to_string(),
-            dh_secret,
-        );
-        assert_ne!(computed, expected);
+        assert!(!computed
+            .contains_key("03195834f65ee4df0d11d2c4a6dc1fbc205692539b613f1cfdb6177ee1c11300dd"));
     }
 
     #[test]
@@ -270,12 +268,8 @@ mod tests {
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         let computed = compute_rpool_secp256r1(&dh_secret_vec, &dh_public_vec).unwrap();
-        let mut expected = HashMap::new();
-        expected.insert(
-            "03195834f65ee4df0d11d2c4a6dc1fbc205692539b613f1cfdb6177ee1c11300dd".to_string(),
-            dh_secret,
-        );
-        assert_ne!(computed, expected);
+        assert!(!computed
+            .contains_key("03195834f65ee4df0d11d2c4a6dc1fbc205692539b613f1cfdb6177ee1c11300dd"));
     }
 
     #[test]

@@ -5,7 +5,10 @@
 use crate::common::{
     correct_key_proof_rho, publickey_from_secretkey, CorrectKeyProof, Curve, CORRECT_KEY_M,
 };
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 use bigints::traits::{Converter, Modulo, Samplable, ZeroizeBN};
@@ -109,11 +112,10 @@ impl APIchildkeyCreator {
                 server_secret_share_encrypted,
             })
         } else if curve == Curve::Secp256r1 {
-            let random = Zeroizing::<Secp256r1Scalar>::new(Secp256r1Scalar::new_random());
+            let random = Secp256r1Scalar::new_random();
             // client's secret share is set to the full secret key
-            let secret_key = Zeroizing::<Secp256r1Scalar>::new(ECScalar::from(&self.secret_key));
-            let client_secret_share =
-                Zeroizing::<Secp256r1Scalar>::new(random.invert() * secret_key.deref());
+            let secret_key: Secp256r1Scalar = ECScalar::from(&self.secret_key);
+            let client_secret_share = random.invert() * secret_key;
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_big_int();
             let public_key =
@@ -252,7 +254,7 @@ fn fill_pool_paillier(n: usize, paillier_pk: &EncryptionKey) {
 
 /// fill pool of random and nonce values for secp256r1 as well as random values for Paillier
 pub fn fill_rpool_secp256r1(
-    mut own_dh_secrets: Vec<Secp256r1Scalar>,
+    own_dh_secrets: Vec<Secp256r1Scalar>,
     other_dh_publics: &[Secp256r1Point],
     paillier_pk: &EncryptionKey,
 ) -> Result<(), ()> {
@@ -280,9 +282,6 @@ pub fn fill_rpool_secp256r1(
             .unwrap()
             .insert(r, (Utc::now(), own_dh_secrets[i].to_big_int()));
     });
-    for i in &mut own_dh_secrets {
-        i.zeroize();
-    }
     fill_pool_paillier(own_dh_secrets.len(), paillier_pk);
     Ok(())
 }
@@ -359,11 +358,6 @@ pub fn encrypt_secret_share(paillier_pk: &EncryptionKey, server_secret_share: &B
     server_encrypted_secret_share
 }
 
-/// sign() is not needed for MPC but used as a faster replacement for the JS implementation
-pub fn sign(secret_key: &Secp256k1Scalar, msg_hash: &BigInt) -> (BigInt, BigInt) {
-    secret_key.clone().sign(&msg_hash)
-}
-
 /// verify proof of correct paillier key generation
 /// see paper "Efficient Noninteractive Certification of RSA Moduli and Beyond" by Goldberg et al. 2019 Section 3.2 and Appendix C.4
 fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> Result<(), ()> {
@@ -396,10 +390,13 @@ mod tests {
     use crate::client::POOL_PAILLIER;
     use crate::client::{
         compute_presig, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
-        get_rpool_size, sign, verify_correct_key_proof, APIchildkeyCreator,
+        get_rpool_size, verify_correct_key_proof, APIchildkeyCreator,
     };
-    use crate::common::{publickey_from_secretkey, verify, CorrectKeyProof, Curve};
+    use crate::common::{CorrectKeyProof, Curve};
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
     use bigints::traits::Converter;
@@ -570,7 +567,6 @@ mod tests {
         let _shared = PAILLIER_POOL_LOCK.lock();
         let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129").unwrap()});
         assert_eq!(get_rpool_size(Curve::Secp256r1).unwrap(), 0);
-        //assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("EAB592977DF1A8E7D77DB58F4DAE73C860920D28B763A0737217D3793563D53E")
                 .unwrap(),
@@ -584,7 +580,6 @@ mod tests {
         let dh_public_vec = vec![dh_public];
         fill_rpool_secp256r1(dh_secret_vec.clone(), &dh_public_vec, &paillier_pk).unwrap();
         assert_eq!(get_rpool_size(Curve::Secp256r1).unwrap(), 1);
-        //assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 1);
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -602,12 +597,9 @@ mod tests {
             BigInt::from_hex("306978b9dd8d1438387f3e1e58ecec203c61ac0c848834ed094ebef5547b74fda")
                 .unwrap()
         );
-        //assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
         fill_rpool_secp256r1(dh_secret_vec.clone(), &dh_public_vec, &paillier_pk).unwrap();
-        //assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 1);
         let (presig2, _) = compute_presig(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
         assert_ne!(presig1, presig2);
-        //assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
     }
 
     #[test]
@@ -619,25 +611,5 @@ mod tests {
         let secret_share_encrypted1 = encrypt_secret_share(&paillier_pk, &secret_key);
         let secret_share_encrypted2 = encrypt_secret_share(&paillier_pk, &secret_key);
         assert_ne!(secret_share_encrypted1, secret_share_encrypted2);
-    }
-
-    #[test]
-    fn test_sign() {
-        let sk: Secp256k1Scalar = ECScalar::from(
-            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
-                .unwrap(),
-        );
-        let msg_hash =
-            BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
-                .unwrap();
-        let signature = sign(&sk, &msg_hash);
-        assert!(verify(
-            &signature.0,
-            &signature.1,
-            &publickey_from_secretkey(&sk.to_big_int(), Curve::Secp256k1).unwrap(),
-            &msg_hash,
-            Curve::Secp256k1
-        )
-        .unwrap());
     }
 }

@@ -1,6 +1,6 @@
 //! Key generation following standard recommendations.
 
-use bigints::traits::{BitManipulation, Modulo, NumberTests, Samplable};
+use rust_bigint::traits::{BitManipulation, Modulo, NumberTests, Samplable};
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
 #[cfg(feature = "num_bigint")]

@@ -4,7 +4,7 @@ use crate::types::ApiKeys;
 use crate::types::Blockchain;
 use crate::types::PublicKey;
 use crate::utils::{der_encode_sig, hash_message};
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::client::APIchildkey;
 use mpc_wallet_lib::common::Curve;
 use mpc_wallet_lib::curves::secp256_k1::Secp256k1Scalar;

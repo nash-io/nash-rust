@@ -10,7 +10,7 @@ use crate::{
     BigInt, DecryptionKey, EncryptionKey, Keypair, MinimalDecryptionKey, MinimalEncryptionKey,
     Paillier, RawCiphertext, RawPlaintext,
 };
-use bigints::traits::*;
+use rust_bigint::traits::*;
 #[cfg(feature = "num_bigint")]
 use num_traits::One;
 

@@ -5,7 +5,7 @@ pub mod client;
 pub mod common;
 pub mod curves;
 pub mod server;
-pub use bigints;
+pub use rust_bigint;
 pub use paillier;
 
 #[derive(Copy, PartialEq, Eq, Clone, Debug)]

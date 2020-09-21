@@ -9,7 +9,7 @@ use crate::graphql::sign_states;
 use crate::types::{eth, Amount, Asset, Blockchain, Nonce, Prefix};
 use async_trait::async_trait;
 use futures::lock::Mutex;
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use std::sync::Arc;
 
 /// Type to generate a new sign states request. It takes an optional

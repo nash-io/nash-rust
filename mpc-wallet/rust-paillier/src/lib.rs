@@ -12,7 +12,7 @@ pub use encoding::*;
 pub use keygen::*;
 pub use traits::*;
 
-pub use bigints::BigInt;
+pub use rust_bigint::BigInt;
 
 /// Main struct onto which most operations are added.
 pub struct Paillier;
@@ -20,10 +20,10 @@ pub struct Paillier;
 /// Keypair from which encryption and decryption keys can be derived.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Keypair {
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub p: BigInt, // TODO[Morten] okay to make non-public?
 
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub q: BigInt, // TODO[Morten] okay to make non-public?
 }
 
@@ -32,7 +32,7 @@ pub struct Keypair {
 /// Used e.g. for serialization of `EncryptionKey`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MinimalEncryptionKey {
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub n: BigInt,
 }
 
@@ -41,10 +41,10 @@ pub struct MinimalEncryptionKey {
 /// Used e.g. for serialization of `DecryptionKey`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MinimalDecryptionKey {
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub p: BigInt,
 
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub q: BigInt,
 }
 

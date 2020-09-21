@@ -8,8 +8,8 @@ use crate::common::{
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use bigints::traits::{Converter, Modulo, Samplable, ZeroizeBN};
-use bigints::BigInt;
+use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
+use rust_bigint::BigInt;
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use indexmap::{IndexMap, IndexSet};
@@ -32,7 +32,7 @@ use zeroize::Zeroizing;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct APIchildkeyCreator {
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     secret_key: BigInt,
     paillier_pk: Option<EncryptionKey>,
 }
@@ -41,9 +41,9 @@ pub struct APIchildkeyCreator {
 pub struct APIchildkey {
     pub paillier_pk: EncryptionKey,
     pub public_key: String,
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub client_secret_share: BigInt,
-    #[serde(with = "bigints::serialize::bigint")]
+    #[serde(with = "rust_bigint::serialize::bigint")]
     pub server_secret_share_encrypted: BigInt,
 }
 
@@ -402,8 +402,8 @@ mod tests {
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
-    use bigints::traits::Converter;
-    use bigints::BigInt;
+    use rust_bigint::traits::Converter;
+    use rust_bigint::BigInt;
     use paillier::{EncryptionKey, MinimalEncryptionKey};
     use std::sync::Mutex;
 

@@ -6,7 +6,7 @@ use crate::types::{Amount, Asset, AssetofPrecision, Blockchain, Nonce, OrderRate
 use crate::types::{AssetOrCrosschain, Prefix};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_eth_message};
 use byteorder::{BigEndian, ReadBytesExt};
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
 
 use super::super::super::signer::Signer;
 

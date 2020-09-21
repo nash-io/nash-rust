@@ -1,4 +1,4 @@
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
 
 use crate::errors::Result;
 use crate::graphql::place_limit_order;

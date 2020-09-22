@@ -9,7 +9,7 @@ use mpc_wallet_lib::client::{
     get_rpool_size, APIchildkeyCreator,
 };
 use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
-use paillier::{EncryptionKey, MinimalEncryptionKey};
+use paillier_common::{EncryptionKey, MinimalEncryptionKey};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let secret_key =

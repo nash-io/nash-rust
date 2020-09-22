@@ -18,8 +18,8 @@ use lazy_static::__Deref;
 use num_integer::Integer;
 #[cfg(feature = "num_bigint")]
 use num_traits::identities::{One, Zero};
-use paillier::traits::{EncryptWithChosenRandomness, PrecomputeRandomness};
-use paillier::{
+use paillier_common::traits::{EncryptWithChosenRandomness, PrecomputeRandomness};
+use paillier_common::{
     Add, EncryptionKey, Mul, Paillier, PrecomputedRandomness, Randomness, RawCiphertext,
     RawPlaintext,
 };
@@ -404,7 +404,7 @@ mod tests {
     use crate::curves::traits::ECScalar;
     use rust_bigint::traits::Converter;
     use rust_bigint::BigInt;
-    use paillier::{EncryptionKey, MinimalEncryptionKey};
+    use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use std::sync::Mutex;
 
     lazy_static! {

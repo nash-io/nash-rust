@@ -9,7 +9,7 @@ use mpc_wallet_lib::client::APIchildkey;
 use mpc_wallet_lib::common::Curve;
 use mpc_wallet_lib::curves::secp256_k1::Secp256k1Scalar;
 use mpc_wallet_lib::curves::traits::ECScalar;
-use mpc_wallet_lib::paillier;
+use mpc_wallet_lib::paillier_common;
 
 pub fn chain_path(chain: Blockchain) -> &'static str {
     match chain {
@@ -93,7 +93,7 @@ impl Signer {
         key_str
     }
 
-    pub fn paillier_pk(&self) -> &paillier::EncryptionKey {
+    pub fn paillier_pk(&self) -> &paillier_common::EncryptionKey {
         &self.api_keys.keys.paillier_pk
     }
 

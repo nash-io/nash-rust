@@ -5,7 +5,7 @@
 use crate::errors::{ProtocolError, Result as ProtocolResult};
 pub use crate::types::Blockchain;
 use mpc_wallet_lib::rust_bigint::BigInt;
-use mpc_wallet_lib::paillier;
+use mpc_wallet_lib::paillier_common;
 use serde::de::{Deserializer, Error};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -74,7 +74,7 @@ pub struct KeyfileChildKey {
 #[derive(Deserialize, Debug)]
 pub struct KeyMap {
     pub child_keys: HashMap<String, KeyfileChildKey>,
-    pub paillier_pk: paillier::EncryptionKey,
+    pub paillier_pk: paillier_common::EncryptionKey,
     #[serde(with = "mpc_wallet_lib::rust_bigint::serialize::bigint")]
     pub payload_public_key: BigInt,
     #[serde(with = "mpc_wallet_lib::rust_bigint::serialize::bigint")]

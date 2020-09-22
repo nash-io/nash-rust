@@ -9,7 +9,7 @@ use mpc_wallet_lib::rust_bigint::traits::Converter;
 use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use mpc_wallet_lib::paillier::{DecryptionKey, EncryptionKey};
+use mpc_wallet_lib::paillier_common::{DecryptionKey, EncryptionKey};
 use mpc_wallet_lib::{client, common, server};
 use rustler::{Encoder, Env, Error, Term};
 

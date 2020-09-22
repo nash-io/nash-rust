@@ -10,7 +10,7 @@ use rust_bigint::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
 use rust_bigint::BigInt;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
-use paillier::{
+use paillier_common::{
     extract_nroot, Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext,
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -173,7 +173,7 @@ mod tests {
     };
     use rust_bigint::traits::{Converter, NumberTests};
     use rust_bigint::BigInt;
-    use paillier::{DecryptionKey, MinimalDecryptionKey};
+    use paillier_common::{DecryptionKey, MinimalDecryptionKey};
     use std::collections::HashMap;
 
     #[test]

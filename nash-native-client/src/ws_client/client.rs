@@ -192,7 +192,8 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                     };
                     // If callback_channel fails, kill process
                     if let Err(_e) = user_callback_sender.send(output) {
-                        break;
+                        // Note: we do not want to kill the process in this case! User could just have destroyed the individual callback stream
+                        // and we still want to send to the global stream! maybe add a log here in the future
                     }
 
                     // Now do global subscription logic. If global channel fails, also kill process
@@ -807,12 +808,14 @@ mod tests {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
-            let _response = client
+            {
+                let _response = client
                 .subscribe_protocol(SubscribeOrderbook {
                     market: Market::btc_usdc(),
                 })
                 .await
                 .unwrap();
+            }
             let (item, client) = client.into_future().await;
             println!("{:?}", item.unwrap().unwrap());
             let (item, _) = client.into_future().await;

@@ -229,8 +229,7 @@ impl AssetOrCrosschain {
 }
 
 impl Amount {
-    /// Serialize Amount to LittleEndian bytes for NEO payload creation.
-    /// This will depend on its precision within a given market.
+    /// Serialize Amount to Little Endian bytes for NEO payload creation.
     pub fn to_le_bytes(&self) -> Result<[u8; 8]> {
         let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_le_bytes();
         Ok(bytes)

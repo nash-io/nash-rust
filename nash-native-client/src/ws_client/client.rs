@@ -788,8 +788,8 @@ mod tests {
                 LimitOrderRequest {
                     market: Market::eth_usdc(),
                     buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.041".to_string(),
-                    price: "150".to_string(),
+                    amount: "10".to_string(),
+                    price: "1".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,
                 }

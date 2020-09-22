@@ -132,8 +132,7 @@ impl OrderRate {
 }
 
 impl Amount {
-    /// Serialize Amount to BigEndian bytes for ETH payload creation.
-    /// This will depend on its precision within a given market.
+    /// Serialize Amount to Big Endian bytes for ETH payload creation.
     pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
         let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
         Ok(bytes)

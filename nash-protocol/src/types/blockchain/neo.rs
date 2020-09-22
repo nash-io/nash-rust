@@ -2,8 +2,8 @@
 
 use crate::errors::{ProtocolError, Result};
 use bs58::{decode, encode};
-use mpc_wallet_lib::bigints::traits::Converter;
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::traits::Converter;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::curves::secp256_r1::Secp256r1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
 use ripemd160::Ripemd160;

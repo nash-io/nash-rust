@@ -6,8 +6,8 @@ use amcl::nist256::big::{BIG, MODBYTES};
 use amcl::nist256::ecp::ECP;
 use amcl::nist256::fp::FP;
 use amcl::nist256::rom::CURVE_ORDER;
-use bigints::traits::Converter;
-use bigints::BigInt;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use getrandom::getrandom;
 #[cfg(feature = "num_bigint")]
 use num_traits::Num;
@@ -427,7 +427,7 @@ mod tests {
     use super::{BigInt, ErrorKey};
     use super::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::{ECPoint, ECScalar};
-    use bigints::traits::{Converter, Modulo, Samplable};
+    use rust_bigint::traits::{Converter, Modulo, Samplable};
 
     fn base_point2() -> Secp256r1Point {
         let random_scalar: Secp256r1Scalar = Secp256r1Scalar::new_random();

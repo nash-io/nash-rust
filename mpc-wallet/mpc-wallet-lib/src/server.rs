@@ -6,11 +6,11 @@ use crate::common::{correct_key_proof_rho, CorrectKeyProof, Curve, PAILLIER_KEY_
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use bigints::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
-use bigints::BigInt;
+use rust_bigint::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
+use rust_bigint::BigInt;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
-use paillier::{
+use paillier_common::{
     extract_nroot, Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext,
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -171,9 +171,9 @@ mod tests {
         complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, correct_key_proof_sigma,
         generate_paillier_keypair, generate_paillier_proof,
     };
-    use bigints::traits::{Converter, NumberTests};
-    use bigints::BigInt;
-    use paillier::{DecryptionKey, MinimalDecryptionKey};
+    use rust_bigint::traits::{Converter, NumberTests};
+    use rust_bigint::BigInt;
+    use paillier_common::{DecryptionKey, MinimalDecryptionKey};
     use std::collections::HashMap;
 
     #[test]

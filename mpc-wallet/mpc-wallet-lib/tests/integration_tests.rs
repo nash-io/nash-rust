@@ -1,5 +1,5 @@
-use bigints::traits::Converter;
-use bigints::BigInt;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use mpc_wallet_lib::client::{
     compute_presig, fill_rpool_secp256k1, fill_rpool_secp256r1, APIchildkeyCreator,
 };

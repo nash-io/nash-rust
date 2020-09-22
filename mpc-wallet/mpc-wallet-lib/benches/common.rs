@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate criterion;
 
-use bigints::traits::Converter;
-use bigints::BigInt;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use criterion::{black_box, Criterion};
 use mpc_wallet_lib::common::{
     dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify, Curve,

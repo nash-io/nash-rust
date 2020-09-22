@@ -1,14 +1,14 @@
 #[macro_use]
 extern crate criterion;
 
-use bigints::traits::Converter;
-use bigints::BigInt;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use criterion::{black_box, Criterion};
 use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, Curve};
 use mpc_wallet_lib::server::{
     complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
 };
-use paillier::{DecryptionKey, MinimalDecryptionKey};
+use paillier_common::{DecryptionKey, MinimalDecryptionKey};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});

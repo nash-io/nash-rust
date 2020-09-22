@@ -5,8 +5,8 @@ use crate::types::neo::{Address, PublicKey};
 use crate::types::{Amount, Asset, Blockchain, Nonce, OrderRate, Rate};
 use crate::types::{AssetOrCrosschain, Prefix};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_neo_message};
-use mpc_wallet_lib::bigints::traits::Converter;
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::traits::Converter;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::curves::secp256_r1::Secp256r1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
 

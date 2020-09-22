@@ -3,8 +3,8 @@
 
 use super::traits::{ECPoint, ECScalar};
 use crate::ErrorKey;
-use bigints::traits::{Converter, Modulo};
-use bigints::BigInt;
+use rust_bigint::traits::{Converter, Modulo};
+use rust_bigint::BigInt;
 use getrandom::getrandom;
 #[cfg(feature = "num_bigint")]
 use num_traits::Num;
@@ -546,7 +546,7 @@ mod tests {
     use super::{BigInt, ErrorKey, Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_k1::{FE, GE};
     use crate::curves::traits::{ECPoint, ECScalar};
-    use bigints::traits::{Converter, Modulo};
+    use rust_bigint::traits::{Converter, Modulo};
     use bincode;
     use serde_json;
 

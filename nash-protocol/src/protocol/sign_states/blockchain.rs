@@ -4,7 +4,7 @@ use crate::types::eth;
 use crate::types::Prefix;
 use crate::types::{Amount, Asset, Blockchain, Nonce};
 use crate::utils::{decode_hexstr, hash_eth_message, hash_neo_message};
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use std::convert::TryInto;
 
 use super::super::signer::Signer;

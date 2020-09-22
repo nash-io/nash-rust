@@ -376,7 +376,10 @@ impl OrderRate {
     /// Subtract fee from user by adjusting the order rate downwards
     pub fn subtract_fee(&self, fee: BigDecimal) -> Self {
         let fee_multiplier = BigDecimal::from(1) - fee;
-        OrderRate { inner: &self.inner * &fee_multiplier }
+        let scale_num = BigDecimal::from(u64::pow(10, 8));
+        let new_rate = &self.inner * &fee_multiplier;
+        let inner = (&new_rate * &scale_num).with_scale(0) / &scale_num;
+        OrderRate { inner }
     }
 }
 

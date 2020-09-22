@@ -86,6 +86,8 @@ impl LimitOrderConstructor {
 
         let min_order = min_order.subtract_fee(Rate::MaxFeeRate.to_bigdecimal()?)?.into();
         let fee_rate = Rate::MinFeeRate; // 0
+
+        println!("fee {:?}", min_order);
         
         match chain {
             Blockchain::Ethereum => {
@@ -139,6 +141,7 @@ impl LimitOrderConstructor {
             let pub_key = signer.child_public_key(blockchain)?;
             for nonce_group in nonces {
                 let fill_order = self.make_fill_order(blockchain, &pub_key, nonce_group)?;
+                println!("{}", fill_order.to_hex().unwrap());
                 order_payloads.push(Some(fill_order.to_blockchain_signature(signer)?))
             }
         }

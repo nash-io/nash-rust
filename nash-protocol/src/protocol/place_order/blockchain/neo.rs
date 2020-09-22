@@ -125,7 +125,7 @@ impl Rate {
 impl OrderRate {
     /// Serialize the OrderRate to bytes for payload creation. We always use a
     /// precision of 8 and multiplication factor of 10^8
-    fn to_le_bytes(&self) -> Result<[u8; 8]> {
+    pub fn to_le_bytes(&self) -> Result<[u8; 8]> {
         let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_le_bytes();
         Ok(bytes)
     }

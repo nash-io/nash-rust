@@ -373,12 +373,12 @@ impl OrderRate {
         self.inner.clone()
     }
 
-    /// Subtract fee from user by adjusting the order rate downwards
+    /// Subtract fee from user by adjusting the order rate downwards. This will keep track of as 
+    /// much precision as BigDecimal is capable of. However, this method is exclusively used by
+    /// the smart contract and will be reduced to an integer in scale of 10^8 before encoding
     pub fn subtract_fee(&self, fee: BigDecimal) -> Self {
         let fee_multiplier = BigDecimal::from(1) - fee;
-        let scale_num = BigDecimal::from(u64::pow(10, 8));
-        let new_rate = &self.inner * &fee_multiplier;
-        let inner = (&new_rate * &scale_num).with_scale(0) / &scale_num;
+        let inner = &self.inner * &fee_multiplier;
         OrderRate { inner }
     }
 }
@@ -588,4 +588,17 @@ pub struct Order {
 pub struct OrderbookOrder {
     pub price: String,
     pub amount: AssetAmount,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BigDecimal, FromStr, OrderRate};
+    #[test]
+    fn fee_rate_conversion_precision() {
+        let rate = OrderRate::new("150").unwrap();
+        let inverted_rate = rate.invert_rate(None);
+        let minus_fee = inverted_rate.subtract_fee(BigDecimal::from_str("0.0025").unwrap());
+        let payload = minus_fee.to_be_bytes().unwrap();
+        assert_eq!(665000, u64::from_be_bytes(payload));
+    }
 }

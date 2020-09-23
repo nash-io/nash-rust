@@ -94,7 +94,7 @@ impl ClientSignedState {
     /// Construct signed state from a `StateData` and a signature.
     pub fn from_state_data(state_data: &StateData, r: BigInt, signature: BigInt) -> Self {
         Self {
-            message: state_data.payload_hash.clone(),
+            message: state_data.payload.clone(),
             blockchain: state_data.blockchain,
             r,
             signature,

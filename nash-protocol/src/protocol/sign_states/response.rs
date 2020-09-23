@@ -13,6 +13,9 @@ impl From<sign_states::ResponseData> for SignStatesResponseData {
         let mut states = Vec::new();
         let data = res.sign_states;
         for state in &data.recycled_orders {
+
+            // println!("recycle: {}\n{}\n{}\n", state.payload_hash, state.payload, state.message);
+
             recycled_orders.push(StateData {
                 payload_hash: state.payload_hash.clone(),
                 payload: state.payload.clone(),
@@ -26,6 +29,9 @@ impl From<sign_states::ResponseData> for SignStatesResponseData {
             });
         }
         for state in &data.states {
+
+            // println!("state: {}\n{}\n{}\n", state.payload_hash, state.payload, state.message);
+
             states.push(StateData {
                 payload_hash: state.payload_hash.clone(),
                 payload: state.payload.clone(),

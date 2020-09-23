@@ -18,10 +18,10 @@ use super::types::StateUpdatePayloadEth;
 pub fn sign_state_data(state_data: &StateData, signer: &mut Signer) -> Result<ClientSignedState> {
     let data = match state_data.blockchain {
         // Recycled orders should not be double hashed, but that is what we are doing here
-        Blockchain::Ethereum => hash_eth_message(&decode_hexstr(&state_data.payload_hash)?),
-        Blockchain::NEO => hash_neo_message(&decode_hexstr(&state_data.payload_hash)?),
+        Blockchain::Ethereum => hash_eth_message(&decode_hexstr(&state_data.payload)?),
+        Blockchain::NEO => hash_neo_message(&decode_hexstr(&state_data.payload)?),
         // No hashing for BTC. This should be fixed in ME
-        Blockchain::Bitcoin => BigInt::from_str_radix(&state_data.payload_hash, 16)
+        Blockchain::Bitcoin => BigInt::from_str_radix(&state_data.payload, 16)
             .map_err(|_| ProtocolError("Could not parse BTC hash as BigInt"))?,
     };
     let (sig, r, _pub) = signer.sign_child_key(data, state_data.blockchain)?;

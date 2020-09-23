@@ -570,6 +570,17 @@ mod tests {
         .unwrap()
     }
 
+    async fn init_dev3_client() -> Client {
+        Client::from_key_data(
+            "eyJjaGlsZF9rZXlzIjp7Im0vNDQnLzAnLzAnLzAvMCI6eyJhZGRyZXNzIjoiMk5GNkRGSkdkbVpkRjNoQnU0b1dGdzNoUHdTbVBCejg2NWEiLCJjbGllbnRfc2VjcmV0X3NoYXJlIjoiMjRjODhlNTU0NWQ2OWQ0NmQzMDkzZTM0NDk5OTc1OTI2Njk2NTJhYWIxZDkzNjc1ZDc1NWFlN2JlYTMzZDY5ZiIsInB1YmxpY19rZXkiOiIwMmY3OGYxMzFlOTUxNjNmOWEzNjkzYTU4M2JjMjE3MTlhMTIwYzY0NWFhYzJlOTE0ZGE1ZDdkOTY1ZGNlOWQ3NGIiLCJzZXJ2ZXJfc2VjcmV0X3NoYXJlX2VuY3J5cHRlZCI6ImUzYTJhMWY0MmJiOTY0M2MyZmJmNzEyMDMxNzY3NGEyNzgyOTIwMGE4NjZhY2MyMzNkNzA2NGI5OTBmNmQwYzZmMjdhNzE5MmE3YmJkYWFkMWFkMTMzMmViNzYwZDcwNmYzN2RjYjRlMTRmN2QyYjM3ODc2ZDM4MjNhMjI3MTVhODk5MzM4M2FiMDdlNjBmY2U3ZDA3N2M5Njc4ODRjNDExYjE1OGVlNjc2NTdmNmJjYzM0NzhjMjFlZjk3MGQ4NTg5NGRhMjE4ZWY0ZTQzNGYwYmRhNThlNGE3NWE3OWU3MTg5N2ExZDczMmViYTk5ODQ1NDY4ZjkwMzU2YzAxNjNhMWIzZTc0MWM0MDI0ZmY2M2YwNmM3YWUxYzk2M2Q1OTNkYTU5MTNlYzQ4ZDIzZDMzNDQ5NmY4MzI2NjdhMGM3MDNiODMxZDgzYWE1MTJlNmMyOTlmMTM0YjYwZmUyNjA0NmVlYTVjNWYxNTBmMTJmMWRkZmU4ZDIxODM3YWU0MTYyZjY3MWFiNTM0MzliN2U3Y2Q4ZTc1OGQyYmZiZTRiNGJkYzg4OWMyM2NjNWE1NzFkM2Y3MTM5MDU2ZDNiMjA5MGYxOTdkZWY2NWY1MTkzMjUzNzI1NWFmZWMyMTgyMmI4ZmZlMTMwNTAzNmFlM2M3NjBmOGQzZDA5NThmNDYxYWY0NTQyMDVhZmNkMWE2ZjQzZjJkOTQxY2FhYzc2OWFjYjZkYmM2MTVhMWQ3Yzg1ZjI3ZGNkNWE3OWQ5NTY2MWVlZTQzN2QyMTcxZTIzOTBlYjc1MjYzZTA2ZmI4ZWZhY2NmOGRkMGNiZDcxMTg3NTVjOGQ1NjgyZDZhYmE5ZjRkZTE0OGI0Nzc5MmM1MTMzZjI5MGM1NTk1ZmYzMzIyYjZlMGY0MzMxZGU0MmJmNDdhYWE2ODgwMGRhYjYwNmIxZDIyNzkxNmNiZjRkOWYxNDM4YmI0NmMxMDFhNWM5ZjMyMDhhMjE5OTZkMWE3NDYxNzViMmRhN2VmZDlkYTU1NzRlMDFmMTliMTJiYTRhZmVhMTI3ZjkxZGJhMWQ1OWNhZWE2MGNmYWIyMGUwNTBhOGIxYmI0NjRkMjUzOTRlY2QzOWQ2ZGI4NGRlMjM4ZjI2ZDc3OGQ3NjZiYTY0YTE3NjBkODZlMjdmNGEwYjUzYzZjZjEzNTM1OGJmOGVkNmQ4M2VmMmY2MmMxODA4MDJjODBhZDZhOWZiYTBjZjkxZjU0NGNkZTM0NTlmODlmNmU5ZGQyYWM4YzRmNTMzYjJmNTUwMGNhYjdiOTljNmZiZjE0OTVkMGZhZDk5ZjdlODU2MDg0NjhmNGU5Y2NmMjY3NjNmYmYyZTAxNDMxMDI4MiJ9LCJtLzQ0Jy82MCcvMCcvMC8wIjp7ImFkZHJlc3MiOiJmODQ0YTVhNTJjMzg5ZDc4YTQwNjVjMzg2N2M5NTM3ZTQ2YjUyNzhjIiwiY2xpZW50X3NlY3JldF9zaGFyZSI6IjdhNzE3OGZhOTJkOTM4ZGJhMTgxNDk3NGI1MTZlMTMxMGY2M2U4OTU2Y2IzNDVkZDMxNGIwNGJkMzZlM2IwNGIiLCJwdWJsaWNfa2V5IjoiMDQ5OTUxYWZlNzFmYTYyZmZiZTE3YTM3M2Y0NTA5ZTY1ZDhmMTIzZjcxMmMxZTc4OTQ1OTE1YzIwMGM1YmVjYjA3NWJjODI5YTQ2MzQzMGZkNDc3YmQ1YmNmMzAyZjRkMTZlOGUyMGZiODZkODNiYTk4ODJjMzhjNWUzMTBkODMwMSIsInNlcnZlcl9zZWNyZXRfc2hhcmVfZW5jcnlwdGVkIjoiMmVjOWE3YjExZTc1ODkxMTgxNzRhMWU5MGIxN2M5YjEyYTU3Y2FiZjhlYzMzNmY3Yjk0MjY1MTAwZjdiM2ZhMWMyY2EzNmM0NDZhOWU0ZDJjMzFjNTRlZmQ0N2Y4OWRlN2EyZGJmNjU3ODhkNDQyNTc2NzRmNDFjZDc0ZGIwNTk4ZjBkNDFlNDY0OWViNGQ4Mzk5OTNkZGZkMWUyY2ZhNzBmZTNiNjM0NzFiYmYzOGNlMWUyZjU5ZGUxYjE4YjYxNzk5N2ZkNTRmZTUxYjBkNGE3MTNhMTNhYmViYmYyZWUxYTY1MjU3YTk5Mzk5MDJiNWMyNWIzZmJjNzdmNGJjNmQ2MDhmMjIyY2Q1ZTYyZGE4MjlmZWUwZWM4YzJmNjY0ZGI3MWY3NmZhYjVkODMyZGVkOTYxNjU2ZjU2Yzg1OTAzNTZlNjkyMDVhNGNmNmJmYmQzOWZmZWRhNDM0OTVmOGM0ODlmNWQ2NzU3Y2UxMjZlYWZlNzRiMjI0NjAyODI5NTk4YTc4NWZmZTdhMGYxYzg5YTY1Y2E3NjAyZjUwZjFkNjQ1NDVlYjg5ODA0ZmIzODdhNDY1ZGY3MzQxNWYzZmQxZWJmYjBkZjk2YTA2YmE5NzBhMDc1MGY4N2JhNzQ2OWNmMjBmNWExNzFjZDE3NDkwNmE0MDExNmMyYzBlMGQ5MGNkOTNmZmQ2ZTA4YWE3MWNlYTBiOTcxYjZjZGEyZTE4MGM2YjZhMTY5NTcwM2VlOTc1Zjc1OTA4Y2IxZjcwNmEyOWU0ZTc2YTczZjNkZjIxMTNiMDA3ZDZhMjhlN2I4NDNiMmU1MWRlNDU4NDY4NmY2YmU3NDkyNWMxMDI1ODYxMjc0ZTFjMTAwYmE5Mzc1MzIwOTlhMjE0ODcxYTVhN2YzYmNhMzQwYzQzYzUzZTJjMjA4MTUwN2JlMTliNWNkNDNmMTMxODFjZDQ4YTRiYjg5ZmVhZGMyOGVhODk1MWUwYzYxZjI5NWI3OGFiNTZhNTk3MjAwYzkyMjliMWViZjk1ODVhM2UzYTc0ZjM3NGY2MDRiNWIyNjBiOTQ5ZWQ5ZTQ5NTcyZTYzMzUyNzU0ODVhZGMzMDI3NTc5YWMwMGY3YmNmNDk3NTBhMDhmNDAwNjNkYjZiZWExOTk0NjBkYjM2ZTg4MDZlODM5MzI3NWI5OWIzMDYxNjBlNTFlZTkwMTliYjk4MDFjZTcyYzMyNWYwNTRmZTFmYjU4ZmY2MzRkMmE2NTgzM2VkMzk4NmM1MjM2YTcxN2MwYjRhMzkxNGE2ZjQ0YWNjY2JiZTc5ZTk2MTM0NzUyNjEwMTAyZGI0YTNiNmRiMzllZmU1MzA1MzBlNTA5NDkxOGFmYzYyZSJ9LCJtLzQ0Jy84ODgnLzAnLzAvMCI6eyJhZGRyZXNzIjoiQWNoVktrNlVIR1IzUHNTZjloMWVUQ0FLOE1mYmtnQ1Z6WSIsImNsaWVudF9zZWNyZXRfc2hhcmUiOiI0ZWRjM2IwNjE2OTkxZDQ2ODI5ZDE3ZjA4MzMwZjkyNTQ4OGZhYmEwMmIyMGYzODZlZmVlZWJlYjQ1ZmI3ZWM1IiwicHVibGljX2tleSI6IjAzMDVlYTJmMzA5ZjFjZDQ5OTNjMmE5ZmU4ZGNhNGQ0ZGI3NjU2MWRlMDViNTEwYjM3MTM5YTk5MGNlMDNmZWI3OCIsInNlcnZlcl9zZWNyZXRfc2hhcmVfZW5jcnlwdGVkIjoiMTc1OTA2YWQ0NWViY2E3ZmY1MzdkZDVlZDFmMzYzOTFlMDY2OWU5YzI4NDEzNjFmOWU5ODM3MjUyZmEzODA4MTgxZjQ5ODA0ZmRiNDhiN2E4MGVlZDk1NDZjZTU2YTAwNGNiMzNlMzczMTRmZTM5ZGI5ODU2NTg0YmYyZjZiNTM3Y2VmM2IxYmRjZjFmNDE5NzJmZDgyMmE2NWYwY2M2N2UwNjZhNGNkNmUwMWEyZTBmOGJiMGVlN2Q0OWE3NzhjMWMzYjM3MjY3NTA2ZmQ5NmQ3YzJiZGVjY2NiZjk3MjMxZTY0MWVhZjQ0MDM0NGM4OGVhMjNhZmM0NjJmYTA3ZGU1ODU5ZGFjMTRlYmU5N2Y0NTcwNWUzMTk5Zjc2YzRmNjlkNzVmMDhlOGY0YzJmNzg5MDFlZjZiOWJiYTk5NGQ3MzUxZGUwMDc3YTE1NDk4NzEyYWYwYTYzMmU0YjIyNTRjNmRhYzBjMWNiYWEzYzAyNzQ4ZTIxYjBmNTVmZmRlZTg0YTM0NTZkN2IyOWVmMTMzMWQ2YzE1NWVmZmY2NWJmYzY0MzVkYmEyMzIyOTQzNzlkYjE3YTRjZDU3ZDQ1NjAxMTc2ZjA4NjAxMzhiNjZhNGQ0YjVhMGNlMGI2ZTEzMmYzOWU1MDAzYWEzMmJiZGZlODI0Y2E3ODU1NGFlNmQ0MWM3NGE3ZDRjODA5NjVjOWRmY2QxZWYwMzU3MGZhNzA0NmFlZWRkNGM4YzZkZTkzNGUyYjIwNzVmMzg4ODZmOTA2MzBhOWM1ZDgwYjIxMGNhYTkwOGQzMjA0Mzg2NmM2OThmMTYyODEyNjNjNjZiM2VkOWZiNzA5MTNhNTYxNzU4MGNjYjEwOTdjNWY0YWUwNjYzYmZlYmFiMjRlODA0ODJhYWExOWE5ZjFhOTQ4NWJkMzU5M2ViNjFjMzNlYTVkZTE3NjFkMGY5OWIwZWFjOGMyNGJiNTYzYmNjYjJmYTVkMjkwMDUyNWM5YjYyODQzNjY1N2I0OGNlMjA0MTQ2NWFkOTE3ZGRkYWFmYzM3YmU2OTk2MWE0ODM4YWQ1ZWFkYjVhNDEyNDFmYTM2YWJmOTYyODI1N2JhMWM1YWQ3NTQ2NjgxMTQ5YzA1ZjU4YTE1MmRkY2UzN2RlMmY5MDJiYTNjMWJmNzgxYWZmNmQ3MTE2MTY3ZjhkNmNhMmZhODM4N2NmMzI2YzQzN2FkZDQ2Zjg5MWFmMjlmZjVjNjgyY2I3OGJhNzcwNzY5YTllNTVjM2JkZjc3NDg1NDQyMWQ4NWYwZjM5NjExY2E2NWFlZWMwZDQ3ZjY1ZGQxOTY2NTMxMTM0OTU4YTBiZjQ5ZGY3MDJkN2UxODg0NmRjYWU3NyJ9fSwicGFpbGxpZXJfcGsiOnsibiI6IjdlYmQ1YzU4NjY4MDA5YjU2NmFhM2ZlZjc0NzYzNTU1ZDg1Y2MxYTg3ZDhmY2E5OTY2MDg4YWVjZDBmMDM2N2UzMWFjZjMzZjg5NDZiMDkyMTUyNzFlMWE3NjcyYjIwMGY2ZmYzZWFkN2QxOTdhMGEyOTk5MmY2OWMwZWY5MDQ3MGNlZWE0YTM5MjVjZmIzZjVhOWRiZGU5ODlmYjM3NTU5M2MzNjZlYzFkMDJiNTMzYzdiZmZhYTg3Yzc4ZTY1NjU2NmMwMGYxZjU4YTAyNTAyYjUyNWZkNTA2ODNmODcyYmYzNjUxZGZmNDVmZTE4NGVjM2I4Y2Q1MzQ1ZjBiNDZmMDk1YjUwZjk4ZmMxMTExOTJlZThjZTM4ODMxOTAwMjI4YTI0MjM1NTgyNzBlMmIyNTBhNjRlNjAxM2YyYjkyYTVkMzEyNDUwNjQ4MmE0ZTIxOTlkYTE2YjVkY2I2ZjE2ZGJjYzdhZDYxN2JlOTQ3MTgxYTRkMTI4Y2I0MGQwMWM4NjRhNjJjYzBkM2EzMjcyNjE1Njg0YmMxZGVlZGFkMTc5MWI5NDYxZWQwYjkzZjBhYzVlZmMxYjlmNWEzNjM3MmZiOTNmNzJiZTY3ZjU5NTVjZmM2YmNkNmJkMjAxMmFmNmE0Y2Q0MjAwMjRhZGIwZWQ2N2I0YTQxMTBiOWUxIn0sInBheWxvYWRfcHVibGljX2tleSI6IjAyZWEwODg4ZTczMWUwM2U4MGNmN2E3YzkyNWQ2Nzc0ZjI0NzlmM2U5ZDBjNjU4YjFiNDYwNzgxY2M0OGQ2ZjRlNCIsInBheWxvYWRfc2lnbmluZ19rZXkiOiIwZDk3Y2M4YjhiMGM3OWUxOWIyMmYzOGQ1MGEzMTQ2M2Q0MjA5NjE5YzVmMTRmOTg5YWZlNTFiMmZjZjFhYzdlIiwidmVyc2lvbiI6MH0",
+            "ab69e08c-61d0-4bde-8ed7-36bf45ee6d18", 
+            None, 
+            0, 
+            Environment::Dev("app.dev3.nash.io/"), 
+            1000
+        ).await.unwrap()
+    }
+
     #[test]
     fn end_to_end_dh_fill_pool() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
@@ -591,7 +602,7 @@ mod tests {
     fn end_to_end_asset_nonces() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
-            let client = init_client().await;
+            let client = init_dev3_client().await;
             let response = client.run(AssetNoncesRequest::new()).await.unwrap();
             println!("{:?}", response);
             println!("{:?}", client.state.lock().await.asset_nonces);
@@ -714,40 +725,111 @@ mod tests {
     }
 
     #[test]
+    fn test_list_markets() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_dev3_client().await;
+            let response = client
+                .run(ListMarketsRequest)
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            println!("{:?}", client.state.lock().await.assets);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
     fn test_account_order_lookup_then_cancel() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
-            let client = init_client().await;
-            let response = client
-                .run(LimitOrderRequest {
+            let client = init_dev3_client().await;
+            let mut requests = Vec::new();
+            requests.push(
+                LimitOrderRequest {
                     market: Market::neo_usdc(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "10".to_string(),
+                    price: "5".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::neo_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1".to_string(),
+                    price: "200".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
                     buy_or_sell: BuyOrSell::Buy,
                     amount: "10".to_string(),
                     price: "1".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
-            let order_id = response.response().unwrap().order_id.clone();
-            // Small delay to make sure it is processed
-            tokio::time::delay_for(tokio::time::Duration::from_millis(500)).await;
-            let response = client
-                .run(GetAccountOrderRequest {
-                    order_id: order_id.clone(),
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
-            let response = client
-                .run(CancelOrderRequest {
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
                     market: Market::eth_usdc(),
-                    order_id,
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.451".to_string(),
+                    price: "75.1".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1.24".to_string(),
+                    price: "821".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1.24".to_string(),
+                    price: "821.12".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            for request in requests {
+                let response = client
+                    .run(request)
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
+                let order_id = response.response().unwrap().order_id.clone();
+                // Small delay to make sure it is processed
+                tokio::time::delay_for(tokio::time::Duration::from_millis(500)).await;
+                let response = client
+                    .run(GetAccountOrderRequest {
+                        order_id: order_id.clone(),
+                    })
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
+                let response = client
+                    .run(CancelOrderRequest {
+                        market: Market::eth_usdc(),
+                        order_id,
+                    })
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
+            }
         };
         runtime.block_on(async_block);
     }

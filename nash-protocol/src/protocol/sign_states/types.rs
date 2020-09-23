@@ -42,7 +42,7 @@ impl SignStatesRequest {
 #[derive(Clone, Debug)]
 pub struct SignStatesResponseData {
     pub recycled_orders: Vec<StateData>,
-    pub server_signed_states: Vec<StateData>,
+    pub server_signed_states: Vec<ServerSignedData>,
     pub states: Vec<StateData>,
 }
 
@@ -57,19 +57,23 @@ impl SignStatesResponseData {
 /// that the client should sign and return
 #[derive(Clone, Debug)]
 pub struct StateData {
-    pub message: String,
+    pub payload: String,
+    pub payload_hash: String,
     pub blockchain: Blockchain,
 }
 
-// FIXME: this is just for Ethereum. Needs to be replaced with an Enum over
-// Ethereum and NEO and hooks on validation logic need to be added to the
-// response data.
+#[derive(Clone, Debug)]
+pub struct ServerSignedData {
+    pub signed_data: String,
+    pub blockchain: Blockchain
+}
 
-/// State update payload returned by Nash ME which we should validate.
-/// State updates set `asset_id` to a new `balance`. The `nonce` used in
-/// the update must be higher than any previous nonce.
+
+// State update payload returned by Nash ME which we should validate.
+// State updates set `asset_id` to a new `balance`. The `nonce` used in
+// the update must be higher than any previous nonce.
 #[derive(Debug, PartialEq)]
-pub struct StateUpdatePayload {
+pub struct StateUpdatePayloadEth {
     pub prefix: Prefix,        // 1 byte
     pub asset_id: Asset,       // 2 bytes
     pub balance: Amount,       // 8 bytes
@@ -90,7 +94,7 @@ impl ClientSignedState {
     /// Construct signed state from a `StateData` and a signature.
     pub fn from_state_data(state_data: &StateData, r: BigInt, signature: BigInt) -> Self {
         Self {
-            message: state_data.message.clone(),
+            message: state_data.payload_hash.clone(),
             blockchain: state_data.blockchain,
             r,
             signature,

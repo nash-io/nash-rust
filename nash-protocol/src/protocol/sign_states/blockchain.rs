@@ -11,17 +11,17 @@ use super::super::signer::Signer;
 #[cfg(feature = "num_bigint")]
 use num_traits::Num;
 
-use super::types::StateUpdatePayload;
+use super::types::StateUpdatePayloadEth;
 
 /// Sign off on a piece of state data such as an account balance or a recycled open order
 /// with a higher nonce. These states can be submitted by the ME to the settlement contract
 pub fn sign_state_data(state_data: &StateData, signer: &mut Signer) -> Result<ClientSignedState> {
     let data = match state_data.blockchain {
         // Recycled orders should not be double hashed, but that is what we are doing here
-        Blockchain::Ethereum => hash_eth_message(&decode_hexstr(&state_data.message)?),
-        Blockchain::NEO => hash_neo_message(&decode_hexstr(&state_data.message)?),
+        Blockchain::Ethereum => hash_eth_message(&decode_hexstr(&state_data.payload_hash)?),
+        Blockchain::NEO => hash_neo_message(&decode_hexstr(&state_data.payload_hash)?),
         // No hashing for BTC. This should be fixed in ME
-        Blockchain::Bitcoin => BigInt::from_str_radix(&state_data.message, 16)
+        Blockchain::Bitcoin => BigInt::from_str_radix(&state_data.payload_hash, 16)
             .map_err(|_| ProtocolError("Could not parse BTC hash as BigInt"))?,
     };
     let (sig, r, _pub) = signer.sign_child_key(data, state_data.blockchain)?;
@@ -34,7 +34,7 @@ impl From<std::array::TryFromSliceError> for ProtocolError {
     }
 }
 
-impl StateUpdatePayload {
+impl StateUpdatePayloadEth {
     pub fn from_hex(hex_str: &str) -> Result<Self> {
         let bytes = hex::decode(hex_str)
             .map_err(|_| ProtocolError("Could not decode StateUpdate hex to bytes"))?;
@@ -65,18 +65,18 @@ impl StateUpdatePayload {
 
 #[cfg(test)]
 mod tests {
-    use super::{eth::Address, Amount, Asset, Nonce, Prefix, StateUpdatePayload};
+    use super::{eth::Address, Amount, Asset, Nonce, Prefix, StateUpdatePayloadEth};
 
     #[test]
     fn test_eth() {
-        let eth_update = StateUpdatePayload {
+        let eth_update = StateUpdatePayloadEth {
             prefix: Prefix::SyncState,
             asset_id: Asset::ETH,
             balance: Amount::new("0", 8).unwrap(),
             nonce: Nonce::Value(44),
             address: Address::new("D58547F100B67BB99BBE8E94523B6BB4FDA76954").unwrap(),
         };
-        let state_update = StateUpdatePayload::from_hex(
+        let state_update = StateUpdatePayloadEth::from_hex(
             "00000000000000000000000000002cd58547f100b67bb99bbe8e94523b6bb4fda76954",
         )
         .unwrap();
@@ -86,12 +86,12 @@ mod tests {
 
     #[test]
     fn test_bat() {
-        let bat_state = StateUpdatePayload::from_hex(
+        let bat_state = StateUpdatePayloadEth::from_hex(
             "0000010000000177825f000000000ed58547f100b67bb99bbe8e94523b6bb4fda76954",
         )
         .unwrap();
         println!("{:?}", bat_state);
-        let bat_update = StateUpdatePayload {
+        let bat_update = StateUpdatePayloadEth {
             prefix: Prefix::SyncState,
             asset_id: Asset::BAT,
             balance: Amount::new("63.0", 8).unwrap(),

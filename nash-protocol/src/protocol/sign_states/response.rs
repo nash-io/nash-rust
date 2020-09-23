@@ -1,6 +1,6 @@
 //! Response processing for state signing
 
-use super::types::{SignStatesResponseData, StateData, ServerSignedData};
+use super::types::{SignStatesResponseData, StateData, RecycledOrder, ContractBalanceState, ServerSignedData};
 use crate::graphql::sign_states;
 use crate::types::Blockchain;
 
@@ -13,14 +13,11 @@ impl From<sign_states::ResponseData> for SignStatesResponseData {
         let mut states = Vec::new();
         let data = res.sign_states;
         for state in &data.recycled_orders {
-
-            // println!("recycle: {}\n{}\n{}\n", state.payload_hash, state.payload, state.message);
-
-            recycled_orders.push(StateData {
+            recycled_orders.push(RecycledOrder(StateData {
                 payload_hash: state.payload_hash.clone(),
                 payload: state.payload.clone(),
                 blockchain: (&state.blockchain).into(),
-            });
+            }));
         }
         for state in &data.server_signed_states {
             server_signed_states.push(ServerSignedData {
@@ -29,14 +26,11 @@ impl From<sign_states::ResponseData> for SignStatesResponseData {
             });
         }
         for state in &data.states {
-
-            // println!("state: {}\n{}\n{}\n", state.payload_hash, state.payload, state.message);
-
-            states.push(StateData {
+            states.push(ContractBalanceState(StateData {
                 payload_hash: state.payload_hash.clone(),
                 payload: state.payload.clone(),
                 blockchain: (&state.blockchain).into(),
-            });
+            }));
         }
         Self {
             recycled_orders,

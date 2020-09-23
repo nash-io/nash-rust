@@ -68,7 +68,7 @@ pub fn spawn_sender_loop(
                 Either::Right((in_msg, _)) => {
                     if let Some(Ok(Ok(resp))) = in_msg.map(|x| x.map(|x| x.into_text())) {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
-                            println!("{:?}", resp_copy1);
+                            // println!("{:?}", resp_copy1);
                             // Similarly, let the client timeout on incoming response if this fails and handle that
                             let _ignore = ws_incoming_sender.send(resp_copy1);
                             // todo: this is a hack since the graphql library has not implemented clone() for responses
@@ -729,7 +729,7 @@ mod tests {
     fn test_list_markets() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
-            let client = init_dev3_client().await;
+            let client = init_client().await;
             let response = client
                 .run(ListMarketsRequest)
                 .await
@@ -822,14 +822,14 @@ mod tests {
                     .await
                     .unwrap();
                 println!("{:?}", response);
-                // let response = client
-                //     .run(CancelOrderRequest {
-                //         market: Market::eth_usdc(),
-                //         order_id,
-                //     })
-                //     .await
-                //     .unwrap();
-                // println!("{:?}", response);
+                let response = client
+                    .run(CancelOrderRequest {
+                        market: Market::eth_usdc(),
+                        order_id,
+                    })
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
             }
         };
         runtime.block_on(async_block);

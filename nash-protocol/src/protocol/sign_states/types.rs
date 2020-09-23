@@ -41,9 +41,9 @@ impl SignStatesRequest {
 /// a list of states to sign as well as to submit client signed states.
 #[derive(Clone, Debug)]
 pub struct SignStatesResponseData {
-    pub recycled_orders: Vec<StateData>,
+    pub recycled_orders: Vec<RecycledOrder>,
     pub server_signed_states: Vec<ServerSignedData>,
-    pub states: Vec<StateData>,
+    pub states: Vec<ContractBalanceState>,
 }
 
 impl SignStatesResponseData {
@@ -52,9 +52,7 @@ impl SignStatesResponseData {
         self.recycled_orders.len() > 0 || self.states.len() > 0
     }
 }
-
-/// A representation of account and order state data coming in from the ME
-/// that the client should sign and return
+/// Common representation of smart contract state data
 #[derive(Clone, Debug)]
 pub struct StateData {
     pub payload: String,
@@ -62,23 +60,22 @@ pub struct StateData {
     pub blockchain: Blockchain,
 }
 
+/// A representation of account and order state data coming in from the ME
+/// that the client should sign and return
+#[derive(Clone, Debug)]
+pub struct RecycledOrder(pub StateData);
+impl RecycledOrder { pub fn state(&self) -> &StateData { &self.0 } }
+
+/// Smart contract balance state
+#[derive(Clone, Debug)]
+pub struct ContractBalanceState(pub StateData);
+impl ContractBalanceState { pub fn state(&self) -> &StateData { &self.0 } }
+
+
 #[derive(Clone, Debug)]
 pub struct ServerSignedData {
     pub signed_data: String,
     pub blockchain: Blockchain
-}
-
-
-// State update payload returned by Nash ME which we should validate.
-// State updates set `asset_id` to a new `balance`. The `nonce` used in
-// the update must be higher than any previous nonce.
-#[derive(Debug, PartialEq)]
-pub struct StateUpdatePayloadEth {
-    pub prefix: Prefix,        // 1 byte
-    pub asset_id: Asset,       // 2 bytes
-    pub balance: Amount,       // 8 bytes
-    pub nonce: Nonce,          // 4 bytes
-    pub address: eth::Address, // 20 bytes
 }
 
 /// Signed state data. This may be for a state balance update or a recycled
@@ -110,7 +107,7 @@ impl NashProtocol for SignStatesRequest {
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
         let mut state = state.lock().await;
         let signer = state.signer()?;
-        let query = self.make_query(signer);
+        let query = self.make_query(signer)?;
         serializable_to_json(&query)
     }
     /// Deserialize response to SignStates protocol request

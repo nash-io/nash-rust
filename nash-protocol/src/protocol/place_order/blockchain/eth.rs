@@ -174,7 +174,6 @@ impl Asset {
     /// This maps assets onto their representation in the ETH SC protocol.
     /// Each asset is represented by two bytes which serve as an identifier
     pub fn to_eth_bytes(&self) -> [u8; 2] {
-        // FIXME: add the rest
         match self {
             Self::ETH => [0x00, 0x00],
             Self::BAT => [0x00, 0x01],

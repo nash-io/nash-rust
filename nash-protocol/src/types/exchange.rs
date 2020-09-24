@@ -110,7 +110,7 @@ impl Asset {
             "gas" => Ok(Self::GAS),
             "trac" => Ok(Self::TRAC),
             "gunthy" => Ok(Self::GUNTHY),
-            "gunthy" => Ok(Self::NNN),
+            "nnn" => Ok(Self::NNN),
             _ => Err(ProtocolError("Asset not known")),
         }
     }

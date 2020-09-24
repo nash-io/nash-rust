@@ -6,7 +6,7 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::sign_states;
-use crate::types::{eth, Amount, Asset, Blockchain, Nonce, Prefix};
+use crate::types::Blockchain;
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use mpc_wallet_lib::rust_bigint::BigInt;

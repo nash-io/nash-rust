@@ -23,14 +23,14 @@ impl ContractBalanceState {
         let state_data = &self.0;
         match state_data.blockchain {
             Blockchain::Ethereum => {
-                println!("{}", state_data.payload);
-                if let Ok(state) = StateUpdatePayloadEth::from_hex(&state_data.payload) {
-                    println!("verified ETH: {:?}", state);
+                if let Ok(_state) = StateUpdatePayloadEth::from_hex(&state_data.payload) {
+                    // TODO: verify other properties here
                     true
                 } else {
                     false
                 }
             },
+            // TODO:
             Blockchain::NEO => true,
             Blockchain::Bitcoin => true
         }
@@ -39,6 +39,7 @@ impl ContractBalanceState {
 
 impl RecycledOrder {
     pub fn verify(&self) -> bool {
+        // TODO:
         match self.0.blockchain {
             Blockchain::Ethereum => true,
             Blockchain::NEO => true,

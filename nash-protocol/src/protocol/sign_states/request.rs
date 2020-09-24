@@ -6,6 +6,7 @@ use crate::graphql::sign_states;
 use crate::types::Blockchain;
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, current_time_as_i64};
 use graphql_client::GraphQLQuery;
+use crate::errors::{Result, ProtocolError};
 
 use super::super::signer::Signer;
 
@@ -14,34 +15,30 @@ impl SignStatesRequest {
     pub fn make_query(
         &self,
         signer: &mut Signer,
-    ) -> graphql_client::QueryBody<sign_states::Variables> {
+    ) -> Result<graphql_client::QueryBody<sign_states::Variables>> {
         // If we have state data from a previous request, sign it
         let (signed_orders, signed_states) = match &self.input_states {
             None => (vec![], vec![]),
             Some(states) => {
-                let signed_orders = states
-                    .recycled_orders
-                    .iter()
-                    .map(|order| {
-                        // This wrapping forced by GraphQL API
-                        Some(
-                            sign_state_data(order, signer)
-                                .expect("Signing orders went wrong in signState")
-                                .into(),
-                        )
-                    })
-                    .collect();
-                let signed_states = states
-                    .states
-                    .iter()
-                    .map(|order| {
-                        Some(
-                            sign_state_data(order, signer)
-                                .expect("Signing states went wrong in signState")
-                                .into(),
-                        )
-                    })
-                    .collect();
+
+                let mut signed_orders = Vec::new();
+                for order in &states.recycled_orders {
+                    if let false = order.verify() {
+                        return Err(ProtocolError("Recycled order payload failed to verify. Refusing to sign"))
+                    }
+                    let signed = sign_state_data(order.state(), signer)?;
+                    signed_orders.push(signed);
+                }
+
+                let mut signed_states = Vec::new();
+                for state in &states.states {
+                    if let false = state.verify() {
+                        return Err(ProtocolError("State balance payload failed to verify. Refusing to sign"))
+                    }
+                    let signed = sign_state_data(state.state(), signer)?;
+                    signed_states.push(signed);
+                }
+
                 (signed_orders, signed_states)
             }
         };
@@ -49,15 +46,15 @@ impl SignStatesRequest {
             payload: sign_states::SignStatesParams {
                 timestamp: current_time_as_i64(),
                 sync_all: Some(true),
-                signed_recycled_orders: Some(signed_orders),
-                client_signed_states: Some(signed_states),
+                signed_recycled_orders: Some(signed_orders.iter().map(|x| Some(x.into())).collect()),
+                client_signed_states: Some(signed_states.iter().map(|x| Some(x.into())).collect()),
             },
             signature: RequestPayloadSignature::empty().into(),
         };
         let sig_payload = sign_states_canonical_string(&params);
         let sig = signer.sign_canonical_string(&sig_payload);
         params.signature = sig.into();
-        graphql::SignStates::build_query(params)
+        Ok(graphql::SignStates::build_query(params))
     }
 }
 
@@ -72,13 +69,13 @@ impl From<RequestPayloadSignature> for sign_states::Signature {
 }
 
 /// Transform our nicer representation to the ugly wrapped one for the backend
-impl From<ClientSignedState> for sign_states::ClientSignedMessage {
-    fn from(signed_state: ClientSignedState) -> Self {
+impl From<&ClientSignedState> for sign_states::ClientSignedMessage {
+    fn from(signed_state: &ClientSignedState) -> Self {
         Self {
             message: Some(signed_state.message.clone()),
             blockchain: Some(signed_state.blockchain.into()),
-            r: Some(bigint_to_nash_r(signed_state.r)),
-            signature: Some(bigint_to_nash_sig(signed_state.signature)),
+            r: Some(bigint_to_nash_r(signed_state.r.clone())),
+            signature: Some(bigint_to_nash_sig(signed_state.signature.clone())),
         }
     }
 }

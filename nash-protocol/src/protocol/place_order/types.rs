@@ -10,7 +10,7 @@ use crate::errors::Result;
 use crate::graphql::place_limit_order;
 use crate::types::{
     AssetAmount, AssetofPrecision, Blockchain, BuyOrSell, Market, Nonce, OrderCancellationPolicy,
-    OrderStatus, OrderType, Rate,
+    OrderStatus, OrderType, Rate
 };
 use crate::utils::{current_time_as_i64, pad_zeros};
 use async_trait::async_trait;

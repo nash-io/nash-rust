@@ -32,6 +32,7 @@ pub enum Asset {
     BAT,
     OMG,
     USDC,
+    USDT,
     ZRX,
     LINK,
     QNT,
@@ -40,6 +41,9 @@ pub enum Asset {
     BTC,
     NEO,
     GAS,
+    TRAC,
+    GUNTHY,
+    NNN
 }
 
 impl Asset {
@@ -48,6 +52,7 @@ impl Asset {
         match self {
             Self::ETH => Blockchain::Ethereum,
             Self::USDC => Blockchain::Ethereum,
+            Self::USDT => Blockchain::Ethereum,
             Self::BAT => Blockchain::Ethereum,
             Self::OMG => Blockchain::Ethereum,
             Self::ZRX => Blockchain::Ethereum,
@@ -55,9 +60,12 @@ impl Asset {
             Self::QNT => Blockchain::Ethereum,
             Self::RLC => Blockchain::Ethereum,
             Self::ANT => Blockchain::Ethereum,
+            Self::TRAC => Blockchain::Ethereum,
+            Self::GUNTHY => Blockchain::Ethereum,
             Self::BTC => Blockchain::Bitcoin,
             Self::NEO => Blockchain::NEO,
             Self::GAS => Blockchain::NEO,
+            Self::NNN => Blockchain::NEO
         }
     }
 
@@ -68,6 +76,7 @@ impl Asset {
         match self {
             Self::ETH => "eth",
             Self::USDC => "usdc",
+            Self::USDT => "usdt",
             Self::BAT => "bat",
             Self::OMG => "omg",
             Self::ZRX => "zrx",
@@ -78,6 +87,9 @@ impl Asset {
             Self::BTC => "btc",
             Self::NEO => "neo",
             Self::GAS => "gas",
+            Self::TRAC => "trac",
+            Self::GUNTHY => "gunthy",
+            Self::NNN => "nnn"
         }
     }
 
@@ -85,6 +97,7 @@ impl Asset {
         match asset_str {
             "eth" => Ok(Self::ETH),
             "usdc" => Ok(Self::USDC),
+            "usdt" => Ok(Self::USDT),
             "bat" => Ok(Self::BAT),
             "omg" => Ok(Self::OMG),
             "zrx" => Ok(Self::ZRX),
@@ -95,6 +108,9 @@ impl Asset {
             "btc" => Ok(Self::BTC),
             "neo" => Ok(Self::NEO),
             "gas" => Ok(Self::GAS),
+            "trac" => Ok(Self::TRAC),
+            "gunthy" => Ok(Self::GUNTHY),
+            "nnn" => Ok(Self::NNN),
             _ => Err(ProtocolError("Asset not known")),
         }
     }
@@ -105,6 +121,7 @@ impl Asset {
         vec![
             Self::ETH,
             Self::USDC,
+            Self::USDT,
             Self::BAT,
             Self::OMG,
             Self::ZRX,
@@ -114,6 +131,9 @@ impl Asset {
             Self::BTC,
             Self::NEO,
             Self::GAS,
+            Self::TRAC,
+            Self::GUNTHY,
+            Self::NNN
         ]
     }
 }
@@ -310,9 +330,7 @@ impl Rate {
             // FIXME: this could be wrong
             Self::MaxOrderRate | Self::MaxFeeRate => {
                 // FIXME: be bytes could be wrong for NEO
-                BigDecimal::parse_bytes(&self.to_be_bytes()?[..], 16).ok_or(ProtocolError(
-                    "Failed to convert MaxOrderRate to BigDecimal",
-                ))?
+                BigDecimal::from_str("0.0025").unwrap()
             }
             Self::MinOrderRate | Self::MinFeeRate => 0.into(),
         };
@@ -326,6 +344,12 @@ impl Rate {
                 "Cannot invert a Rate that is not an OrderRate",
             )),
         }
+    }
+
+    /// Subtract fee from user by adjusting the order rate downwards
+    pub fn subtract_fee(&self, fee: BigDecimal) -> Result<OrderRate> {
+        let as_order_rate = OrderRate {inner: self.to_bigdecimal()? };
+        Ok(as_order_rate.subtract_fee(fee))
     }
 }
 
@@ -367,6 +391,15 @@ impl OrderRate {
     /// Return a new `BigDecimal` based on `OrderRate`
     pub fn to_bigdecimal(&self) -> BigDecimal {
         self.inner.clone()
+    }
+
+    /// Subtract fee from user by adjusting the order rate downwards. This will keep track of as 
+    /// much precision as BigDecimal is capable of. However, this method is exclusively used by
+    /// the smart contract and will be reduced to an integer in scale of 10^8 before encoding
+    pub fn subtract_fee(&self, fee: BigDecimal) -> Self {
+        let fee_multiplier = BigDecimal::from(1) - fee;
+        let inner = &self.inner * &fee_multiplier;
+        OrderRate { inner }
     }
 }
 
@@ -575,4 +608,17 @@ pub struct Order {
 pub struct OrderbookOrder {
     pub price: String,
     pub amount: AssetAmount,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BigDecimal, FromStr, OrderRate};
+    #[test]
+    fn fee_rate_conversion_precision() {
+        let rate = OrderRate::new("150").unwrap();
+        let inverted_rate = rate.invert_rate(None);
+        let minus_fee = inverted_rate.subtract_fee(BigDecimal::from_str("0.0025").unwrap());
+        let payload = minus_fee.to_be_bytes().unwrap();
+        assert_eq!(665000, u64::from_be_bytes(payload));
+    }
 }

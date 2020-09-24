@@ -125,7 +125,7 @@ impl Rate {
 impl OrderRate {
     /// Serialize the OrderRate to bytes for payload creation. We always use a
     /// precision of 8 and multiplication factor of 10^8
-    fn to_le_bytes(&self) -> Result<[u8; 8]> {
+    pub fn to_le_bytes(&self) -> Result<[u8; 8]> {
         let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_le_bytes();
         Ok(bytes)
     }
@@ -148,6 +148,9 @@ impl Asset {
             Self::USDC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
                 .unwrap()
                 .to_bytes(),
+            Self::USDT => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
             Self::ZRX => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
                 .unwrap()
                 .to_bytes(),
@@ -163,6 +166,12 @@ impl Asset {
             Self::ANT => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
                 .unwrap()
                 .to_bytes(),
+            Self::TRAC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::GUNTHY => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
             Self::BTC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
                 .unwrap()
                 .to_bytes(),
@@ -175,7 +184,10 @@ impl Asset {
                 BigInt::from_hex("E72D286979EE6CB1B7E65DFDDFB2E384100B8D148E7758DE42E4168B71792C60")
                     .unwrap()
                     .to_bytes()
-            }
+            },
+            Self::NNN => BigInt::from_hex("045fab3389daf5602fa0953b4d7db3ef7b57b753")
+                .unwrap()
+                .to_bytes(),
         }
     }
 
@@ -393,6 +405,13 @@ mod tests {
             order_data.to_hex().unwrap(),
             "016F6F85BFFFB412967AF3DD0D71A5E2F8A759006CE72D286979EE6CB1B7E65DFDDFB2E384100B8D148E7758DE42E4168B71792C609B7CFFDAA674BEAE0F930EBE6085AF9093E5FE56B34A5C220CCDCF6EFC336FC52CE65200000000002CE6520000000000A0860100000000000000000000000000F0C159000000000090D00300000000002CE65200000000000292CBF3790801CEF47C5CDC9ABF4B010EC50AAD117F595350D77ECD385D286E63"
         );
+    }
+
+    #[test]
+    fn run(){
+        let bytes = hex::decode("53b7577befb37d4d3b95a02f60f5da8933ab5f04").unwrap();
+        let rev_bytes: Vec<u8> = bytes.iter().rev().map(|x| x.clone()).collect();
+        println!("{}", hex::encode(&rev_bytes));
     }
 
     #[test]

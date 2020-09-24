@@ -729,7 +729,7 @@ mod tests {
     fn test_list_markets() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
-            let client = init_client().await;
+            let client = init_dev3_client().await;
             let response = client
                 .run(ListMarketsRequest)
                 .await
@@ -748,7 +748,30 @@ mod tests {
             let mut requests = Vec::new();
             requests.push(
                 LimitOrderRequest {
+<<<<<<< HEAD
+=======
                     market: Market::neo_usdc(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "10".to_string(),
+                    price: "5".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+>>>>>>> master
+                    market: Market::neo_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1".to_string(),
+                    price: "200".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
                     buy_or_sell: BuyOrSell::Buy,
                     amount: "10".to_string(),
                     price: "5".to_string(),

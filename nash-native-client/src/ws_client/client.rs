@@ -748,8 +748,6 @@ mod tests {
             let mut requests = Vec::new();
             requests.push(
                 LimitOrderRequest {
-<<<<<<< HEAD
-=======
                     market: Market::neo_usdc(),
                     buy_or_sell: BuyOrSell::Buy,
                     amount: "10".to_string(),
@@ -760,7 +758,6 @@ mod tests {
             );
             requests.push(
                 LimitOrderRequest {
->>>>>>> master
                     market: Market::neo_usdc(),
                     buy_or_sell: BuyOrSell::Sell,
                     amount: "1".to_string(),

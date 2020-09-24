@@ -86,8 +86,6 @@ impl LimitOrderConstructor {
 
         let min_order = min_order.subtract_fee(Rate::MaxFeeRate.to_bigdecimal()?)?.into();
         let fee_rate = Rate::MinFeeRate; // 0
-
-        println!("fee {:?}", min_order);
         
         match chain {
             Blockchain::Ethereum => {

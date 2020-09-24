@@ -32,6 +32,7 @@ pub enum Asset {
     BAT,
     OMG,
     USDC,
+    USDT,
     ZRX,
     LINK,
     QNT,
@@ -40,6 +41,9 @@ pub enum Asset {
     BTC,
     NEO,
     GAS,
+    TRAC,
+    GUNTHY,
+    NNN
 }
 
 impl Asset {
@@ -48,6 +52,7 @@ impl Asset {
         match self {
             Self::ETH => Blockchain::Ethereum,
             Self::USDC => Blockchain::Ethereum,
+            Self::USDT => Blockchain::Ethereum,
             Self::BAT => Blockchain::Ethereum,
             Self::OMG => Blockchain::Ethereum,
             Self::ZRX => Blockchain::Ethereum,
@@ -55,9 +60,12 @@ impl Asset {
             Self::QNT => Blockchain::Ethereum,
             Self::RLC => Blockchain::Ethereum,
             Self::ANT => Blockchain::Ethereum,
+            Self::TRAC => Blockchain::Ethereum,
+            Self::GUNTHY => Blockchain::Ethereum,
             Self::BTC => Blockchain::Bitcoin,
             Self::NEO => Blockchain::NEO,
             Self::GAS => Blockchain::NEO,
+            Self::NNN => Blockchain::NEO
         }
     }
 
@@ -68,6 +76,7 @@ impl Asset {
         match self {
             Self::ETH => "eth",
             Self::USDC => "usdc",
+            Self::USDT => "usdt",
             Self::BAT => "bat",
             Self::OMG => "omg",
             Self::ZRX => "zrx",
@@ -78,6 +87,9 @@ impl Asset {
             Self::BTC => "btc",
             Self::NEO => "neo",
             Self::GAS => "gas",
+            Self::TRAC => "trac",
+            Self::GUNTHY => "gunthy",
+            Self::NNN => "nnn"
         }
     }
 
@@ -85,6 +97,7 @@ impl Asset {
         match asset_str {
             "eth" => Ok(Self::ETH),
             "usdc" => Ok(Self::USDC),
+            "usdt" => Ok(Self::USDT),
             "bat" => Ok(Self::BAT),
             "omg" => Ok(Self::OMG),
             "zrx" => Ok(Self::ZRX),
@@ -95,6 +108,9 @@ impl Asset {
             "btc" => Ok(Self::BTC),
             "neo" => Ok(Self::NEO),
             "gas" => Ok(Self::GAS),
+            "trac" => Ok(Self::TRAC),
+            "gunthy" => Ok(Self::GUNTHY),
+            "nnn" => Ok(Self::NNN),
             _ => Err(ProtocolError("Asset not known")),
         }
     }
@@ -105,6 +121,7 @@ impl Asset {
         vec![
             Self::ETH,
             Self::USDC,
+            Self::USDT,
             Self::BAT,
             Self::OMG,
             Self::ZRX,
@@ -114,6 +131,9 @@ impl Asset {
             Self::BTC,
             Self::NEO,
             Self::GAS,
+            Self::TRAC,
+            Self::GUNTHY,
+            Self::NNN
         ]
     }
 }

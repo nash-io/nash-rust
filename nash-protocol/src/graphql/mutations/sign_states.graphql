@@ -2,11 +2,12 @@ mutation SignStates($payload: SignStatesParams!, $signature: Signature!){
   signStates(payload: $payload, signature: $signature){
     recycledOrders {
       blockchain,
-      message
+      payload,
+      payloadHash
     },
    serverSignedStates{
      blockchain,
-     message
+     message,
   },
   states {
     address,
@@ -15,8 +16,9 @@ mutation SignStates($payload: SignStatesParams!, $signature: Signature!){
       currency
     },
     blockchain,
-    message,
-    nonce
+    nonce,
+    payload,
+    payloadHash
   }
   }
 }

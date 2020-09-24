@@ -1,4 +1,4 @@
-//! Client implementation over websockets using channels and message brokers
+//! Client implementation of Nash API over websockets using channels and message brokers
 
 use futures::lock::Mutex;
 use futures::{FutureExt, SinkExt, StreamExt};

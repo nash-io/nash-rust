@@ -139,7 +139,6 @@ impl LimitOrderConstructor {
             let pub_key = signer.child_public_key(blockchain)?;
             for nonce_group in nonces {
                 let fill_order = self.make_fill_order(blockchain, &pub_key, nonce_group)?;
-                println!("{}", fill_order.to_hex().unwrap());
                 order_payloads.push(Some(fill_order.to_blockchain_signature(signer)?))
             }
         }

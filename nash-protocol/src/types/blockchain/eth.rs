@@ -4,6 +4,147 @@ use crate::errors::{ProtocolError, Result};
 use mpc_wallet_lib::curves::secp256_k1::Secp256k1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
 use sha3::{Digest, Keccak256};
+use byteorder::{BigEndian, ReadBytesExt};
+use super::super::{Rate, OrderRate, Amount, Nonce, Asset, AssetOrCrosschain, AssetofPrecision};
+use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
+
+impl Rate {
+    /// Convert any Rate into bytes for encoding in a Ethereum payload
+    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
+        let zero_bytes = (0 as f64).to_be_bytes();
+        let bytes = match self {
+            Self::OrderRate(rate) | Self::FeeRate(rate) => rate.to_be_bytes()?,
+            Self::MinOrderRate | Self::MinFeeRate => zero_bytes,
+            Self::MaxOrderRate => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+            // 0.0025 * 10^8 = 250,000
+            Self::MaxFeeRate => [0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xD0, 0x90],
+        };
+        Ok(bytes)
+    }
+}
+
+impl OrderRate {
+    /// Serialize the OrderRate to bytes for payload creation. We always use a
+    /// precision of 8 and multiplication factor of 10^8
+    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
+        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
+        Ok(bytes)
+    }
+}
+
+impl Amount {
+    /// Serialize Amount to Big Endian bytes for ETH payload creation.
+    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
+        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
+        Ok(bytes)
+    }
+    /// Create an amount of given precision from ETH payload bytes
+    pub fn from_bytes(bytes: [u8; 8], precision: u32) -> Result<Self> {
+        let value = nash_u64_to_bigdecimal(
+            (&bytes[..])
+                .read_u64::<BigEndian>()
+                .map_err(|_| ProtocolError("Could not convert bytes to u64"))?,
+            precision,
+        );
+        Ok(Self { value, precision })
+    }
+}
+
+impl Nonce {
+    /// Serialize Nonce for ETH payload as BigEndian bytes
+    pub fn to_be_bytes(&self) -> [u8; 4] {
+        match self {
+            Self::Value(value) => value.to_be_bytes(),
+            Self::Crosschain => Nonce::crosschain().to_be_bytes(),
+        }
+    }
+    /// Create a nonce from ETH payload bytes
+    pub fn from_be_bytes(bytes: [u8; 4]) -> Result<Self> {
+        let value = (&bytes[..])
+            .read_u32::<BigEndian>()
+            .map_err(|_| ProtocolError("Could not read bytes into u32 for Nonce"))?;
+        if value == Nonce::crosschain() {
+            Ok(Nonce::Crosschain)
+        } else {
+            Ok(Nonce::Value(value))
+        }
+    }
+}
+
+impl Asset {
+    /// This maps assets onto their representation in the ETH SC protocol.
+    /// Each asset is represented by two bytes which serve as an identifier
+    pub fn to_eth_bytes(&self) -> [u8; 2] {
+        match self {
+            Self::ETH => [0x00, 0x00],
+            Self::BAT => [0x00, 0x01],
+            Self::OMG => [0x00, 0x02],
+            Self::USDC => [0x00, 0x03],
+            Self::USDT => [0x00,0x11],
+            Self::ZRX => [0x00, 0x04],
+            Self::LINK => [0x00, 0x05],
+            Self::QNT => [0x00, 0x06],
+            Self::RLC => [0x00, 0x0a],
+            Self::ANT => [0x00, 0x0e],
+            Self::TRAC => [0x00, 0x14],
+            Self::GUNTHY => [0x00, 0x15],
+            Self::BTC => [0xff, 0xff],
+            Self::NEO => [0xff, 0xff],
+            Self::GAS => [0xff, 0xff],
+            Self::NNN => [0xff, 0xff]
+        }
+    }
+
+    /// Given two bytes asset id in ETH payload, return asset
+    pub fn from_eth_bytes(bytes: [u8; 2]) -> Result<Self> {
+        match bytes {
+            [0x00, 0x00] => Ok(Self::ETH),
+            [0x00, 0x01] => Ok(Self::BAT),
+            [0x00, 0x02] => Ok(Self::OMG),
+            [0x00, 0x03] => Ok(Self::USDC),
+            [0x00, 0x11] => Ok(Self::USDT),
+            [0x00, 0x04] => Ok(Self::ZRX),
+            [0x00, 0x05] => Ok(Self::LINK),
+            [0x00, 0x06] => Ok(Self::QNT),
+            [0x00, 0x0a] => Ok(Self::RLC),
+            [0x00, 0x0e] => Ok(Self::ANT),
+            [0x00, 0x14] => Ok(Self::TRAC),
+            [0x00, 0x15] => Ok(Self::GUNTHY),
+            _ => Err(ProtocolError("Invalid Asset ID in bytes")),
+        }
+    }
+}
+
+impl AssetOrCrosschain {
+    /// Convert asset to id in bytes interpretable by the Ethereum
+    /// smart contract, or `0xffff` if it is a cross-chain asset
+    pub fn to_eth_bytes(&self) -> [u8; 2] {
+        match self {
+            Self::Crosschain => [0xff, 0xff],
+            Self::Asset(asset) => asset.to_eth_bytes(),
+        }
+    }
+    /// Read asset bytes from a protocol payload and convert into
+    /// an Asset or mark as cross-chain
+    pub fn from_eth_bytes(bytes: [u8; 2]) -> Result<Self> {
+        Ok(match bytes {
+            [0xff, 0xff] => Self::Crosschain,
+            _ => Self::Asset(Asset::from_eth_bytes(bytes)?),
+        })
+    }
+}
+
+impl From<Asset> for AssetOrCrosschain {
+    fn from(asset: Asset) -> Self {
+        Self::Asset(asset)
+    }
+}
+
+impl From<AssetofPrecision> for AssetOrCrosschain {
+    fn from(asset_prec: AssetofPrecision) -> Self {
+        Self::Asset(asset_prec.asset)
+    }
+}
 
 /// Ethereum addresses are 20 bytes of data that follow a specific
 /// encoding, usually represented by a hex string
@@ -36,6 +177,7 @@ impl Address {
         self.inner
     }
 
+    /// Create an address from ETH payload bytes
     pub fn from_bytes(bytes: [u8; 20]) -> Result<Self> {
         let _to_validate = hex::encode(bytes);
         // FIXME: do some validation here
@@ -43,12 +185,14 @@ impl Address {
     }
 }
 
+/// Public key representation for Ethereum
 #[derive(Clone, Debug, PartialEq)]
 pub struct PublicKey {
     inner: Secp256k1Point,
 }
 
 impl PublicKey {
+    /// Create a new Ethereum public key from a hex string
     pub fn new(hex_str: &str) -> Result<Self> {
         let inner = Secp256k1Point::from_hex(hex_str).map_err(|_| {
             ProtocolError("Could not create public key (Secp256r1Point) from hex string")
@@ -65,7 +209,7 @@ impl PublicKey {
         // last 20 hex-encoded bytes of hash are the address
         Address::new(&hex::encode(&hash[12..])).unwrap()
     }
-
+    /// Convert Ethereum public key into a hex string
     pub fn to_hex(&self) -> String {
         self.inner.to_hex()
     }

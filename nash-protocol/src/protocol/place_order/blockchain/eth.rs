@@ -1,9 +1,10 @@
-use crate::errors::Result;
+use crate::errors::{Result, ProtocolError};
 use crate::graphql::place_limit_order;
 use crate::types::eth::Address;
 use crate::types::{Amount, Blockchain, Nonce, Rate, AssetOrCrosschain, Prefix};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_eth_message};
 use mpc_wallet_lib::rust_bigint::BigInt;
+use std::convert::TryInto;
 
 use super::super::super::signer::Signer;
 
@@ -79,6 +80,36 @@ impl FillOrder {
         Ok(hex::encode(self.to_bytes()?).to_uppercase())
     }
 
+    pub fn from_hex(hex_str: &str) -> Result<Self> {
+        let bytes = hex::decode(hex_str)
+            .map_err(|_| ProtocolError("Could not decode FillOrder hex to bytes"))?;
+        let prefix = Prefix::from_bytes(bytes[..1].try_into()?)?;
+        let address = Address::from_bytes(bytes[1..21].try_into()?)?;
+        let asset_from = AssetOrCrosschain::from_eth_bytes(bytes[21..23].try_into()?)?;
+        let asset_to = AssetOrCrosschain::from_eth_bytes(bytes[23..25].try_into()?)?;
+        let nonce_from = Nonce::from_be_bytes(bytes[25..29].try_into()?)?;
+        let nonce_to = Nonce::from_be_bytes(bytes[29..33].try_into()?)?;
+        let amount = Amount::from_bytes(bytes[33..41].try_into()?, 8)?;
+        let min_order = Rate::from_be_bytes(bytes[41..49].try_into()?)?;
+        let max_order = Rate::from_be_bytes(bytes[49..57].try_into()?)?;
+        let fee_rate = Rate::from_be_bytes(bytes[57..65].try_into()?)?;
+        let order_nonce = Nonce::from_be_bytes(bytes[65..69].try_into()?)?;
+        
+        Ok(Self {
+            prefix,
+            address,
+            asset_from,
+            asset_to,
+            nonce_from,
+            nonce_to,
+            amount,
+            min_order,
+            max_order,
+            fee_rate,
+            order_nonce
+        })
+    }
+
     /// Hash a FillOrder for signing with an Ethereum private key or Nash MPC protocol
     pub fn hash(&self) -> Result<BigInt> {
         let bytes = self.to_bytes()?;
@@ -101,6 +132,33 @@ impl FillOrder {
             r: Some(bigint_to_nash_r(r)),
         };
         Ok(graphql_output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FillOrder, Amount, Nonce, Rate, Address}; 
+    use crate::types::Asset;
+    #[test]
+    fn fillorder_generate_and_parse(){
+        let order = FillOrder::new(
+            Address::new("D58547F100B67BB99BBE8E94523B6BB4FDA76954").unwrap(),
+            Asset::USDC.into(),
+            Asset::ETH.into(),
+            Nonce::Value(0),
+            Nonce::Value(1),
+            Amount::new("100.0", 8).unwrap(),
+            Rate::MinOrderRate,
+            Rate::MaxOrderRate,
+            Rate::MaxFeeRate,
+            Nonce::Value(23)
+        );
+        let order_hex = order.to_hex().unwrap();
+        let parsed_order = FillOrder::from_hex(&order_hex).unwrap();
+        let to_hex_again = parsed_order.to_hex().unwrap();
+        println!("{:?}", order);
+        println!("{:?}", parsed_order);
+        assert_eq!(order_hex, to_hex_again);
     }
 }
 

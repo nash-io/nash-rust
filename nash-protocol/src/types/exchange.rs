@@ -377,6 +377,11 @@ impl OrderRate {
             .map(|inner| Self { inner })
     }
 
+    /// Create new OrderRate from bigdecimal
+    pub fn from_bigdecimal(decimal: BigDecimal) -> Self {
+        Self { inner: decimal }
+    }
+
     /// Invert the price to units of the other market pair. For example, if price is
     /// in terms of ETH in an ETH/USDC market, this will convert it to terms of USDC
     pub fn invert_rate(&self, precision: Option<u32>) -> Self {

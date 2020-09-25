@@ -7,6 +7,7 @@ use sha3::{Digest, Keccak256};
 use byteorder::{BigEndian, ReadBytesExt};
 use super::super::{Rate, OrderRate, Amount, Nonce, Asset, AssetOrCrosschain, AssetofPrecision};
 use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
+use bigdecimal::BigDecimal;
 
 impl Rate {
     /// Convert any Rate into bytes for encoding in a Ethereum payload
@@ -21,6 +22,11 @@ impl Rate {
         };
         Ok(bytes)
     }
+
+    /// Create Rate from big endian bytes in Ethereum FillOrder payload
+    pub fn from_be_bytes(bytes: [u8; 8]) -> Result<Self> {
+        Ok(Self::OrderRate(OrderRate::from_be_bytes(bytes)?))
+    }
 }
 
 impl OrderRate {
@@ -29,6 +35,13 @@ impl OrderRate {
     pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
         let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
         Ok(bytes)
+    }
+
+    /// Create OrderRate from big endian bytes in Ethereum FillOrder payload
+    pub fn from_be_bytes(bytes: [u8; 8]) -> Result<Self> {
+        let num = u64::from_be_bytes(bytes);
+        let big_num = nash_u64_to_bigdecimal(num, 8);
+        Ok(OrderRate::from_bigdecimal(big_num))
     }
 }
 

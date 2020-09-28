@@ -29,9 +29,9 @@ test-mpc-wallet-wasm:
     - cargo build --release
     - cargo test --release
     - wasm-pack build --release --target bundler
-    - wasm-opt -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
+    - wasm-opt -all -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
     - wasm-pack build --release --target nodejs
-    - wasm-opt -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
+    - wasm-opt -all -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
 
 test-bigints:
   <<: *rust-template

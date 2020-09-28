@@ -208,6 +208,9 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                 }
             } else {
                 // kill process due to closed channel
+                let _ignore= global_subscription_sender.send(Err(ProtocolError("socket connection died")));
+                // if for some reason the global subscription doesn't exist anymore (likely because client doesn't exist!) then just ignore
+                // and close out the process loop
                 break;
             }
         }

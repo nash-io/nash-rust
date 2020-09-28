@@ -159,13 +159,14 @@ impl MessageBroker {
                             }
                         }
                         BrokerAction::Message(Err(e)) => {
-                            // kill broker process if WS connection closed
+                            // iterate over all subscription and request channels and propogate error
                             for (_id, channel) in request_map.iter_mut() {
                                 let _ = channel.send(Err(e.clone()));
                             }
                             for (_id, channel) in subscription_map.iter_mut() {
                                 let _ = channel.send(Err(e.clone()));
                             }
+                            // kill broker process if WS connection closed
                             break;
                         }
                     }
@@ -969,7 +970,7 @@ mod tests {
                 .await
                 .unwrap();
             }
-            for _ in 0..1000 {
+            for _ in 0..10 {
                 let item = client.next().await;
                 println!("{:?}", item.unwrap().unwrap());
             }

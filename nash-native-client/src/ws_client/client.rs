@@ -38,8 +38,10 @@ pub fn spawn_heartbeat_loop(
                 AbsintheEvent::Heartbeat,
                 None,
             );
+            println!("trying to send heartbeat...");
             if let Err(_ignore) = outgoing_sender.send(heartbeat) {
                 let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS connection died")));
+                println!("failed on heartbeat outgoing_sender \n {:?}", _ignore);
                 break;
             }
             delay_for(Duration::from_millis(15000)).await;
@@ -61,11 +63,15 @@ pub fn spawn_sender_loop(
             let next_incoming = websocket.next();
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
+                    println!("processing outgoing message");
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
                         // If sending fails, pass error through broker and global channel
                         match websocket.send(Message::Text(m_text)).await {
-                            Ok(_) => {},
+                            Ok(_) => {
+                                println!("message sent (supposedly)...");
+                            },
                             Err(_) => {
+                                println!("websocket errored on outgoing, sending error downstream to ws_incoming_sender and broker_link");
                                 let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
                                 let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
                                 break;
@@ -73,6 +79,9 @@ pub fn spawn_sender_loop(
                         }
                     } else {
                         // Kill process on error
+                        println!("outgoing channel died or errored");
+                        let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
+                        let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
                         break;
                     }
                 }
@@ -90,11 +99,12 @@ pub fn spawn_sender_loop(
                                 message_broker_link.send(BrokerAction::Message(Ok(resp_copy2)));
                         } else {
                             // If response is not Ok(), pass along info of WS disconnect
-                            let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
-                            let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
-                            break;
+                            println!("response failed to destructure");
                         }
                     } else {
+                        println!("incoming channel failed from WS");
+                        let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
+                        let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
                         break;
                     }
                 }
@@ -156,12 +166,15 @@ impl MessageBroker {
                             }
                         }
                         BrokerAction::Message(Err(e)) => {
+                            println!("broker recieved error");
                             // kill broker process if WS connection closed
                             for (_id, channel) in request_map.iter_mut() {
                                 let _ignore = channel.send(Err(e.clone()));
+                                println!("sending error on channel {}, {:?}", _id, _ignore);
                             }
                             for (_id, channel) in subscription_map.iter_mut() {
                                 let _ignore = channel.send(Err(e.clone()));
+                                println!("sending error on channel {}, {:?}", _id,  _ignore);
                             }
                             break;
                         }
@@ -951,7 +964,7 @@ mod tests {
     fn sub_orderbook_via_client_stream() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
-            let client = init_client().await;
+            let mut client = init_client().await;
             {
                 let _response = client
                 .subscribe_protocol(SubscribeOrderbook {
@@ -960,10 +973,10 @@ mod tests {
                 .await
                 .unwrap();
             }
-            let (item, client) = client.into_future().await;
-            println!("{:?}", item.unwrap().unwrap());
-            let (item, _) = client.into_future().await;
-            println!("{:?}", item.unwrap().unwrap());
+            for _ in 0..1000 {
+                let item = client.next().await;
+                println!("{:?}", item.unwrap().unwrap());
+            }
         };
         runtime.block_on(async_block);
     }

@@ -24,7 +24,11 @@ use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheW
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
 // this will add hearbeat (keep alive) messages to the channel for ws to send out every 15s
-pub fn spawn_heartbeat_loop(client_id: u64, sender: UnboundedSender<AbsintheWSRequest>) {
+pub fn spawn_heartbeat_loop(
+    client_id: u64, 
+    outgoing_sender: UnboundedSender<AbsintheWSRequest>,
+    ws_incoming_sender: UnboundedSender<Result<AbsintheWSResponse>>,
+) {
     tokio::spawn(async move {
         loop {
             let heartbeat = AbsintheWSRequest::new(
@@ -34,8 +38,8 @@ pub fn spawn_heartbeat_loop(client_id: u64, sender: UnboundedSender<AbsintheWSRe
                 AbsintheEvent::Heartbeat,
                 None,
             );
-            if let Err(_ignore) = sender.send(heartbeat) {
-                // Kill process on error
+            if let Err(_ignore) = outgoing_sender.send(heartbeat) {
+                let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS connection died")));
                 break;
             }
             delay_for(Duration::from_millis(15000)).await;
@@ -48,7 +52,7 @@ pub fn spawn_heartbeat_loop(client_id: u64, sender: UnboundedSender<AbsintheWSRe
 pub fn spawn_sender_loop(
     mut websocket: WebSocket,
     mut ws_outgoing_reciever: UnboundedReceiver<AbsintheWSRequest>,
-    ws_incoming_sender: UnboundedSender<AbsintheWSResponse>,
+    ws_incoming_sender: UnboundedSender<Result<AbsintheWSResponse>>,
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
@@ -69,15 +73,18 @@ pub fn spawn_sender_loop(
                     if let Some(Ok(Ok(resp))) = in_msg.map(|x| x.map(|x| x.into_text())) {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
                             // Similarly, let the client timeout on incoming response if this fails and handle that
-                            let _ignore = ws_incoming_sender.send(resp_copy1);
+                            let _ignore = ws_incoming_sender.send(Ok(resp_copy1));
                             // todo: this is a hack since the graphql library has not implemented clone() for responses
                             // but we need another copy of the response to send to the broker
                             // this could actually be more efficient and have broker handle all messages?
                             let resp_copy2: AbsintheWSResponse =
                                 serde_json::from_str(&resp).unwrap(); // this unwrap is safe
                             let _ignore =
-                                message_broker_link.send(BrokerAction::Message(resp_copy2));
+                                message_broker_link.send(BrokerAction::Message(Ok(resp_copy2)));
                         } else {
+                            // If response is not Ok(), pass along info of WS disconnect
+                            let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
+                            let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
                             break;
                         }
                     } else {
@@ -91,9 +98,9 @@ pub fn spawn_sender_loop(
 
 /// Broker will route responses to the right client channel based on message id lookup
 pub enum BrokerAction {
-    RegisterRequest(u64, UnboundedSender<AbsintheWSResponse>),
-    RegisterSubscription(String, UnboundedSender<AbsintheWSResponse>),
-    Message(AbsintheWSResponse),
+    RegisterRequest(u64, UnboundedSender<Result<AbsintheWSResponse>>),
+    RegisterSubscription(String, UnboundedSender<Result<AbsintheWSResponse>>),
+    Message(Result<AbsintheWSResponse>),
 }
 
 struct MessageBroker {
@@ -117,13 +124,13 @@ impl MessageBroker {
                             subscription_map.insert(id, channel);
                         }
                         // When message comes in, if id is registered with channel, send there
-                        BrokerAction::Message(response) => {
+                        BrokerAction::Message(Ok(response)) => {
                             // if message has subscription id, send it to subscription
                             if let Some(id) = response.subscription_id() {
                                 if let Some(channel) = subscription_map.get_mut(&id) {
                                     // Again, we will let client timeout on waiting a response using its own policy.
                                     // Crashing inside the broker process does not allow us to handle the error gracefully
-                                    if let Err(_ignore) = channel.send(response) {
+                                    if let Err(_ignore) = channel.send(Ok(response)) {
                                         // Kill process on error
                                         break;
                                     }
@@ -132,7 +139,7 @@ impl MessageBroker {
                             // otherwise check if it is a response to a registered request
                             else if let Some(id) = response.message_id() {
                                 if let Some(channel) = request_map.get_mut(&id) {
-                                    if let Err(_ignore) = channel.send(response) {
+                                    if let Err(_ignore) = channel.send(Ok(response)) {
                                         // Kill process on error
                                         break;
                                     }
@@ -140,6 +147,11 @@ impl MessageBroker {
                                     request_map.remove(&id);
                                 }
                             }
+                        }
+                        BrokerAction::Message(Err(e)) => {
+                            // kill broker process if WS connection closed
+                            // TODO: iterate over all channels and send error?
+                            break;
                         }
                     }
                 } else {
@@ -152,7 +164,7 @@ impl MessageBroker {
 }
 
 fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>(
-    mut callback_channel: UnboundedReceiver<AbsintheWSResponse>,
+    mut callback_channel: UnboundedReceiver<Result<AbsintheWSResponse>>,
     user_callback_sender: UnboundedSender<
         Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
     >,
@@ -164,7 +176,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
         loop {
             let response = callback_channel.next().await;
             // is there a valid incoming payload?
-            if let Some(response) = response {
+            if let Some(Ok(response)) = response {
                 // can the payload json be parsed?
                 if let Ok(json_payload) = response.subscription_json_payload() {
                     // First do normal subscription logic
@@ -236,7 +248,7 @@ impl Environment {
 /// Interface for interacting with a websocket connection
 pub struct Client {
     ws_outgoing_sender: UnboundedSender<AbsintheWSRequest>,
-    ws_incoming_reciever: UnboundedReceiver<AbsintheWSResponse>,
+    ws_incoming_reciever: UnboundedReceiver<Result<AbsintheWSResponse>>,
     last_message_id: Mutex<u64>,
     client_id: u64,
     message_broker: MessageBroker,
@@ -311,7 +323,7 @@ impl Client {
         spawn_sender_loop(
             socket,
             ws_outgoing_reciever,
-            ws_incoming_sender,
+            ws_incoming_sender.clone(),
             message_broker.link.clone(),
         );
 
@@ -322,7 +334,7 @@ impl Client {
             .map_err(|_| ProtocolError("Could not initialize connection with Nash"))?;
 
         // start a heartbeat loop
-        spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
+        spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone(), ws_incoming_sender.clone());
 
         Ok(Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
@@ -352,7 +364,7 @@ impl Client {
         )
         .await
         .map_err(|_| ProtocolError("Request timeout"))?
-        .ok_or(ProtocolError("Failed to recieve message"))?;
+        .ok_or(ProtocolError("Failed to recieve message"))??;
         let json_payload = ws_response.json_payload()?;
         let protocol_response = request.response_from_json(json_payload)?;
         if let Some(response) = protocol_response.response() {
@@ -456,7 +468,7 @@ impl Client {
             .await?
             .next()
             .await
-            .ok_or(ProtocolError("Could not get subscription response"))?;
+            .ok_or(ProtocolError("Could not get subscription response"))??;
         // create a channel where associated data will be pushed back
         let (for_broker, callback_channel) = unbounded_channel();
         let broker_link = self.message_broker.link.clone();
@@ -489,7 +501,7 @@ impl Client {
     async fn request(
         &self,
         request: serde_json::Value,
-    ) -> Result<UnboundedReceiver<AbsintheWSResponse>> {
+    ) -> Result<UnboundedReceiver<Result<AbsintheWSResponse>>> {
         let message_id = self.incr_id().await;
         let graphql_msg = AbsintheWSRequest::new(
             self.client_id,
@@ -513,7 +525,7 @@ impl Client {
         Ok(callback_channel)
     }
 
-    pub async fn on_every_ws_response(&mut self, callback: fn(AbsintheWSResponse) -> ()) {
+    pub async fn on_every_ws_response(&mut self, callback: fn(Result<AbsintheWSResponse>) -> ()) {
         // pull some incoming messages off of the reciever. we could loop over these
         // in main application logic, expose to foreign callback, etc.
         self.ws_incoming_reciever

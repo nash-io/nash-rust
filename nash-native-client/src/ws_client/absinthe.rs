@@ -86,9 +86,6 @@ impl AbsintheWSResponse {
         }
     }
     pub fn json_payload(self) -> ProtocolResult<serde_json::Value> {
-        // self.payload.and_then(|payload| {
-        //     payload.graphql().and_then(|res| res.response.get("data").map(|x| x.clone() ) )
-        // })
         if let Some(payload) = self.payload {
             Ok(payload.graphql()?.response)
         } else {
@@ -96,9 +93,6 @@ impl AbsintheWSResponse {
         }
     }
     pub fn subscription_json_payload(self) -> ProtocolResult<serde_json::Value> {
-        // self.payload.and_then(|payload| {
-        //     payload.graphql().and_then(|res| res.response.get("data").map(|x| x.clone() ) )
-        // })
         if let Some(payload) = self.payload {
             Ok(payload.subscription()?.result)
         } else {

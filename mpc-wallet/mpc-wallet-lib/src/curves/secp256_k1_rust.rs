@@ -3,8 +3,6 @@
 
 use super::traits::{ECPoint, ECScalar};
 use crate::ErrorKey;
-use bigints::traits::{Converter, Modulo};
-use bigints::BigInt;
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;
@@ -13,6 +11,8 @@ use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use k256::{AffinePoint, EncodedPoint, NonZeroScalar, ProjectivePoint, Scalar, SecretKey};
 #[cfg(feature = "num_bigint")]
 use num_traits::Num;
+use rust_bigint::traits::{Converter, Modulo};
+use rust_bigint::BigInt;
 use serde::de;
 use serde::de::Visitor;
 use serde::ser::{Serialize, Serializer};
@@ -493,12 +493,12 @@ impl<'de> Visitor<'de> for Secp256k1PointVisitor {
 #[cfg(test)]
 mod tests {
     use super::{BigInt, ErrorKey};
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-    #[cfg(feature = "wasm")]
+    #[cfg(feature = "k256")]
     use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::traits::{ECPoint, ECScalar};
-    use bigints::traits::{Converter, Modulo};
+    use rust_bigint::traits::{Converter, Modulo};
     use bincode;
     use serde_json;
 

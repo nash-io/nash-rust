@@ -27,15 +27,11 @@ test-mpc-wallet-wasm:
   script:
     - cd mpc-wallet-wasm
     - cargo build --release
-    - cargo build --features rust_gmp --no-default-features --release
-    - cargo build --features num_bigint --no-default-features --release
     - cargo test --release
-    - cargo test --no-default-features --features rust_gmp --release
-    - cargo test --no-default-features --features num_bigint --release
     - wasm-pack build --release --target bundler
-    - wasm-opt -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
+    - wasm-opt -all -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
     - wasm-pack build --release --target nodejs
-    - wasm-opt -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
+    - wasm-opt -all -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
 
 test-bigints:
   <<: *rust-template
@@ -54,10 +50,14 @@ test-mpc-wallet-lib:
   stage: test
   script:
     - cd mpc-wallet-lib
-    - cargo build --no-default-features --features rust_gmp --release
-    - cargo test --no-default-features --features rust_gmp --release
-    - cargo build --no-default-features --features num_bigint --release
-    - cargo test --no-default-features --features num_bigint --release
+    - cargo build --release
+    - cargo test --release
+    - cargo build --no-default-features --features rust_gmp --features k256 --release
+    - cargo test --no-default-features --features rust_gmp --features k256 --release
+    - cargo build --no-default-features --features num_bigint --features secp256k1 --release
+    - cargo test --no-default-features --features num_bigint --features secp256k1 --release
+    - cargo build --no-default-features --features num_bigint --features k256 --release
+    - cargo test --no-default-features --features num_bigint --features k256 --release
 
 test-mpc-wallet-elixir:
   <<: *rust-template
@@ -65,8 +65,6 @@ test-mpc-wallet-elixir:
   script:
     - cd mpc-wallet-elixir
     - cargo build --release
-    - cargo build --no-default-features --features rust_gmp --release
-    - cargo build --no-default-features --features num_bigint --release
 
 test-rust-paillier:
   <<: *rust-template

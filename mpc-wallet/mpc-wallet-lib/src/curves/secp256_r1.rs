@@ -2,8 +2,6 @@
 
 use super::traits::{ECPoint, ECScalar};
 use crate::ErrorKey;
-use rust_bigint::traits::Converter;
-use rust_bigint::BigInt;
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;
@@ -12,6 +10,8 @@ use num_traits::Num;
 use p256::ecdsa::VerifyKey;
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use p256::{AffinePoint, EncodedPoint, NonZeroScalar, ProjectivePoint, Scalar, SecretKey};
+use rust_bigint::traits::{Converter, Modulo};
+use rust_bigint::BigInt;
 use serde::de;
 use serde::de::Visitor;
 use serde::ser::{Serialize, Serializer};

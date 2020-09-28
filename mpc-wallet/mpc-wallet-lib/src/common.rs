@@ -8,8 +8,8 @@ use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use bigints::traits::{Converter, NumberTests};
-use bigints::BigInt;
+use rust_bigint::traits::{Converter, NumberTests};
+use rust_bigint::BigInt;
 #[cfg(feature = "k256")]
 use k256::{EncodedPoint as k256_EncodedPoint, SecretKey};
 #[cfg(feature = "secp256k1")]
@@ -36,7 +36,7 @@ pub enum Curve {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CorrectKeyProof {
-    #[serde(with = "bigints::serialize::vecbigint512")]
+    #[serde(with = "rust_bigint::serialize::vecbigint512")]
     pub sigma_vec: Vec<BigInt>,
 }
 
@@ -253,8 +253,8 @@ mod tests {
     use crate::curves::secp256_k1_rust::Secp256k1Point;
     use crate::curves::secp256_r1::Secp256r1Point;
     use crate::curves::traits::{ECPoint, ECScalar};
-    use bigints::traits::Converter;
-    use bigints::BigInt;
+    use rust_bigint::traits::Converter;
+    use rust_bigint::BigInt;
     #[cfg(feature = "num_bigint")]
     use num_traits::Num;
 

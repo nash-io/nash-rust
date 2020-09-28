@@ -83,6 +83,9 @@ impl LimitOrderConstructor {
         let max_order = Rate::MaxOrderRate;
         // Amount is specified in the "source" asset
         let amount = self.source.amount.clone();
+
+        let min_order = min_order.subtract_fee(Rate::MaxFeeRate.to_bigdecimal()?)?.into();
+        let fee_rate = Rate::MinFeeRate; // 0
         
         match chain {
             Blockchain::Ethereum => {
@@ -95,7 +98,7 @@ impl LimitOrderConstructor {
                     amount,
                     min_order,
                     max_order,
-                    Rate::MaxFeeRate,
+                    fee_rate,
                     nonces.order_nonce,
                 )))
             }
@@ -115,7 +118,7 @@ impl LimitOrderConstructor {
                     amount,
                     min_order,
                     max_order,
-                    Rate::MaxFeeRate,
+                    fee_rate,
                     nonces.order_nonce,
                 );
                 Ok(FillOrder::NEO(neo_order))

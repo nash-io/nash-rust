@@ -28,8 +28,6 @@ test-mpc-wallet-wasm:
     - cd mpc-wallet-wasm
     - cargo build --release
     - cargo test --release
-    - cargo build --no-default-features --features num_bigint --release
-    - cargo test --no-default-features --features num_bigint --release
     - wasm-pack build --release --target bundler
     - wasm-opt -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
     - wasm-pack build --release --target nodejs
@@ -69,8 +67,6 @@ test-mpc-wallet-elixir:
   script:
     - cd mpc-wallet-elixir
     - cargo build --release
-    - cargo build --no-default-features --features rust_gmp --release
-    - cargo build --no-default-features --features num_bigint --release
 
 test-rust-paillier:
   <<: *rust-template

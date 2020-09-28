@@ -7,11 +7,6 @@ edition = "2018"
 name = "mpc_wallet_elixir"
 crate-type = ["dylib"]
 
-[features]
-default = ["rust_gmp"]
-rust_gmp = ["mpc-wallet-lib/rust_gmp"]
-num_bigint = ["mpc-wallet-lib/num_bigint", "mpc-wallet-lib/secp256k1"]
-
 [dependencies]
 mpc-wallet-lib = { version = "*", path = '../mpc-wallet-lib', default-features = false }
 rustler = "0.21"

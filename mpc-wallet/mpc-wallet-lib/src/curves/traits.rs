@@ -1,7 +1,7 @@
 // based on MIT/Apache-licensed https://github.com/KZen-networks/curv/blob/master/src/elliptic/curves/traits.rs
 
 use crate::ErrorKey;
-use bigints::BigInt;
+use rust_bigint::BigInt;
 
 pub trait ECScalar<SK> {
     fn new_random() -> Self;

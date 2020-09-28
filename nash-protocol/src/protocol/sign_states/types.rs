@@ -6,10 +6,10 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::sign_states;
-use crate::types::{eth, Amount, Asset, Blockchain, Nonce, Prefix};
+use crate::types::Blockchain;
 use async_trait::async_trait;
 use futures::lock::Mutex;
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use std::sync::Arc;
 
 /// Type to generate a new sign states request. It takes an optional
@@ -41,9 +41,9 @@ impl SignStatesRequest {
 /// a list of states to sign as well as to submit client signed states.
 #[derive(Clone, Debug)]
 pub struct SignStatesResponseData {
-    pub recycled_orders: Vec<StateData>,
-    pub server_signed_states: Vec<StateData>,
-    pub states: Vec<StateData>,
+    pub recycled_orders: Vec<RecycledOrder>,
+    pub server_signed_states: Vec<ServerSignedData>,
+    pub states: Vec<ContractBalanceState>,
 }
 
 impl SignStatesResponseData {
@@ -52,29 +52,30 @@ impl SignStatesResponseData {
         self.recycled_orders.len() > 0 || self.states.len() > 0
     }
 }
+/// Common representation of smart contract state data
+#[derive(Clone, Debug)]
+pub struct StateData {
+    pub payload: String,
+    pub payload_hash: String,
+    pub blockchain: Blockchain,
+}
 
 /// A representation of account and order state data coming in from the ME
 /// that the client should sign and return
 #[derive(Clone, Debug)]
-pub struct StateData {
-    pub message: String,
-    pub blockchain: Blockchain,
-}
+pub struct RecycledOrder(pub StateData);
+impl RecycledOrder { pub fn state(&self) -> &StateData { &self.0 } }
 
-// FIXME: this is just for Ethereum. Needs to be replaced with an Enum over
-// Ethereum and NEO and hooks on validation logic need to be added to the
-// response data.
+/// Smart contract balance state
+#[derive(Clone, Debug)]
+pub struct ContractBalanceState(pub StateData);
+impl ContractBalanceState { pub fn state(&self) -> &StateData { &self.0 } }
 
-/// State update payload returned by Nash ME which we should validate.
-/// State updates set `asset_id` to a new `balance`. The `nonce` used in
-/// the update must be higher than any previous nonce.
-#[derive(Debug, PartialEq)]
-pub struct StateUpdatePayload {
-    pub prefix: Prefix,        // 1 byte
-    pub asset_id: Asset,       // 2 bytes
-    pub balance: Amount,       // 8 bytes
-    pub nonce: Nonce,          // 4 bytes
-    pub address: eth::Address, // 20 bytes
+
+#[derive(Clone, Debug)]
+pub struct ServerSignedData {
+    pub signed_data: String,
+    pub blockchain: Blockchain
 }
 
 /// Signed state data. This may be for a state balance update or a recycled
@@ -90,7 +91,7 @@ impl ClientSignedState {
     /// Construct signed state from a `StateData` and a signature.
     pub fn from_state_data(state_data: &StateData, r: BigInt, signature: BigInt) -> Self {
         Self {
-            message: state_data.message.clone(),
+            message: state_data.payload.clone(),
             blockchain: state_data.blockchain,
             r,
             signature,
@@ -106,7 +107,7 @@ impl NashProtocol for SignStatesRequest {
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
         let mut state = state.lock().await;
         let signer = state.signer()?;
-        let query = self.make_query(signer);
+        let query = self.make_query(signer)?;
         serializable_to_json(&query)
     }
     /// Deserialize response to SignStates protocol request

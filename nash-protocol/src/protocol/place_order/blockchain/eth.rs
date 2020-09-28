@@ -1,12 +1,10 @@
-use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
-use crate::errors::{ProtocolError, Result};
+use crate::errors::{Result, ProtocolError};
 use crate::graphql::place_limit_order;
 use crate::types::eth::Address;
-use crate::types::{Amount, Asset, AssetofPrecision, Blockchain, Nonce, OrderRate, Rate};
-use crate::types::{AssetOrCrosschain, Prefix};
+use crate::types::{Amount, Blockchain, Nonce, Rate, AssetOrCrosschain, Prefix};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_eth_message};
-use byteorder::{BigEndian, ReadBytesExt};
-use mpc_wallet_lib::bigints::BigInt;
+use mpc_wallet_lib::rust_bigint::BigInt;
+use std::convert::TryInto;
 
 use super::super::super::signer::Signer;
 
@@ -82,6 +80,36 @@ impl FillOrder {
         Ok(hex::encode(self.to_bytes()?).to_uppercase())
     }
 
+    pub fn from_hex(hex_str: &str) -> Result<Self> {
+        let bytes = hex::decode(hex_str)
+            .map_err(|_| ProtocolError("Could not decode FillOrder hex to bytes"))?;
+        let prefix = Prefix::from_bytes(bytes[..1].try_into()?)?;
+        let address = Address::from_bytes(bytes[1..21].try_into()?)?;
+        let asset_from = AssetOrCrosschain::from_eth_bytes(bytes[21..23].try_into()?)?;
+        let asset_to = AssetOrCrosschain::from_eth_bytes(bytes[23..25].try_into()?)?;
+        let nonce_from = Nonce::from_be_bytes(bytes[25..29].try_into()?)?;
+        let nonce_to = Nonce::from_be_bytes(bytes[29..33].try_into()?)?;
+        let amount = Amount::from_bytes(bytes[33..41].try_into()?, 8)?;
+        let min_order = Rate::from_be_bytes(bytes[41..49].try_into()?)?;
+        let max_order = Rate::from_be_bytes(bytes[49..57].try_into()?)?;
+        let fee_rate = Rate::from_be_bytes(bytes[57..65].try_into()?)?;
+        let order_nonce = Nonce::from_be_bytes(bytes[65..69].try_into()?)?;
+        
+        Ok(Self {
+            prefix,
+            address,
+            asset_from,
+            asset_to,
+            nonce_from,
+            nonce_to,
+            amount,
+            min_order,
+            max_order,
+            fee_rate,
+            order_nonce
+        })
+    }
+
     /// Hash a FillOrder for signing with an Ethereum private key or Nash MPC protocol
     pub fn hash(&self) -> Result<BigInt> {
         let bytes = self.to_bytes()?;
@@ -107,135 +135,30 @@ impl FillOrder {
     }
 }
 
-impl Rate {
-    /// Convert any Rate into bytes for encoding in a Ethereum payload
-    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
-        let zero_bytes = (0 as f64).to_be_bytes();
-        let bytes = match self {
-            Self::OrderRate(rate) | Self::FeeRate(rate) => rate.to_be_bytes()?,
-            Self::MinOrderRate | Self::MinFeeRate => zero_bytes,
-            Self::MaxOrderRate => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
-            // 0.0025 * 10^8 = 250,000
-            Self::MaxFeeRate => [0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xD0, 0x90],
-        };
-        Ok(bytes)
-    }
-}
-
-impl OrderRate {
-    /// Serialize the OrderRate to bytes for payload creation. We always use a
-    /// precision of 8 and multiplication factor of 10^8
-    fn to_be_bytes(&self) -> Result<[u8; 8]> {
-        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
-        Ok(bytes)
-    }
-}
-
-impl Amount {
-    /// Serialize Amount to BigEndian bytes for ETH payload creation.
-    /// This will depend on its precision within a given market.
-    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
-        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
-        Ok(bytes)
-    }
-
-    pub fn from_bytes(bytes: [u8; 8], precision: u32) -> Result<Self> {
-        let value = nash_u64_to_bigdecimal(
-            (&bytes[..])
-                .read_u64::<BigEndian>()
-                .map_err(|_| ProtocolError("Could not convert bytes to u64"))?,
-            precision,
+#[cfg(test)]
+mod tests {
+    use super::{FillOrder, Amount, Nonce, Rate, Address}; 
+    use crate::types::Asset;
+    #[test]
+    fn fillorder_generate_and_parse(){
+        let order = FillOrder::new(
+            Address::new("D58547F100B67BB99BBE8E94523B6BB4FDA76954").unwrap(),
+            Asset::USDC.into(),
+            Asset::ETH.into(),
+            Nonce::Value(0),
+            Nonce::Value(1),
+            Amount::new("100.0", 8).unwrap(),
+            Rate::MinOrderRate,
+            Rate::MaxOrderRate,
+            Rate::MaxFeeRate,
+            Nonce::Value(23)
         );
-        Ok(Self { value, precision })
+        let order_hex = order.to_hex().unwrap();
+        let parsed_order = FillOrder::from_hex(&order_hex).unwrap();
+        let to_hex_again = parsed_order.to_hex().unwrap();
+        println!("{:?}", order);
+        println!("{:?}", parsed_order);
+        assert_eq!(order_hex, to_hex_again);
     }
 }
 
-impl Nonce {
-    /// Serialize Nonce for ETH payload as BigEndian bytes
-    pub fn to_be_bytes(&self) -> [u8; 4] {
-        match self {
-            Self::Value(value) => value.to_be_bytes(),
-            Self::Crosschain => Nonce::crosschain().to_be_bytes(),
-        }
-    }
-
-    pub fn from_be_bytes(bytes: [u8; 4]) -> Result<Self> {
-        let value = (&bytes[..])
-            .read_u32::<BigEndian>()
-            .map_err(|_| ProtocolError("Could not read bytes into u32 for Nonce"))?;
-        if value == Nonce::crosschain() {
-            Ok(Nonce::Crosschain)
-        } else {
-            Ok(Nonce::Value(value))
-        }
-    }
-}
-
-impl Asset {
-    /// This maps assets onto their representation in the ETH SC protocol.
-    /// Each asset is represented by two bytes which serve as an identifier
-    pub fn to_eth_bytes(&self) -> [u8; 2] {
-        // FIXME: add the rest
-        match self {
-            Self::ETH => [0x00, 0x00],
-            Self::BAT => [0x00, 0x01],
-            Self::OMG => [0x00, 0x02],
-            Self::USDC => [0x00, 0x03],
-            Self::ZRX => [0x00, 0x04],
-            Self::LINK => [0x00, 0x05],
-            Self::QNT => [0x00, 0x06],
-            Self::RLC => [0x00, 0x0a],
-            Self::ANT => [0x00, 0x11],
-            Self::BTC => [0xff, 0xff],
-            Self::NEO => [0xff, 0xff],
-            Self::GAS => [0xff, 0xff],
-        }
-    }
-
-    /// Given two bytes asset id, return asset
-    pub fn from_eth_bytes(bytes: [u8; 2]) -> Result<Self> {
-        match bytes {
-            [0x00, 0x00] => Ok(Self::ETH),
-            [0x00, 0x01] => Ok(Self::BAT),
-            [0x00, 0x02] => Ok(Self::OMG),
-            [0x00, 0x03] => Ok(Self::USDC),
-            [0x00, 0x04] => Ok(Self::ZRX),
-            [0x00, 0x05] => Ok(Self::LINK),
-            [0x00, 0x06] => Ok(Self::QNT),
-            [0x00, 0x0a] => Ok(Self::RLC),
-            [0x00, 0x11] => Ok(Self::ANT),
-            _ => Err(ProtocolError("Invalid Asset ID in bytes")),
-        }
-    }
-}
-
-impl AssetOrCrosschain {
-    /// Convert asset to id in bytes interpretable by the Ethereum
-    /// smart contract, or `0xffff` if it is a cross-chain asset
-    pub fn to_eth_bytes(&self) -> [u8; 2] {
-        match self {
-            Self::Crosschain => [0xff, 0xff],
-            Self::Asset(asset) => asset.to_eth_bytes(),
-        }
-    }
-    /// Read asset bytes from a protocol payload and convert into
-    /// an Asset or mark as cross-chain
-    pub fn from_eth_bytes(bytes: [u8; 2]) -> Result<Self> {
-        Ok(match bytes {
-            [0xff, 0xff] => Self::Crosschain,
-            _ => Self::Asset(Asset::from_eth_bytes(bytes)?),
-        })
-    }
-}
-
-impl From<Asset> for AssetOrCrosschain {
-    fn from(asset: Asset) -> Self {
-        Self::Asset(asset)
-    }
-}
-
-impl From<AssetofPrecision> for AssetOrCrosschain {
-    fn from(asset_prec: AssetofPrecision) -> Self {
-        Self::Asset(asset_prec.asset)
-    }
-}

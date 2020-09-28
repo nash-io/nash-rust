@@ -2,8 +2,8 @@
 
 use super::traits::{ECPoint, ECScalar};
 use crate::ErrorKey;
-use bigints::traits::{Converter, Modulo};
-use bigints::BigInt;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;
@@ -472,7 +472,7 @@ mod tests {
     use super::{BigInt, ErrorKey};
     use super::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::{ECPoint, ECScalar};
-    use bigints::traits::{Converter, Modulo, Samplable};
+    use rust_bigint::traits::{Converter, Modulo, Samplable};
 
     fn base_point2() -> Secp256r1Point {
         let random_scalar: Secp256r1Scalar = Secp256r1Scalar::new_random();

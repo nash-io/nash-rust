@@ -1,4 +1,4 @@
-//! Client implementation over websockets using channels and message brokers
+//! Client implementation of Nash API over websockets using channels and message brokers
 
 use futures::lock::Mutex;
 use futures::{FutureExt, SinkExt, StreamExt};
@@ -192,7 +192,8 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                     };
                     // If callback_channel fails, kill process
                     if let Err(_e) = user_callback_sender.send(output) {
-                        break;
+                        // Note: we do not want to kill the process in this case! User could just have destroyed the individual callback stream
+                        // and we still want to send to the global stream! maybe add a log here in the future
                     }
 
                     // Now do global subscription logic. If global channel fails, also kill process
@@ -401,7 +402,6 @@ impl Client {
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline containst more actions for client to take, execute them
         loop {
-            // FIXME: Ditto here on lock/unlock
             if let Some(protocol_request) = request
                 .next_step(&protocol_state, self.state.clone())
                 .await?
@@ -604,7 +604,7 @@ mod tests {
         let async_block = async {
             let client = init_client().await;
             let response = client.run(SignAllStates::new()).await.unwrap();
-            println!("{:?}", response.response());
+            println!("{:?}", response);
         };
         runtime.block_on(async_block);
     }
@@ -713,40 +713,131 @@ mod tests {
     }
 
     #[test]
-    fn test_account_order_lookup_then_cancel() {
+    fn test_list_markets() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
-                .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                .run(ListMarketsRequest)
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            println!("{:?}", client.state.lock().await.assets);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn test_account_order_lookup_then_cancel() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let mut requests = Vec::new();
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::neo_usdc(),
                     buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.041".to_string(),
-                    price: "150".to_string(),
+                    amount: "10".to_string(),
+                    price: "5".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
-            let order_id = response.response().unwrap().order_id.clone();
-            // Small delay to make sure it is processed
-            tokio::time::delay_for(tokio::time::Duration::from_millis(500)).await;
-            let response = client
-                .run(GetAccountOrderRequest {
-                    order_id: order_id.clone(),
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
-            let response = client
-                .run(CancelOrderRequest {
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::neo_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1".to_string(),
+                    price: "200".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
                     market: Market::eth_usdc(),
-                    order_id,
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "10".to_string(),
+                    price: "5".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::neo_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1".to_string(),
+                    price: "200".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "10".to_string(),
+                    price: "1".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.451".to_string(),
+                    price: "75.1".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1.24".to_string(),
+                    price: "821".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            requests.push(
+                LimitOrderRequest {
+                    market: Market::eth_usdc(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "1.24".to_string(),
+                    price: "821.12".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                }
+            );
+            for request in requests {
+                let response = client
+                    .run(request)
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
+                let order_id = response.response().unwrap().order_id.clone();
+                // Small delay to make sure it is processed
+                tokio::time::delay_for(tokio::time::Duration::from_millis(500)).await;
+                let response = client
+                    .run(GetAccountOrderRequest {
+                        order_id: order_id.clone(),
+                    })
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
+                let response = client
+                    .run(CancelOrderRequest {
+                        market: Market::eth_usdc(),
+                        order_id,
+                    })
+                    .await
+                    .unwrap();
+                println!("{:?}", response);
+            }
         };
         runtime.block_on(async_block);
     }
@@ -807,12 +898,14 @@ mod tests {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
-            let _response = client
+            {
+                let _response = client
                 .subscribe_protocol(SubscribeOrderbook {
                     market: Market::btc_usdc(),
                 })
                 .await
                 .unwrap();
+            }
             let (item, client) = client.into_future().await;
             println!("{:?}", item.unwrap().unwrap());
             let (item, _) = client.into_future().await;

@@ -1,5 +1,5 @@
-use bigints::traits::Converter;
-use bigints::BigInt;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use mpc_wallet_lib::client::{
     compute_presig, fill_rpool_secp256k1, fill_rpool_secp256r1, APIchildkeyCreator,
 };
@@ -38,15 +38,15 @@ fn test_integration_k1() {
         .get(&format!("{:0>66}", r.to_hex()))
         .unwrap()
         .to_big_int();
-    let (_, s, _) = complete_sig(&paillier_sk, &presig, &r, &k, Curve::Secp256k1).unwrap();
-    verify(
-        &r,
+    let (rx, s, _) = complete_sig(&paillier_sk, &presig, &r, &k, Curve::Secp256k1).unwrap();
+    assert!(verify(
+        &rx,
         &s,
         &publickey_from_secretkey(&secret_key, Curve::Secp256k1).unwrap(),
         &msg_hash,
         Curve::Secp256k1,
     )
-    .unwrap();
+    .unwrap());
 }
 
 #[test]
@@ -75,13 +75,13 @@ fn test_integration_r1() {
         .get(&format!("{:0>66}", r.to_hex()))
         .unwrap()
         .to_big_int();
-    let (_, s, _) = complete_sig(&paillier_sk, &presig, &r, &k, Curve::Secp256r1).unwrap();
-    verify(
-        &r,
+    let (rx, s, _) = complete_sig(&paillier_sk, &presig, &r, &k, Curve::Secp256r1).unwrap();
+    assert!(verify(
+        &rx,
         &s,
         &publickey_from_secretkey(&secret_key, Curve::Secp256r1).unwrap(),
         &msg_hash,
         Curve::Secp256r1,
     )
-    .unwrap();
+    .unwrap());
 }

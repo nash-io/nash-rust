@@ -157,7 +157,12 @@ impl MessageBroker {
                         }
                         BrokerAction::Message(Err(e)) => {
                             // kill broker process if WS connection closed
-                            // TODO: iterate over all channels and send error?
+                            for (_id, channel) in request_map.iter_mut() {
+                                let _ignore = channel.send(Err(e.clone()));
+                            }
+                            for (_id, channel) in subscription_map.iter_mut() {
+                                let _ignore = channel.send(Err(e.clone()));
+                            }
                             break;
                         }
                     }

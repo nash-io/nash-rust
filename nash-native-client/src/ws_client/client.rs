@@ -26,8 +26,7 @@ type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 // this will add hearbeat (keep alive) messages to the channel for ws to send out every 15s
 pub fn spawn_heartbeat_loop(
     client_id: u64, 
-    outgoing_sender: UnboundedSender<AbsintheWSRequest>,
-    ws_incoming_sender: UnboundedSender<Result<AbsintheWSResponse>>,
+    outgoing_sender: UnboundedSender<AbsintheWSRequest>
 ) {
     tokio::spawn(async move {
         loop {
@@ -38,12 +37,11 @@ pub fn spawn_heartbeat_loop(
                 AbsintheEvent::Heartbeat,
                 None,
             );
-            println!("trying to send heartbeat...");
             if let Err(_ignore) = outgoing_sender.send(heartbeat) {
-                let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS connection died")));
-                println!("failed on heartbeat outgoing_sender \n {:?}", _ignore);
+                // if outgoing sender is dead just ignore, will be handled elsewhere
                 break;
             }
+            // every 15s
             delay_for(Duration::from_millis(15000)).await;
         }
     });
@@ -63,25 +61,21 @@ pub fn spawn_sender_loop(
             let next_incoming = websocket.next();
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
-                    println!("processing outgoing message");
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
                         // If sending fails, pass error through broker and global channel
                         match websocket.send(Message::Text(m_text)).await {
-                            Ok(_) => {
-                                println!("message sent (supposedly)...");
-                            },
+                            Ok(_) => {},
                             Err(_) => {
-                                println!("websocket errored on outgoing, sending error downstream to ws_incoming_sender and broker_link");
-                                let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
-                                let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
+                                let error = ProtocolError("failed to send message on WS connection, likely disconnected");
+                                let _ = ws_incoming_sender.send(Err(error.clone()));
+                                let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                                 break;
                             }
                         }
                     } else {
-                        // Kill process on error
-                        println!("outgoing channel died or errored");
-                        let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
-                        let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
+                        let error = ProtocolError("outgoing channel died or errored, likely disconnected");
+                        let _ = ws_incoming_sender.send(Err(error.clone()));
+                        let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
                 }
@@ -98,13 +92,12 @@ pub fn spawn_sender_loop(
                             let _ignore =
                                 message_broker_link.send(BrokerAction::Message(Ok(resp_copy2)));
                         } else {
-                            // If response is not Ok(), pass along info of WS disconnect
-                            println!("response failed to destructure");
+                            // if response fails to destructure, ignore and continue broker loop
                         }
                     } else {
-                        println!("incoming channel failed from WS");
-                        let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
-                        let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
+                        let error = ProtocolError("incoming WS channel failed, likely disconnected");
+                        let _ = ws_incoming_sender.send(Err(error.clone()));
+                        let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
                 }
@@ -166,15 +159,12 @@ impl MessageBroker {
                             }
                         }
                         BrokerAction::Message(Err(e)) => {
-                            println!("broker recieved error");
                             // kill broker process if WS connection closed
                             for (_id, channel) in request_map.iter_mut() {
-                                let _ignore = channel.send(Err(e.clone()));
-                                println!("sending error on channel {}, {:?}", _id, _ignore);
+                                let _ = channel.send(Err(e.clone()));
                             }
                             for (_id, channel) in subscription_map.iter_mut() {
-                                let _ignore = channel.send(Err(e.clone()));
-                                println!("sending error on channel {}, {:?}", _id,  _ignore);
+                                let _ = channel.send(Err(e.clone()));
                             }
                             break;
                         }
@@ -201,54 +191,61 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
         loop {
             let response = callback_channel.next().await;
             // is there a valid incoming payload?
-            if let Some(Ok(response)) = response {
-                // can the payload json be parsed?
-                if let Ok(json_payload) = response.subscription_json_payload() {
-                    // First do normal subscription logic
-                    let output = match request.subscription_response_from_json(json_payload.clone())
-                    {
-                        Ok(response) => {
-                            match response {
-                                ResponseOrError::Error(err_resp) => {
-                                    Ok(ResponseOrError::Error(err_resp))
-                                }
-                                response => {
-                                    // this unwrap below is safe because previous match case checks for error
-                                    let sub_response = response.response().unwrap();
-                                    match request
-                                        .process_subscription_response(sub_response, state.clone())
-                                        .await
-                                    {
-                                        Ok(_) => Ok(response),
-                                        Err(e) => Err(e),
+            match response {
+                Some(Ok(response)) => {
+                    // can the payload json be parsed?
+                    if let Ok(json_payload) = response.subscription_json_payload() {
+                        // First do normal subscription logic
+                        let output = match request.subscription_response_from_json(json_payload.clone())
+                        {
+                            Ok(response) => {
+                                match response {
+                                    ResponseOrError::Error(err_resp) => {
+                                        Ok(ResponseOrError::Error(err_resp))
+                                    }
+                                    response => {
+                                        // this unwrap below is safe because previous match case checks for error
+                                        let sub_response = response.response().unwrap();
+                                        match request
+                                            .process_subscription_response(sub_response, state.clone())
+                                            .await
+                                        {
+                                            Ok(_) => Ok(response),
+                                            Err(e) => Err(e),
+                                        }
                                     }
                                 }
                             }
+                            Err(e) => Err(e),
+                        };
+                        // If callback_channel fails, kill process
+                        if let Err(_e) = user_callback_sender.send(output) {
+                            // Note: we do not want to kill the process in this case! User could just have destroyed the individual callback stream
+                            // and we still want to send to the global stream! maybe add a log here in the future
                         }
-                        Err(e) => Err(e),
-                    };
-                    // If callback_channel fails, kill process
-                    if let Err(_e) = user_callback_sender.send(output) {
-                        // Note: we do not want to kill the process in this case! User could just have destroyed the individual callback stream
-                        // and we still want to send to the global stream! maybe add a log here in the future
-                    }
 
-                    // Now do global subscription logic. If global channel fails, also kill process
-                    if let Err(_e) = global_subscription_sender
-                        .send(request.wrap_response_as_any_subscription(json_payload))
-                    {
+                        // Now do global subscription logic. If global channel fails, also kill process
+                        if let Err(_e) = global_subscription_sender
+                            .send(request.wrap_response_as_any_subscription(json_payload))
+                        {
+                            break;
+                        }
+                    } else {
+                        // Kill process due to unparsable absinthe payload
                         break;
                     }
-                } else {
-                    // Kill process due to unparsable absinthe payload
+                },
+                Some(Err(e)) => {
+                    // kill process due to closed channel
+                    let _= global_subscription_sender.send(Err(e));
+                    // if for some reason the global subscription doesn't exist anymore (likely because client doesn't exist!) then just ignore
+                    // and close out the process loop
+                    break;
+                },
+                None => {
+                    let _= global_subscription_sender.send(Err(ProtocolError("channel returned None. dead?")));
                     break;
                 }
-            } else {
-                // kill process due to closed channel
-                let _ignore= global_subscription_sender.send(Err(ProtocolError("socket connection died")));
-                // if for some reason the global subscription doesn't exist anymore (likely because client doesn't exist!) then just ignore
-                // and close out the process loop
-                break;
             }
         }
     });
@@ -359,7 +356,7 @@ impl Client {
             .map_err(|_| ProtocolError("Could not initialize connection with Nash"))?;
 
         // start a heartbeat loop
-        spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone(), ws_incoming_sender.clone());
+        spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
 
         Ok(Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
@@ -382,7 +379,6 @@ impl Client {
         request: T,
     ) -> Result<ResponseOrError<T::Response>> {
         let query = request.graphql(self.state.clone()).await?;
-        // println!("{}", serde_json::to_string(&query).unwrap());
         let ws_response = timeout(
             Duration::from_millis(self.timeout),
             self.request(query).await?.next(),

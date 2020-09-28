@@ -62,8 +62,15 @@ pub fn spawn_sender_loop(
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
-                        // If sending fails, don't fail here. Let the client timeout and handle it
-                        let _ignore = websocket.send(Message::Text(m_text)).await;
+                        // If sending fails, pass error through broker and global channel
+                        match websocket.send(Message::Text(m_text)).await {
+                            Ok(_) => {},
+                            Err(_) => {
+                                let _ignore = ws_incoming_sender.send(Err(ProtocolError("WS disconnected")));
+                                let _ignore = message_broker_link.send(BrokerAction::Message(Err(ProtocolError("WS disconnected"))));
+                                break;
+                            }
+                        }
                     } else {
                         // Kill process on error
                         break;

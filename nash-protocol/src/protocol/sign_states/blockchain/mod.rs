@@ -3,7 +3,7 @@ use crate::errors::{ProtocolError, Result};
 use crate::types::Blockchain;
 use crate::utils::{decode_hexstr, hash_eth_message, hash_neo_message};
 use mpc_wallet_lib::rust_bigint::BigInt;
-
+use super::super::place_order::blockchain::eth::FillOrder as FillOrderEth;
 
 use super::super::signer::Signer;
 #[cfg(feature = "num_bigint")]
@@ -39,9 +39,16 @@ impl ContractBalanceState {
 
 impl RecycledOrder {
     pub fn verify(&self) -> bool {
-        // TODO:
-        match self.0.blockchain {
-            Blockchain::Ethereum => true,
+        let order_data = &self.0;
+        match order_data.blockchain {
+            Blockchain::Ethereum => {
+                if let Ok(_order) = FillOrderEth::from_hex(&order_data.payload) {
+                    // TODO: verify other properties here
+                    true
+                } else {
+                    false
+                }
+            },
             Blockchain::NEO => true,
             Blockchain::Bitcoin => true
         }

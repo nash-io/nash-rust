@@ -8,7 +8,161 @@ use mpc_wallet_lib::curves::secp256_r1::Secp256r1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
 use ripemd160::Ripemd160;
 use sha2::{Digest, Sha256};
+use super::super::{Rate, OrderRate, Amount, Nonce, Asset, AssetOrCrosschain};
+use super::{bigdecimal_to_nash_u64};
 
+impl Rate {
+    /// Convert any Rate into bytes for encoding in a NEO payload
+    pub fn to_le_bytes(&self) -> Result<[u8; 8]> {
+        let zero_bytes = (0 as f64).to_le_bytes();
+        let bytes = match self {
+            Self::OrderRate(rate) | Self::FeeRate(rate) => rate.to_le_bytes()?,
+            Self::MinOrderRate | Self::MinFeeRate => zero_bytes,
+            Self::MaxOrderRate => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+            // 0.0025 * 10^8 = 250,000
+            Self::MaxFeeRate => [0x90, 0xD0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00],
+        };
+        Ok(bytes)
+    }
+}
+
+impl OrderRate {
+    /// Serialize the OrderRate to bytes for payload creation. We always use a
+    /// precision of 8 and multiplication factor of 10^8
+    pub fn to_le_bytes(&self) -> Result<[u8; 8]> {
+        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_le_bytes();
+        Ok(bytes)
+    }
+}
+
+impl Asset {
+    /// This maps assets onto their representation in the NEO SC protocol.
+    /// Each asset is represented by two bytes which serve as an identifier
+    pub fn to_neo_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::ETH => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::BAT => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::OMG => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::USDC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::USDT => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::ZRX => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::LINK => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::QNT => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::RLC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::ANT => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::TRAC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::GUNTHY => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::BTC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::NEO => {
+                BigInt::from_hex("9B7CFFDAA674BEAE0F930EBE6085AF9093E5FE56B34A5C220CCDCF6EFC336FC5")
+                    .unwrap()
+                    .to_bytes()
+            }
+            Self::GAS => {
+                BigInt::from_hex("E72D286979EE6CB1B7E65DFDDFB2E384100B8D148E7758DE42E4168B71792C60")
+                    .unwrap()
+                    .to_bytes()
+            },
+            Self::NNN => BigInt::from_hex("045fab3389daf5602fa0953b4d7db3ef7b57b753")
+                .unwrap()
+                .to_bytes(),
+        }
+    }
+
+    /// Given two bytes asset id, return asset
+    pub fn from_neo_bytes(bytes: &[u8; 32]) -> Result<Self> {
+        match bytes {
+            [0x9B, 0x7C, 0xFF, 0xDA, 0xA6, 0x74, 0xBE, 0xAE, 0x0F, 0x93, 0x0E, 0xBE, 0x60, 0x85, 0xAF, 0x90, 0x93, 0xE5, 0xFE, 0x56, 0xB3, 0x4A, 0x5C, 0x22, 0x0C, 0xCD, 0xCF, 0x6E, 0xFC, 0x33, 0x6F, 0xC5] => {
+                Ok(Self::NEO)
+            }
+            [0xE7, 0x2D, 0x28, 0x69, 0x79, 0xEE, 0x6C, 0xB1, 0xB7, 0xE6, 0x5D, 0xFD, 0xDF, 0xB2, 0xE3, 0x84, 0x10, 0x0B, 0x8D, 0x14, 0x8E, 0x77, 0x58, 0xDE, 0x42, 0xE4, 0x16, 0x8B, 0x71, 0x79, 0x2C, 0x60] => {
+                Ok(Self::GAS)
+            }
+            _ => Err(ProtocolError("Invalid Asset ID in bytes")),
+        }
+    }
+}
+
+impl AssetOrCrosschain {
+    /// Convert asset to id in bytes interpretable by the NEO
+    /// smart contract, or `0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF` if it is a cross-chain asset
+    pub fn to_neo_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Crosschain => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
+            Self::Asset(asset) => asset.to_neo_bytes().to_vec(),
+        }
+    }
+    /// Read asset bytes from a protocol payload and convert into
+    /// an Asset or mark as cross-chain
+    pub fn from_neo_bytes(bytes: Vec<u8>) -> Result<Self> {
+        if bytes.len() == 20
+            && bytes
+                == [
+                    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                ]
+                .to_vec()
+        {
+            Ok(Self::Crosschain)
+        } else if bytes.len() == 32 {
+            // convert vector to fixed-size array
+            let mut arr = [0; 32];
+            let bytes = &bytes[..arr.len()];
+            arr.copy_from_slice(bytes);
+            Ok(Self::Asset(Asset::from_neo_bytes(&arr)?))
+        } else {
+            Err(ProtocolError("Invalid Asset ID in bytes"))
+        }
+    }
+}
+
+impl Amount {
+    /// Serialize Amount to Little Endian bytes for NEO payload creation.
+    pub fn to_le_bytes(&self) -> Result<[u8; 8]> {
+        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_le_bytes();
+        Ok(bytes)
+    }
+}
+
+impl Nonce {
+    /// Serialize Nonce for NEO payload as 8 bytes LittleEndian
+    pub fn to_le_bytes(&self) -> [u8; 8] {
+        match self {
+            Self::Value(value) => u64::from(*value).to_le_bytes(),
+            Self::Crosschain => u64::from(Nonce::crosschain()).to_le_bytes(),
+        }
+    }
+}
+
+/// NEO address representation
 #[derive(Clone, Debug, PartialEq)]
 pub struct Address {
     inner: BigInt,
@@ -42,6 +196,7 @@ impl Address {
     }
 }
 
+/// NEO public key representation
 #[derive(Clone, Debug, PartialEq)]
 pub struct PublicKey {
     // FIXME: why?
@@ -49,6 +204,7 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
+    /// Create a new NEO public key from a hex string
     pub fn new(hex_str: &str) -> Result<Self> {
         let inner = Secp256r1Point::from_hex(hex_str).map_err(|_| {
             ProtocolError("Could not create public key (Secp256r1Point) from hex string")
@@ -77,10 +233,12 @@ impl PublicKey {
         Address::new(&address).unwrap()
     }
 
+    /// Get Secp256r1 point associated with NEO public key
     pub fn to_point(&self) -> Secp256r1Point {
         self.inner
     }
-
+    
+    /// Conver NEO public key to hex string
     pub fn to_hex(&self) -> String {
         self.inner.to_hex()
     }

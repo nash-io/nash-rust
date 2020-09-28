@@ -30,7 +30,7 @@ pub struct Secp256r1Scalar {
     fe: SK,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct Secp256r1Point {
     purpose: &'static str,
     ge: PK,
@@ -55,9 +55,11 @@ impl ECScalar<SK> for Secp256r1Scalar {
     }
 
     fn zero() -> Secp256r1Scalar {
+        let zero_arr = [0u8; 32];
+        let zero = unsafe { std::mem::transmute::<[u8; 32], SecretKey>(zero_arr) };
         Secp256r1Scalar {
             purpose: "zero",
-            fe: SK::from_bytes(&Scalar::zero().to_bytes()).unwrap(),
+            fe: zero,
         }
     }
 
@@ -214,6 +216,26 @@ impl<'de> Visitor<'de> for Secp256r1ScalarVisitor {
     fn visit_str<E: de::Error>(self, s: &str) -> Result<Secp256r1Scalar, E> {
         let v = BigInt::from_str_radix(s, 16).expect("Failed in serde");
         Ok(ECScalar::from(&v))
+    }
+}
+
+impl PartialEq for Secp256r1Scalar {
+    fn eq(&self, other: &Secp256r1Scalar) -> bool {
+        self.get_element().to_bytes() == other.get_element().to_bytes()
+    }
+}
+
+impl PartialEq for Secp256r1Point {
+    fn eq(&self, other: &Secp256r1Point) -> bool {
+        self.get_element() == other.get_element()
+    }
+}
+
+impl Zeroize for Secp256r1Point {
+    fn zeroize(&mut self) {
+        unsafe { ptr::write_volatile(self, Secp256r1Point::generator()) };
+        atomic::fence(atomic::Ordering::SeqCst);
+        atomic::compiler_fence(atomic::Ordering::SeqCst);
     }
 }
 
@@ -562,7 +584,7 @@ mod tests {
         let pk = Secp256r1Point::generator();
         let bin = bincode::serialize(&pk).unwrap();
         let decoded: Secp256r1Point = bincode::deserialize(bin.as_slice()).unwrap();
-        assert_eq!(decoded.get_element(), pk.get_element());
+        assert_eq!(decoded, pk);
     }
 
     #[test]
@@ -570,12 +592,12 @@ mod tests {
         let pk = Secp256r1Point::generator();
         let s = serde_json::to_string(&pk).expect("Failed in serialization");
         let des_pk: Secp256r1Point = serde_json::from_str(&s).expect("Failed in deserialization");
-        assert_eq!(des_pk.get_element(), pk.get_element());
+        assert_eq!(des_pk, pk);
 
         let pk = base_point2();
         let s = serde_json::to_string(&pk).expect("Failed in serialization");
         let des_pk: Secp256r1Point = serde_json::from_str(&s).expect("Failed in deserialization");
-        assert_eq!(des_pk.get_element(), pk.get_element());
+        assert_eq!(des_pk, pk);
     }
 
     #[test]
@@ -651,7 +673,7 @@ mod tests {
         let point_a = base.clone() * a;
         let point_b = base.clone() * b;
         let point_ab2 = point_a.sub_point(&point_b.get_element());
-        assert_eq!(point_ab1.get_element(), point_ab2.get_element());
+        assert_eq!(point_ab1, point_ab2);
     }
 
     #[test]
@@ -693,7 +715,7 @@ mod tests {
         let b: Secp256r1Scalar = ECScalar::new_random();
         let c1 = a.mul(&b.get_element());
         let c2 = a * b;
-        assert_eq!(c1.get_element().to_bytes(), c2.get_element().to_bytes());
+        assert_eq!(c1, c2);
     }
 
     #[test]
@@ -753,7 +775,7 @@ mod tests {
             assert!(key_slice.len() == 65);
             assert!(key_slice[0].clone() == 4);
             let rg_prime: Secp256r1Point = ECPoint::from_bytes(&key_slice).unwrap();
-            assert_eq!(rg_prime.get_element(), rg.get_element());
+            assert_eq!(rg_prime, rg);
         }
     }
 
@@ -769,7 +791,7 @@ mod tests {
         let g = Secp256r1Point::generator();
         let h = g.bytes_compressed_to_big_int();
         let i = Secp256r1Point::from_bigint(&h).unwrap();
-        assert_eq!(i.get_element(), g.get_element());
+        assert_eq!(i, g);
     }
 
     #[test]
@@ -779,7 +801,7 @@ mod tests {
         let point = g * r;
         let point_int = point.bytes_compressed_to_big_int();
         let point_test = Secp256r1Point::from_bigint(&point_int).unwrap();
-        assert_eq!(point.get_element(), point_test.get_element());
+        assert_eq!(point, point_test);
     }
 
     #[test]

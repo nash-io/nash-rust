@@ -224,7 +224,7 @@ impl Environment {
     pub fn url(&self) -> &str {
         match self {
             Self::Production => "app.nash.io",
-            Self::Sandbox => "sandbox.nash.io",
+            Self::Sandbox => "app.sandbox.nash.io",
             Self::Dev(s) => s,
         }
     }
@@ -567,6 +567,33 @@ mod tests {
         )
         .await
         .unwrap()
+    }
+
+    async fn init_sandbox_client() -> Client {
+        Client::new(
+            None,
+            0,
+            None,
+            Environment::Sandbox,
+            1500,
+        )
+        .await
+        .unwrap()
+    }
+
+    #[test]
+    fn test_list_markets_sandbox() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_sandbox_client().await;
+            let response = client
+                .run(ListMarketsRequest)
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            println!("{:?}", client.state.lock().await.assets);
+        };
+        runtime.block_on(async_block);
     }
 
     #[test]

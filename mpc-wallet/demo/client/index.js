@@ -172,6 +172,8 @@ async function compute_presig() {
             presig: presig,
             r: r,
             curve: curve,
+            pubkey: JSON.parse(get_state("public_key")),
+            msg_hash: message_hash,
         }).then((response) =>{
             let recovery_id = response.data["recovery_id"];
             let r = response.data["r"];

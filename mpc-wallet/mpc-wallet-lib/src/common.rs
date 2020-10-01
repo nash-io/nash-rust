@@ -79,7 +79,7 @@ pub fn verify(
     msg_hash: &BigInt,
     curve: Curve,
 ) -> bool{
-    // convert pubkey string format as used by ME to Secp256k1Point
+    // convert pubkey string format as used by ME to bigint
     let pk_int = match BigInt::from_hex(pubkey_str) {
         Ok(v) => v,
         Err(_) => return false,

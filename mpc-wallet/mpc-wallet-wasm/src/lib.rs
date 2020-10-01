@@ -311,18 +311,7 @@ pub fn verify(
         Err(_) => return serde_json::to_string(&(false, &"error deserializing curve")).unwrap(),
     };
 
-    let result = match common::verify(&r, &s, &pubkey, &msg_hash, curve) {
-        Ok(v) => v,
-        Err(_) => {
-            return serde_json::to_string(&(false, &"error: invalid pubkey or invalid curve"))
-                .unwrap()
-        }
-    };
-    if result {
-        serde_json::to_string(&(&true, &"")).unwrap()
-    } else {
-        serde_json::to_string(&(&false, &"error verifying signature")).unwrap()
-    }
+    serde_json::to_string(&common::verify(&r, &s, &pubkey, &msg_hash, curve)).unwrap()
 }
 
 /// Derive public key from given secret key.
@@ -785,7 +774,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256k1\""
         );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(success);
     }
 
@@ -798,8 +787,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256k1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error verifying signature");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -812,8 +800,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256k1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error verifying signature");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -826,8 +813,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256k1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error: invalid pubkey or invalid curve");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -840,8 +826,7 @@ mod tests {
             "100000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256k1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error verifying signature");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -854,8 +839,7 @@ mod tests {
             "100000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256r1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error: invalid pubkey or invalid curve");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -868,7 +852,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256r1\""
         );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(success);
     }
 
@@ -881,8 +865,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256r1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error verifying signature");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -895,8 +878,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256r1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error verifying signature");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -909,8 +891,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256r1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error: invalid pubkey or invalid curve");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -923,8 +904,7 @@ mod tests {
             "010000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256r1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error verifying signature");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 
@@ -937,8 +917,7 @@ mod tests {
             "000000000000000fffffffffffffffffff00000000000000ffffffffff000000",
             "\"Secp256k1\""
         );
-        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error: invalid pubkey or invalid curve");
+        let success: bool = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 

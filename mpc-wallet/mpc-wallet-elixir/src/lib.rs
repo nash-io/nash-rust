@@ -18,7 +18,7 @@ rustler_export_nifs! {
     [
     ("generate_paillier_keypair_and_proof", 0, generate_paillier_keypair_and_proof),
     ("dh_rpool", 2, dh_rpool),
-    ("complete_sig", 5, complete_sig),
+    ("complete_sig", 7, complete_sig),
     ("verify", 5, verify),
     ("compute_presig", 3, compute_presig),
     ("fill_rpool", 4, fill_rpool),
@@ -144,7 +144,7 @@ fn dh_rpool<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
 }
 
 /// finalize presignature to normal ECDSA signature
-/// input: paillier_sk, presig, r, k, curve
+/// input: paillier_sk, presig, r, k, curve, pubkey, msg_hash
 /// output: r, s, recid
 fn complete_sig<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
     let paillier_sk_str: String = match args[0].decode() {
@@ -187,9 +187,22 @@ fn complete_sig<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> 
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
-    let (r, s, recid) = match server::complete_sig(&paillier_sk, &presig, &r, &k, curve) {
+    let pubkey: String = match args[5].decode() {
         Ok(v) => v,
-        Err(_) => return Ok((atoms::error(), &"error: invalid r").encode(env)),
+        Err(_) => return Ok((atoms::error(), &"error parsing pubkey").encode(env)),
+    };
+    let msg_hash_str: String = match args[6].decode() {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error parsing msg_hash").encode(env)),
+    };
+    let msg_hash = match BigInt::from_hex(&msg_hash_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing msg_hash").encode(env)),
+    };
+
+    let (r, s, recid) = match server::complete_sig(&paillier_sk, &presig, &r, &k, curve, &pubkey, &msg_hash) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error: completing signature failed").encode(env)),
     };
     // add leading zeros if necessary
     Ok((

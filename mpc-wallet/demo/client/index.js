@@ -180,7 +180,7 @@ async function compute_presig() {
             signature_html.innerHTML = "r:" + JSON.stringify(r) + ", s:" + JSON.stringify(s) + ", recovery_id:" + recovery_id;
             console.log("Server has completed the signature.")
             let result = JSON.parse(MPCwallet.verify(r, s, get_state("public_key"), message_hash, curve));
-            if (result[0] === true){
+            if (result === true){
                 console.log("Signature verified successfully.");
             } else {
                 console.log("Error verifying signature. " + result[1]);

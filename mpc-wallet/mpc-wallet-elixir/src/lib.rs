@@ -242,16 +242,10 @@ fn verify<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
 
-    let result = match common::verify(&r, &s, &pubkey, &msg_hash, curve) {
-        Ok(v) => v,
-        Err(_) => {
-            return Ok((atoms::error(), &"error: invalid pubkey or invalid curve").encode(env))
-        }
-    };
-    if result {
-        Ok((atoms::ok(), atoms::__true__()).encode(env))
+    if common::verify(&r, &s, &pubkey, &msg_hash, curve) {
+        Ok(atoms::ok().encode(env))
     } else {
-        Ok((atoms::error(), atoms::__false__()).encode(env))
+        Ok(atoms::error().encode(env))
     }
 }
 

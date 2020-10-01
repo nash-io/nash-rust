@@ -78,11 +78,11 @@ pub fn verify(
     pubkey_str: &str,
     msg_hash: &BigInt,
     curve: Curve,
-) -> Result<bool, ()> {
+) -> bool{
     // convert pubkey string format as used by ME to Secp256k1Point
     let pk_int = match BigInt::from_hex(pubkey_str) {
         Ok(v) => v,
-        Err(_) => return Err(()),
+        Err(_) => return false,
     };
     let pk_vec = BigInt::to_vec(&pk_int);
     let q: BigInt;
@@ -90,7 +90,7 @@ pub fn verify(
     if curve == Curve::Secp256k1 {
         let pk = match Secp256k1Point::from_bytes(&pk_vec) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return false,
         };
         let s_fe: Secp256k1Scalar = ECScalar::from(&s);
         let rx_fe: Secp256k1Scalar = ECScalar::from(&r);
@@ -103,7 +103,7 @@ pub fn verify(
     } else if curve == Curve::Secp256r1 {
         let pk = match Secp256r1Point::from_bytes(&pk_vec) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return false,
         };
         let s_fe: Secp256r1Scalar = ECScalar::from(&s);
         let rx_fe: Secp256r1Scalar = ECScalar::from(&r);
@@ -114,12 +114,16 @@ pub fn verify(
         let u2 = pk * &rx_fe * &s_inv_fe;
         u1_plus_u2 = (u1 + u2).x_coor().unwrap();
     } else {
-        return Err(());
+        return false;
     }
     let rx_bytes = &BigInt::to_vec(&r)[..];
     let u1_plus_u2_bytes = &BigInt::to_vec(&u1_plus_u2)[..];
     // second condition is against malleability
-    Ok(rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone()))
+    if rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone()) {
+        true
+    } else {
+        false
+    }
 }
 
 /// derive public key from secret key, in uncompressed format as expected by ME
@@ -325,8 +329,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -352,8 +355,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -379,8 +381,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -406,8 +407,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -428,8 +428,7 @@ mod tests {
             &"1234567890".to_string(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -455,8 +454,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -482,8 +480,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -509,8 +506,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -536,8 +532,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -563,8 +558,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -585,8 +579,7 @@ mod tests {
             &"1234567890".to_string(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -612,8 +605,7 @@ mod tests {
             &pubkey.bytes_compressed_to_big_int().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]

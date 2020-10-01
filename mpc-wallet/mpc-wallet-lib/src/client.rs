@@ -637,7 +637,6 @@ mod tests {
             &publickey_from_secretkey(&sk.to_big_int(), Curve::Secp256k1).unwrap(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 }

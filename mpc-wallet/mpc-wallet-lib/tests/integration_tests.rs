@@ -45,8 +45,7 @@ fn test_integration_k1() {
         &publickey_from_secretkey(&secret_key, Curve::Secp256k1).unwrap(),
         &msg_hash,
         Curve::Secp256k1,
-    )
-    .unwrap());
+    ));
 }
 
 #[test]
@@ -82,6 +81,5 @@ fn test_integration_r1() {
         &publickey_from_secretkey(&secret_key, Curve::Secp256r1).unwrap(),
         &msg_hash,
         Curve::Secp256r1,
-    )
-    .unwrap());
+    ));
 }

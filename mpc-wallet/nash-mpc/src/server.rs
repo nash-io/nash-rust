@@ -49,8 +49,8 @@ pub fn compute_rpool_secp256r1(
             // use strings with leading zeros for ME
             "{:0>66}",
             client_dh_publics[i.parse::<usize>().unwrap()]
-                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].get_element())
-                .bytes_compressed_to_big_int()
+                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
+                .to_bigint()
                 .to_hex()
         )
     });
@@ -79,8 +79,8 @@ pub fn compute_rpool_secp256k1(
             // use strings with leading zeros for ME
             "{:0>66}",
             client_dh_publics[i.parse::<usize>().unwrap()]
-                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].get_element())
-                .bytes_compressed_to_big_int()
+                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
+                .to_bigint()
                 .to_hex()
         )
     });
@@ -110,16 +110,16 @@ pub fn complete_sig(
             Err(_) => return Err(()),
         };
         q = Secp256k1Scalar::q();
-        rx = r_point.x_coor().unwrap().mod_floor(&q);
-        ry = r_point.y_coor().unwrap().mod_floor(&q);
+        rx = r_point.x_coor().mod_floor(&q);
+        ry = r_point.y_coor().mod_floor(&q);
     } else if curve == Curve::Secp256r1 {
         let r_point = match Secp256r1Point::from_bigint(&r) {
             Ok(v) => v,
             Err(_) => return Err(()),
         };
         q = Secp256r1Scalar::q();
-        rx = r_point.x_coor().unwrap().mod_floor(&q);
-        ry = r_point.y_coor().unwrap().mod_floor(&q);
+        rx = r_point.x_coor().mod_floor(&q);
+        ry = r_point.y_coor().mod_floor(&q);
     } else {
         return Err(());
     }

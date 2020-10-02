@@ -37,7 +37,7 @@ fn test_integration_k1() {
     let k = rpool
         .get(&format!("{:0>66}", r.to_hex()))
         .unwrap()
-        .to_big_int();
+        .to_bigint();
     let pk = publickey_from_secretkey(&secret_key, Curve::Secp256k1).unwrap();
     let (rx, s, _) = complete_sig(&paillier_sk, &presig, &r, &k, Curve::Secp256k1, &pk, &msg_hash).unwrap();
     assert!(verify(
@@ -74,7 +74,7 @@ fn test_integration_r1() {
     let k = rpool
         .get(&format!("{:0>66}", r.to_hex()))
         .unwrap()
-        .to_big_int();
+        .to_bigint();
     let pk = publickey_from_secretkey(&secret_key, Curve::Secp256r1).unwrap();
     let (rx, s, _) = complete_sig(&paillier_sk, &presig, &r, &k, Curve::Secp256r1, &pk, &msg_hash).unwrap();
     assert!(verify(

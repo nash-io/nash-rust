@@ -96,7 +96,7 @@ impl APIchildkeyCreator {
             let client_secret_share =
                 Zeroizing::<Secp256k1Scalar>::new(random.invert() * secret_key.deref());
             // server's secret share is set to random * 1
-            let mut server_secret_share = random.to_big_int();
+            let mut server_secret_share = random.to_bigint();
             let public_key =
                 publickey_from_secretkey(&self.secret_key, curve).expect("Invalid curve");
             let server_secret_share_encrypted =
@@ -105,7 +105,7 @@ impl APIchildkeyCreator {
             Ok(APIchildkey {
                 paillier_pk: self.paillier_pk.unwrap(),
                 public_key,
-                client_secret_share: client_secret_share.to_big_int(),
+                client_secret_share: client_secret_share.to_bigint(),
                 server_secret_share_encrypted,
             })
         } else if curve == Curve::Secp256r1 {
@@ -115,7 +115,7 @@ impl APIchildkeyCreator {
             let client_secret_share =
                 Zeroizing::<Secp256r1Scalar>::new(random.invert() * secret_key.deref());
             // server's secret share is set to random * 1
-            let mut server_secret_share = random.to_big_int();
+            let mut server_secret_share = random.to_bigint();
             let public_key =
                 publickey_from_secretkey(&self.secret_key, curve).expect("Invalid curve");
             let server_secret_share_encrypted =
@@ -124,7 +124,7 @@ impl APIchildkeyCreator {
             Ok(APIchildkey {
                 paillier_pk: self.paillier_pk.unwrap(),
                 public_key,
-                client_secret_share: client_secret_share.to_big_int(),
+                client_secret_share: client_secret_share.to_bigint(),
                 server_secret_share_encrypted,
             })
         } else {
@@ -157,7 +157,7 @@ pub fn compute_presig(
             Err(_) => return Err(()),
         };
         q = Secp256k1Scalar::q();
-        rx = r_point.x_coor().unwrap().mod_floor(&q);
+        rx = r_point.x_coor().mod_floor(&q);
     } else if curve == Curve::Secp256r1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256R1.lock().unwrap().pop() {
@@ -172,7 +172,7 @@ pub fn compute_presig(
             Err(_) => return Err(()),
         };
         q = Secp256r1Scalar::q();
-        rx = r_point.x_coor().unwrap().mod_floor(&q);
+        rx = r_point.x_coor().mod_floor(&q);
     } else {
         return Err(());
     }
@@ -263,22 +263,22 @@ pub fn fill_rpool_secp256r1(
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
         let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].get_element())
-            .bytes_compressed_to_big_int();
+            .scalar_mul(&own_dh_secrets[i].fe)
+            .to_bigint();
         RPOOL_SECP256R1
             .lock()
             .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_big_int()));
+            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
         let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].get_element())
-            .bytes_compressed_to_big_int();
+            .scalar_mul(&own_dh_secrets[i].fe)
+            .to_bigint();
         RPOOL_SECP256R1
             .lock()
             .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_big_int()));
+            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
     });
     for i in &mut own_dh_secrets {
         i.zeroize();
@@ -300,22 +300,22 @@ pub fn fill_rpool_secp256k1(
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
         let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].get_element())
-            .bytes_compressed_to_big_int();
+            .scalar_mul(&own_dh_secrets[i].fe)
+            .to_bigint();
         RPOOL_SECP256K1
             .lock()
             .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_big_int()));
+            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
         let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].get_element())
-            .bytes_compressed_to_big_int();
+            .scalar_mul(&own_dh_secrets[i].fe)
+            .to_bigint();
         RPOOL_SECP256K1
             .lock()
             .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_big_int()));
+            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
     });
     for i in &mut own_dh_secrets {
         i.zeroize();
@@ -634,7 +634,7 @@ mod tests {
         assert!(verify(
             &signature.0,
             &signature.1,
-            &publickey_from_secretkey(&sk.to_big_int(), Curve::Secp256k1).unwrap(),
+            &publickey_from_secretkey(&sk.to_bigint(), Curve::Secp256k1).unwrap(),
             &msg_hash,
             Curve::Secp256k1
         ));

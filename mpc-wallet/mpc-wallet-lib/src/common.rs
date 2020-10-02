@@ -99,7 +99,7 @@ pub fn verify(
         let e_fe: Secp256k1Scalar = ECScalar::from(&msg_hash.mod_floor(&q));
         let u1 = Secp256k1Point::generator() * &e_fe * &s_inv_fe;
         let u2 = pk * &rx_fe * &s_inv_fe;
-        u1_plus_u2 = (u1 + u2).x_coor().unwrap();
+        u1_plus_u2 = (u1 + u2).x_coor();
     } else if curve == Curve::Secp256r1 {
         let pk = match Secp256r1Point::from_bytes(&pk_vec) {
             Ok(v) => v,
@@ -112,7 +112,7 @@ pub fn verify(
         let e_fe: Secp256r1Scalar = ECScalar::from(&msg_hash.mod_floor(&q));
         let u1 = Secp256r1Point::generator() * &e_fe * &s_inv_fe;
         let u2 = pk * &rx_fe * &s_inv_fe;
-        u1_plus_u2 = (u1 + u2).x_coor().unwrap();
+        u1_plus_u2 = (u1 + u2).x_coor();
     } else {
         return false;
     }
@@ -129,12 +129,12 @@ pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result
         let base: Secp256k1Point = ECPoint::generator();
         let pk = base * secret_key.deref();
         Ok("0".to_string()
-            + &BigInt::from_bytes(&pk.get_element().serialize_uncompressed()).to_str_radix(16))
+            + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_str_radix(16))
     } else if curve == Curve::Secp256r1 {
         let secret_key = Zeroizing::<Secp256r1Scalar>::new(ECScalar::from(secret_key_int));
         let pk = Secp256r1Point::generator() * secret_key.deref();
         let mut b: [u8; 2 * MODBYTES as usize + 1] = [0; 2 * MODBYTES as usize + 1];
-        pk.get_element().tobytes(&mut b, false);
+        pk.ge.tobytes(&mut b, false);
         let mut s = String::new();
         for byte in b.iter() {
             s += &format!("{:02x}", byte);
@@ -322,7 +322,7 @@ mod tests {
         assert!(verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
         ));
@@ -348,7 +348,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
         ));
@@ -374,7 +374,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
         ));
@@ -400,7 +400,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
         ));
@@ -447,7 +447,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
         ));
@@ -473,7 +473,7 @@ mod tests {
         assert!(verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
         ));
@@ -499,7 +499,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
         ));
@@ -525,7 +525,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
         ));
@@ -551,7 +551,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
         ));
@@ -598,7 +598,7 @@ mod tests {
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
         ));

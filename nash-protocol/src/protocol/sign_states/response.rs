@@ -1,6 +1,8 @@
 //! Response processing for state signing
 
-use super::types::{SignStatesResponseData, StateData, RecycledOrder, ContractBalanceState, ServerSignedData};
+use super::types::{
+    ContractBalanceState, RecycledOrder, ServerSignedData, SignStatesResponseData, StateData,
+};
 use crate::graphql::sign_states;
 use crate::types::Blockchain;
 

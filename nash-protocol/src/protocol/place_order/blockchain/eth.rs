@@ -1,7 +1,7 @@
-use crate::errors::{Result, ProtocolError};
+use crate::errors::{ProtocolError, Result};
 use crate::graphql::place_limit_order;
 use crate::types::eth::Address;
-use crate::types::{Amount, Blockchain, Nonce, Rate, AssetOrCrosschain, Prefix};
+use crate::types::{Amount, AssetOrCrosschain, Blockchain, Nonce, Prefix, Rate};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_eth_message};
 use mpc_wallet_lib::rust_bigint::BigInt;
 use std::convert::TryInto;
@@ -94,7 +94,7 @@ impl FillOrder {
         let max_order = Rate::from_be_bytes(bytes[49..57].try_into()?)?;
         let fee_rate = Rate::from_be_bytes(bytes[57..65].try_into()?)?;
         let order_nonce = Nonce::from_be_bytes(bytes[65..69].try_into()?)?;
-        
+
         Ok(Self {
             prefix,
             address,
@@ -106,7 +106,7 @@ impl FillOrder {
             min_order,
             max_order,
             fee_rate,
-            order_nonce
+            order_nonce,
         })
     }
 
@@ -137,10 +137,10 @@ impl FillOrder {
 
 #[cfg(test)]
 mod tests {
-    use super::{FillOrder, Amount, Nonce, Rate, Address}; 
+    use super::{Address, Amount, FillOrder, Nonce, Rate};
     use crate::types::Asset;
     #[test]
-    fn fillorder_generate_and_parse(){
+    fn fillorder_generate_and_parse() {
         let order = FillOrder::new(
             Address::new("D58547F100B67BB99BBE8E94523B6BB4FDA76954").unwrap(),
             Asset::USDC.into(),
@@ -151,7 +151,7 @@ mod tests {
             Rate::MinOrderRate,
             Rate::MaxOrderRate,
             Rate::MaxFeeRate,
-            Nonce::Value(23)
+            Nonce::Value(23),
         );
         let order_hex = order.to_hex().unwrap();
         let parsed_order = FillOrder::from_hex(&order_hex).unwrap();
@@ -161,4 +161,3 @@ mod tests {
         assert_eq!(order_hex, to_hex_again);
     }
 }
-

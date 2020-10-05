@@ -24,10 +24,7 @@ use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheW
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
 // this will add hearbeat (keep alive) messages to the channel for ws to send out every 15s
-pub fn spawn_heartbeat_loop(
-    client_id: u64, 
-    outgoing_sender: UnboundedSender<AbsintheWSRequest>
-) {
+pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<AbsintheWSRequest>) {
     tokio::spawn(async move {
         loop {
             let heartbeat = AbsintheWSRequest::new(
@@ -64,16 +61,19 @@ pub fn spawn_sender_loop(
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
                         // If sending fails, pass error through broker and global channel
                         match websocket.send(Message::Text(m_text)).await {
-                            Ok(_) => {},
+                            Ok(_) => {}
                             Err(_) => {
-                                let error = ProtocolError("failed to send message on WS connection, likely disconnected");
+                                let error = ProtocolError(
+                                    "failed to send message on WS connection, likely disconnected",
+                                );
                                 let _ = ws_incoming_sender.send(Err(error.clone()));
                                 let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                                 break;
                             }
                         }
                     } else {
-                        let error = ProtocolError("outgoing channel died or errored, likely disconnected");
+                        let error =
+                            ProtocolError("outgoing channel died or errored, likely disconnected");
                         let _ = ws_incoming_sender.send(Err(error.clone()));
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
@@ -95,7 +95,8 @@ pub fn spawn_sender_loop(
                             // if response fails to destructure, ignore and continue broker loop
                         }
                     } else {
-                        let error = ProtocolError("incoming WS channel failed, likely disconnected");
+                        let error =
+                            ProtocolError("incoming WS channel failed, likely disconnected");
                         let _ = ws_incoming_sender.send(Err(error.clone()));
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
@@ -197,28 +198,31 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                     // can the payload json be parsed?
                     if let Ok(json_payload) = response.subscription_json_payload() {
                         // First do normal subscription logic
-                        let output = match request.subscription_response_from_json(json_payload.clone())
-                        {
-                            Ok(response) => {
-                                match response {
-                                    ResponseOrError::Error(err_resp) => {
-                                        Ok(ResponseOrError::Error(err_resp))
-                                    }
-                                    response => {
-                                        // this unwrap below is safe because previous match case checks for error
-                                        let sub_response = response.response().unwrap();
-                                        match request
-                                            .process_subscription_response(sub_response, state.clone())
-                                            .await
-                                        {
-                                            Ok(_) => Ok(response),
-                                            Err(e) => Err(e),
+                        let output =
+                            match request.subscription_response_from_json(json_payload.clone()) {
+                                Ok(response) => {
+                                    match response {
+                                        ResponseOrError::Error(err_resp) => {
+                                            Ok(ResponseOrError::Error(err_resp))
+                                        }
+                                        response => {
+                                            // this unwrap below is safe because previous match case checks for error
+                                            let sub_response = response.response().unwrap();
+                                            match request
+                                                .process_subscription_response(
+                                                    sub_response,
+                                                    state.clone(),
+                                                )
+                                                .await
+                                            {
+                                                Ok(_) => Ok(response),
+                                                Err(e) => Err(e),
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => Err(e),
-                        };
+                                Err(e) => Err(e),
+                            };
                         // If callback_channel fails, kill process
                         if let Err(_e) = user_callback_sender.send(output) {
                             // Note: we do not want to kill the process in this case! User could just have destroyed the individual callback stream
@@ -235,16 +239,17 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                         // Kill process due to unparsable absinthe payload
                         break;
                     }
-                },
+                }
                 Some(Err(e)) => {
                     // kill process due to closed channel
-                    let _= global_subscription_sender.send(Err(e));
+                    let _ = global_subscription_sender.send(Err(e));
                     // if for some reason the global subscription doesn't exist anymore (likely because client doesn't exist!) then just ignore
                     // and close out the process loop
                     break;
-                },
+                }
                 None => {
-                    let _= global_subscription_sender.send(Err(ProtocolError("channel returned None. dead?")));
+                    let _ = global_subscription_sender
+                        .send(Err(ProtocolError("channel returned None. dead?")));
                     break;
                 }
             }
@@ -552,10 +557,8 @@ impl Client {
         // in main application logic, expose to foreign callback, etc.
         self.ws_incoming_reciever
             .borrow_mut()
-            .for_each(|msg| {
-                async move {
-                    callback(msg);
-                }
+            .for_each(|msg| async move {
+                callback(msg);
             })
             .await;
     }
@@ -607,15 +610,9 @@ mod tests {
     }
 
     async fn init_sandbox_client() -> Client {
-        Client::new(
-            None,
-            0,
-            None,
-            Environment::Sandbox,
-            1500,
-        )
-        .await
-        .unwrap()
+        Client::new(None, 0, None, Environment::Sandbox, 1500)
+            .await
+            .unwrap()
     }
 
     #[test]
@@ -623,10 +620,7 @@ mod tests {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_sandbox_client().await;
-            let response = client
-                .run(ListMarketsRequest)
-                .await
-                .unwrap();
+            let response = client.run(ListMarketsRequest).await.unwrap();
             println!("{:?}", response);
             println!("{:?}", client.state.lock().await.assets);
         };
@@ -781,10 +775,7 @@ mod tests {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
-            let response = client
-                .run(ListMarketsRequest)
-                .await
-                .unwrap();
+            let response = client.run(ListMarketsRequest).await.unwrap();
             println!("{:?}", response);
             println!("{:?}", client.state.lock().await.assets);
         };
@@ -797,91 +788,72 @@ mod tests {
         let async_block = async {
             let client = init_client().await;
             let mut requests = Vec::new();
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::neo_usdc(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "10".to_string(),
-                    price: "5".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::neo_usdc(),
-                    buy_or_sell: BuyOrSell::Sell,
-                    amount: "1".to_string(),
-                    price: "200".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::eth_usdc(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "10".to_string(),
-                    price: "5".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::neo_usdc(),
-                    buy_or_sell: BuyOrSell::Sell,
-                    amount: "1".to_string(),
-                    price: "200".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::eth_usdc(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "10".to_string(),
-                    price: "1".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::eth_usdc(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.451".to_string(),
-                    price: "75.1".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::eth_usdc(),
-                    buy_or_sell: BuyOrSell::Sell,
-                    amount: "1.24".to_string(),
-                    price: "821".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
-            requests.push(
-                LimitOrderRequest {
-                    market: Market::eth_usdc(),
-                    buy_or_sell: BuyOrSell::Sell,
-                    amount: "1.24".to_string(),
-                    price: "821.12".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                }
-            );
+            requests.push(LimitOrderRequest {
+                market: Market::neo_usdc(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "10".to_string(),
+                price: "5".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::neo_usdc(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "1".to_string(),
+                price: "200".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::eth_usdc(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "10".to_string(),
+                price: "5".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::neo_usdc(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "1".to_string(),
+                price: "200".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::eth_usdc(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "10".to_string(),
+                price: "1".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::eth_usdc(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.451".to_string(),
+                price: "75.1".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::eth_usdc(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "1.24".to_string(),
+                price: "821".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
+            requests.push(LimitOrderRequest {
+                market: Market::eth_usdc(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "1.24".to_string(),
+                price: "821.12".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            });
             for request in requests {
-                let response = client
-                    .run(request)
-                    .await
-                    .unwrap();
+                let response = client.run(request).await.unwrap();
                 println!("{:?}", response);
                 let order_id = response.response().unwrap().order_id.clone();
                 // Small delay to make sure it is processed
@@ -964,11 +936,11 @@ mod tests {
             let mut client = init_client().await;
             {
                 let _response = client
-                .subscribe_protocol(SubscribeOrderbook {
-                    market: Market::btc_usdc(),
-                })
-                .await
-                .unwrap();
+                    .subscribe_protocol(SubscribeOrderbook {
+                        market: Market::btc_usdc(),
+                    })
+                    .await
+                    .unwrap();
             }
             for _ in 0..10 {
                 let item = client.next().await;

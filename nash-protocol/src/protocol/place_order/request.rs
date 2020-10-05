@@ -27,7 +27,7 @@ impl LimitOrderRequest {
     pub fn make_constructor(&self) -> Result<LimitOrderConstructor> {
         // Amount of order always in asset A in ME
         let amount_of_a = self.market.asset_a.with_amount(&self.amount)?;
-        
+
         // Price is always in terms of asset B in ME
         let b_per_a: Rate = OrderRate::new(&self.price)?.into();
         let a_per_b = b_per_a.invert_rate(None)?;
@@ -35,7 +35,7 @@ impl LimitOrderRequest {
         let amount_of_b = amount_of_a.exchange_at(&b_per_a, self.market.asset_b)?;
 
         let (source, rate, destination) = match self.buy_or_sell {
-            BuyOrSell::Buy => {        
+            BuyOrSell::Buy => {
                 // Buying: in SC, source is B, rate is B, and moving to asset A
                 (amount_of_b, a_per_b.clone(), self.market.asset_a)
             }
@@ -44,7 +44,7 @@ impl LimitOrderRequest {
                 (amount_of_a.clone(), b_per_a.clone(), self.market.asset_b)
             }
         };
-        
+
         Ok(LimitOrderConstructor {
             me_amount: amount_of_a,
             me_rate: b_per_a,
@@ -84,24 +84,24 @@ impl LimitOrderConstructor {
         // Amount is specified in the "source" asset
         let amount = self.source.amount.clone();
 
-        let min_order = min_order.subtract_fee(Rate::MaxFeeRate.to_bigdecimal()?)?.into();
+        let min_order = min_order
+            .subtract_fee(Rate::MaxFeeRate.to_bigdecimal()?)?
+            .into();
         let fee_rate = Rate::MinFeeRate; // 0
-        
+
         match chain {
-            Blockchain::Ethereum => {
-                Ok(FillOrder::Ethereum(eth::FillOrder::new(
-                    pub_key.to_address()?.try_into()?,
-                    self.source.asset.into(),
-                    self.destination.into(),
-                    map_crosschain(nonces.nonce_from, chain, self.source.asset.into()),
-                    map_crosschain(nonces.nonce_to, chain, self.destination.into()),
-                    amount,
-                    min_order,
-                    max_order,
-                    fee_rate,
-                    nonces.order_nonce,
-                )))
-            }
+            Blockchain::Ethereum => Ok(FillOrder::Ethereum(eth::FillOrder::new(
+                pub_key.to_address()?.try_into()?,
+                self.source.asset.into(),
+                self.destination.into(),
+                map_crosschain(nonces.nonce_from, chain, self.source.asset.into()),
+                map_crosschain(nonces.nonce_to, chain, self.destination.into()),
+                amount,
+                min_order,
+                max_order,
+                fee_rate,
+                nonces.order_nonce,
+            ))),
             Blockchain::Bitcoin => Ok(FillOrder::Bitcoin(btc::FillOrder::new(
                 map_crosschain(nonces.nonce_from, chain, self.source.asset.into()),
                 map_crosschain(nonces.nonce_to, chain, self.destination.into()),

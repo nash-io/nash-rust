@@ -1,7 +1,7 @@
 use crate::graphql;
+use crate::types::Market;
 use graphql::updated_orderbook;
 use graphql_client::GraphQLQuery;
-use crate::types::Market;
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbook {
     pub market: Market,

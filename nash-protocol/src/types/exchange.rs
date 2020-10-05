@@ -5,8 +5,8 @@
 use crate::errors::{ProtocolError, Result};
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
-use std::str::FromStr;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -43,7 +43,7 @@ pub enum Asset {
     GAS,
     TRAC,
     GUNTHY,
-    NNN
+    NNN,
 }
 
 impl Asset {
@@ -65,7 +65,7 @@ impl Asset {
             Self::BTC => Blockchain::Bitcoin,
             Self::NEO => Blockchain::NEO,
             Self::GAS => Blockchain::NEO,
-            Self::NNN => Blockchain::NEO
+            Self::NNN => Blockchain::NEO,
         }
     }
 
@@ -89,7 +89,7 @@ impl Asset {
             Self::GAS => "gas",
             Self::TRAC => "trac",
             Self::GUNTHY => "gunthy",
-            Self::NNN => "nnn"
+            Self::NNN => "nnn",
         }
     }
 
@@ -133,7 +133,7 @@ impl Asset {
             Self::GAS,
             Self::TRAC,
             Self::GUNTHY,
-            Self::NNN
+            Self::NNN,
         ]
     }
 }
@@ -348,7 +348,9 @@ impl Rate {
 
     /// Subtract fee from user by adjusting the order rate downwards
     pub fn subtract_fee(&self, fee: BigDecimal) -> Result<OrderRate> {
-        let as_order_rate = OrderRate {inner: self.to_bigdecimal()? };
+        let as_order_rate = OrderRate {
+            inner: self.to_bigdecimal()?,
+        };
         Ok(as_order_rate.subtract_fee(fee))
     }
 }
@@ -398,7 +400,7 @@ impl OrderRate {
         self.inner.clone()
     }
 
-    /// Subtract fee from user by adjusting the order rate downwards. This will keep track of as 
+    /// Subtract fee from user by adjusting the order rate downwards. This will keep track of as
     /// much precision as BigDecimal is capable of. However, this method is exclusively used by
     /// the smart contract and will be reduced to an integer in scale of 10^8 before encoding
     pub fn subtract_fee(&self, fee: BigDecimal) -> Self {

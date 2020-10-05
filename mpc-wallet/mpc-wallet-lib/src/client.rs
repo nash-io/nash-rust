@@ -8,8 +8,6 @@ use crate::common::{
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
-use rust_bigint::BigInt;
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use indexmap::{IndexMap, IndexSet};
@@ -25,6 +23,8 @@ use paillier_common::{
 };
 #[cfg(not(feature = "wasm"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
+use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use zeroize::Zeroize;
@@ -402,9 +402,9 @@ mod tests {
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
+    use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use rust_bigint::traits::Converter;
     use rust_bigint::BigInt;
-    use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use std::sync::Mutex;
 
     lazy_static! {

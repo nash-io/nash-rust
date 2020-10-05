@@ -6,11 +6,11 @@ use amcl::nist256::big::{BIG, MODBYTES};
 use amcl::nist256::ecp::ECP;
 use amcl::nist256::fp::FP;
 use amcl::nist256::rom::CURVE_ORDER;
-use rust_bigint::traits::Converter;
-use rust_bigint::BigInt;
 use getrandom::getrandom;
 #[cfg(feature = "num_bigint")]
 use num_traits::Num;
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use serde::de;
 use serde::de::Visitor;
 use serde::ser::{Serialize, Serializer};

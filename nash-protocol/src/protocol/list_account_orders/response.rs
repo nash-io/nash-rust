@@ -5,8 +5,8 @@ use crate::types::{
     AccountTradeSide, BuyOrSell, Market, Order, OrderCancellationPolicy, OrderCancellationReason,
     OrderStatus, OrderType, Trade,
 };
-use std::convert::TryFrom;
 use chrono::{DateTime, Utc};
+use std::convert::TryFrom;
 use std::str::FromStr;
 
 impl TryFrom<list_account_orders::ResponseData> for ListAccountOrdersResponse {

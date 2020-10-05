@@ -6,9 +6,8 @@ use crate::types::{
     OrderStatus, OrderType, Trade,
 };
 use chrono::{DateTime, Utc};
-use std::str::FromStr;
 use std::convert::TryFrom;
-
+use std::str::FromStr;
 
 impl TryFrom<get_account_order::ResponseData> for GetAccountOrderResponse {
     type Error = ProtocolError;

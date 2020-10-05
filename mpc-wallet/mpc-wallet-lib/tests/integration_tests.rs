@@ -1,5 +1,3 @@
-use rust_bigint::traits::Converter;
-use rust_bigint::BigInt;
 use mpc_wallet_lib::client::{
     compute_presig, fill_rpool_secp256k1, fill_rpool_secp256r1, APIchildkeyCreator,
 };
@@ -11,6 +9,8 @@ use mpc_wallet_lib::server::{
     complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_keypair,
     generate_paillier_proof,
 };
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 
 #[test]
 fn test_integration_k1() {

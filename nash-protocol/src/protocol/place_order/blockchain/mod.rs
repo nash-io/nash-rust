@@ -2,10 +2,9 @@ pub mod btc;
 pub mod eth;
 pub mod neo;
 
+use super::super::signer::Signer;
 use crate::errors::Result;
 use crate::graphql::place_limit_order;
-use super::super::signer::Signer;
-
 
 /// Generic representation of FillOrder payloads across blockchains. These enable
 /// Nash to settle active orders directly with the smart contract if necessary

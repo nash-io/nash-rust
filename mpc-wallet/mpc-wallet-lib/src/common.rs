@@ -6,11 +6,11 @@ use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 use amcl::nist256::big::MODBYTES;
-use rust_bigint::traits::{Converter, NumberTests};
-use rust_bigint::BigInt;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
+use rust_bigint::traits::{Converter, NumberTests};
+use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -229,10 +229,10 @@ mod tests {
     use crate::curves::secp256_k1::Secp256k1Point;
     use crate::curves::secp256_r1::Secp256r1Point;
     use crate::curves::traits::ECPoint;
-    use rust_bigint::traits::Converter;
-    use rust_bigint::BigInt;
     #[cfg(feature = "num_bigint")]
     use num_traits::Num;
+    use rust_bigint::traits::Converter;
+    use rust_bigint::BigInt;
 
     #[test]
     // Test Vectors taken from:

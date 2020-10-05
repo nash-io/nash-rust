@@ -1,7 +1,9 @@
-use super::super::{serializable_to_json, NashProtocol, ResponseOrError, State, try_response_from_json};
+use super::super::{
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
+};
 use crate::errors::Result;
-use crate::types::{Candle, CandleInterval, DateTimeRange, Market};
 use crate::graphql::list_candles;
+use crate::types::{Candle, CandleInterval, DateTimeRange, Market};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;

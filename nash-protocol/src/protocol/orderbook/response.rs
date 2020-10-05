@@ -1,8 +1,8 @@
 use super::super::{DataResponse, ResponseOrError};
 use super::types::{OrderbookRequest, OrderbookResponse};
-use crate::types::OrderbookOrder;
 use crate::errors::Result;
 use crate::graphql::get_orderbook;
+use crate::types::OrderbookOrder;
 
 impl OrderbookRequest {
     pub fn response_from_graphql(

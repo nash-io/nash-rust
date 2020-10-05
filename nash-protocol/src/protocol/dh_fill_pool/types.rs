@@ -1,5 +1,5 @@
 use super::super::{
-    try_response_from_json, serializable_to_json, NashProtocol, ResponseOrError, State,
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
 };
 use super::response;
 use crate::errors::{ProtocolError, Result};

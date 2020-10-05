@@ -2,7 +2,7 @@
 //! updating account values in the Nash state channel
 
 use super::super::{
-    try_response_from_json, serializable_to_json, NashProtocol, ResponseOrError, State,
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
 };
 use crate::errors::Result;
 use crate::graphql::sign_states;
@@ -64,18 +64,25 @@ pub struct StateData {
 /// that the client should sign and return
 #[derive(Clone, Debug)]
 pub struct RecycledOrder(pub StateData);
-impl RecycledOrder { pub fn state(&self) -> &StateData { &self.0 } }
+impl RecycledOrder {
+    pub fn state(&self) -> &StateData {
+        &self.0
+    }
+}
 
 /// Smart contract balance state
 #[derive(Clone, Debug)]
 pub struct ContractBalanceState(pub StateData);
-impl ContractBalanceState { pub fn state(&self) -> &StateData { &self.0 } }
-
+impl ContractBalanceState {
+    pub fn state(&self) -> &StateData {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ServerSignedData {
     pub signed_data: String,
-    pub blockchain: Blockchain
+    pub blockchain: Blockchain,
 }
 
 /// Signed state data. This may be for a state balance update or a recycled

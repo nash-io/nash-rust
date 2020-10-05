@@ -1,6 +1,6 @@
 use super::super::list_markets::types::ListMarketsRequest;
 use super::super::{
-    try_response_from_json, serializable_to_json, NashProtocol, NashProtocolRequest, ProtocolHook,
+    serializable_to_json, try_response_from_json, NashProtocol, NashProtocolRequest, ProtocolHook,
     ResponseOrError, State,
 };
 use crate::errors::Result;

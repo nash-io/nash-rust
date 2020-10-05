@@ -1,9 +1,9 @@
-use super::types::{ClientSignedState, StateData, ContractBalanceState, RecycledOrder};
+use super::super::place_order::blockchain::eth::FillOrder as FillOrderEth;
+use super::types::{ClientSignedState, ContractBalanceState, RecycledOrder, StateData};
 use crate::errors::{ProtocolError, Result};
 use crate::types::Blockchain;
 use crate::utils::{decode_hexstr, hash_eth_message, hash_neo_message};
 use mpc_wallet_lib::rust_bigint::BigInt;
-use super::super::place_order::blockchain::eth::FillOrder as FillOrderEth;
 
 use super::super::signer::Signer;
 #[cfg(feature = "num_bigint")]
@@ -15,7 +15,7 @@ pub mod neo;
 use eth::StateUpdatePayloadEth;
 
 pub enum StateUpdatePayload {
-    Eth(StateUpdatePayloadEth)
+    Eth(StateUpdatePayloadEth),
 }
 
 impl ContractBalanceState {
@@ -29,10 +29,10 @@ impl ContractBalanceState {
                 } else {
                     false
                 }
-            },
+            }
             // TODO:
             Blockchain::NEO => true,
-            Blockchain::Bitcoin => true
+            Blockchain::Bitcoin => true,
         }
     }
 }
@@ -48,9 +48,9 @@ impl RecycledOrder {
                 } else {
                     false
                 }
-            },
+            }
             Blockchain::NEO => true,
-            Blockchain::Bitcoin => true
+            Blockchain::Bitcoin => true,
         }
     }
 }

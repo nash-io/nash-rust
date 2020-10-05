@@ -1,15 +1,15 @@
 //! NEO specific types shared across protocol requests
 
+use super::super::{Amount, Asset, AssetOrCrosschain, Nonce, OrderRate, Rate};
+use super::bigdecimal_to_nash_u64;
 use crate::errors::{ProtocolError, Result};
 use bs58::{decode, encode};
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::curves::secp256_r1::Secp256r1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
+use mpc_wallet_lib::rust_bigint::traits::Converter;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use ripemd160::Ripemd160;
 use sha2::{Digest, Sha256};
-use super::super::{Rate, OrderRate, Amount, Nonce, Asset, AssetOrCrosschain};
-use super::{bigdecimal_to_nash_u64};
 
 impl Rate {
     /// Convert any Rate into bytes for encoding in a NEO payload
@@ -88,7 +88,7 @@ impl Asset {
                 BigInt::from_hex("E72D286979EE6CB1B7E65DFDDFB2E384100B8D148E7758DE42E4168B71792C60")
                     .unwrap()
                     .to_bytes()
-            },
+            }
             Self::NNN => BigInt::from_hex("045fab3389daf5602fa0953b4d7db3ef7b57b753")
                 .unwrap()
                 .to_bytes(),
@@ -237,7 +237,7 @@ impl PublicKey {
     pub fn to_point(&self) -> Secp256r1Point {
         self.inner
     }
-    
+
     /// Conver NEO public key to hex string
     pub fn to_hex(&self) -> String {
         self.inner.to_hex()

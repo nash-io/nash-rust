@@ -1,13 +1,13 @@
 use super::super::super::{DataResponse, ResponseOrError};
 use super::request::SubscribeOrderbook;
-use crate::types::OrderbookOrder;
 use crate::errors::Result;
 use crate::graphql::updated_orderbook;
+use crate::types::OrderbookOrder;
 
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbookResponse {
     pub bids: Vec<OrderbookOrder>,
-    pub asks: Vec<OrderbookOrder>
+    pub asks: Vec<OrderbookOrder>,
 }
 
 // FIXME: if possible, remove duplication with orderbook query

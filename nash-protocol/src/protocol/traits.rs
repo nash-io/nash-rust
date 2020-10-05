@@ -1,13 +1,13 @@
 //! These traits describe the high level behavior of the Nash protocol. Clients can use them
 //! to provide a generic implementation across requests
+use super::subscriptions::SubscriptionResponse;
 use super::{ProtocolHook, ResponseOrError, State};
 use crate::errors::ProtocolError;
 use crate::errors::Result;
-use std::fmt::Debug;
 use async_trait::async_trait;
 use futures::lock::Mutex;
+use std::fmt::Debug;
 use std::sync::Arc;
-use super::subscriptions::SubscriptionResponse;
 
 //****************************************//
 //  Nash protocol trait                   //
@@ -172,5 +172,8 @@ pub trait NashProtocolSubscription: Clone {
     ) -> Result<()> {
         Ok(())
     }
-    fn wrap_response_as_any_subscription(&self, response: serde_json::Value) -> Result<SubscriptionResponse>;
+    fn wrap_response_as_any_subscription(
+        &self,
+        response: serde_json::Value,
+    ) -> Result<SubscriptionResponse>;
 }

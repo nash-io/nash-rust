@@ -1,6 +1,8 @@
-use super::super::{serializable_to_json, NashProtocol, ResponseOrError, State, try_response_from_json};
-use crate::graphql::get_account_order;
+use super::super::{
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
+};
 use crate::errors::Result;
+use crate::graphql::get_account_order;
 use crate::types::Order;
 
 use async_trait::async_trait;

@@ -4,12 +4,12 @@ use crate::types::ApiKeys;
 use crate::types::Blockchain;
 use crate::types::PublicKey;
 use crate::utils::{der_encode_sig, hash_message};
-use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::client::APIchildkey;
 use mpc_wallet_lib::common::Curve;
 use mpc_wallet_lib::curves::secp256_k1::Secp256k1Scalar;
 use mpc_wallet_lib::curves::traits::ECScalar;
 use mpc_wallet_lib::paillier_common;
+use mpc_wallet_lib::rust_bigint::BigInt;
 
 pub fn chain_path(chain: Blockchain) -> &'static str {
     match chain {

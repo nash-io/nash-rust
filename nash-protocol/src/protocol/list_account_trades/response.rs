@@ -2,8 +2,8 @@ use super::types::ListAccountTradesResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_account_trades;
 use crate::types::{AccountTradeSide, BuyOrSell, Market, Trade};
-use std::convert::TryFrom;
 use chrono::{DateTime, Utc};
+use std::convert::TryFrom;
 use std::str::FromStr;
 
 impl TryFrom<list_account_trades::ResponseData> for ListAccountTradesResponse {

@@ -1,8 +1,6 @@
 #[macro_use]
 extern crate criterion;
 
-use rust_bigint::traits::Converter;
-use rust_bigint::BigInt;
 use criterion::{black_box, Criterion};
 use mpc_wallet_lib::client::{
     compute_presig, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
@@ -10,6 +8,8 @@ use mpc_wallet_lib::client::{
 };
 use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
 use paillier_common::{EncryptionKey, MinimalEncryptionKey};
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let secret_key =

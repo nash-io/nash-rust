@@ -19,12 +19,12 @@ pub use exchange::{
     Market,
     Nonce,
     Order,
-    OrderbookOrder,
     OrderCancellationPolicy,
     OrderCancellationReason,
     OrderRate,
     OrderStatus,
     OrderType,
+    OrderbookOrder,
     Rate,
     SubscriptionTrade, //TODO: remove subscription trade
     Trade,

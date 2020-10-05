@@ -3,8 +3,8 @@
 use crate::errors::{ProtocolError, Result};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Display;
 
 //****************************************//
 //  GraphQL response parsing              //
@@ -29,26 +29,22 @@ pub fn serializable_to_json<T: Serialize>(obj: &T) -> Result<serde_json::Value> 
 
 /// Helper to convert data corresponding to raw GraphQL types (B) into
 /// nicer library managed types A when failure is possible
-pub fn try_response_from_json<A, B>(response: serde_json::Value) -> Result<ResponseOrError<A>> 
+pub fn try_response_from_json<A, B>(response: serde_json::Value) -> Result<ResponseOrError<A>>
 where
     A: TryFrom<B>,
     <A as TryFrom<B>>::Error: Display,
-    B: DeserializeOwned
+    B: DeserializeOwned,
 {
     let parse_graphql = json_to_type_or_error::<B>(response)?;
     // Maybe we get back a parsed result from server response
     let mapped = parse_graphql.map(Box::new(|data| data.try_into()));
     // Unpacking the inner state is annoying, but need to surface the conversion error if encountered
     match mapped {
-        ResponseOrError::Response(DataResponse { data }) => {
-            match data {
-                Ok(data) => Ok(ResponseOrError::from_data(data)),
-                Err(err) => Err(ProtocolError::coerce_static_from_str(&format!("{}", err)))
-            }
+        ResponseOrError::Response(DataResponse { data }) => match data {
+            Ok(data) => Ok(ResponseOrError::from_data(data)),
+            Err(err) => Err(ProtocolError::coerce_static_from_str(&format!("{}", err))),
         },
-        ResponseOrError::Error(e) => {
-            Ok(ResponseOrError::Error(e))
-        }
+        ResponseOrError::Error(e) => Ok(ResponseOrError::Error(e)),
     }
 }
 

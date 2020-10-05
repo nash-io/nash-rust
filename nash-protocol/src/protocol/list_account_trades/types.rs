@@ -1,6 +1,8 @@
-use super::super::{serializable_to_json, NashProtocol, ResponseOrError, State, try_response_from_json};
-use crate::graphql::list_account_trades;
+use super::super::{
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
+};
 use crate::errors::Result;
+use crate::graphql::list_account_trades;
 use crate::types::{DateTimeRange, Market, Trade};
 
 use async_trait::async_trait;
@@ -37,6 +39,8 @@ impl NashProtocol for ListAccountTradesRequest {
         &self,
         response: serde_json::Value,
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<ListAccountTradesResponse, list_account_trades::ResponseData>(response)
+        try_response_from_json::<ListAccountTradesResponse, list_account_trades::ResponseData>(
+            response,
+        )
     }
 }

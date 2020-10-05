@@ -1,13 +1,12 @@
 //! Ethereum specific types shared across protocol requests
 
+use super::super::{Amount, Asset, AssetOrCrosschain, AssetofPrecision, Nonce, OrderRate, Rate};
+use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
 use crate::errors::{ProtocolError, Result};
+use byteorder::{BigEndian, ReadBytesExt};
 use mpc_wallet_lib::curves::secp256_k1::Secp256k1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
 use sha3::{Digest, Keccak256};
-use byteorder::{BigEndian, ReadBytesExt};
-use super::super::{Rate, OrderRate, Amount, Nonce, Asset, AssetOrCrosschain, AssetofPrecision};
-use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
-use bigdecimal::BigDecimal;
 
 impl Rate {
     /// Convert any Rate into bytes for encoding in a Ethereum payload
@@ -93,7 +92,7 @@ impl Asset {
             Self::BAT => [0x00, 0x01],
             Self::OMG => [0x00, 0x02],
             Self::USDC => [0x00, 0x03],
-            Self::USDT => [0x00,0x11],
+            Self::USDT => [0x00, 0x11],
             Self::ZRX => [0x00, 0x04],
             Self::LINK => [0x00, 0x05],
             Self::QNT => [0x00, 0x06],
@@ -104,7 +103,7 @@ impl Asset {
             Self::BTC => [0xff, 0xff],
             Self::NEO => [0xff, 0xff],
             Self::GAS => [0xff, 0xff],
-            Self::NNN => [0xff, 0xff]
+            Self::NNN => [0xff, 0xff],
         }
     }
 

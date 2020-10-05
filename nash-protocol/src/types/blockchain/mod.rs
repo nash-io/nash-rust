@@ -8,9 +8,8 @@ pub mod neo;
 
 use crate::errors::{ProtocolError, Result};
 use crate::types::{Asset, Blockchain};
-use std::convert::TryFrom;
 use bigdecimal::{BigDecimal, ToPrimitive};
-
+use std::convert::TryFrom;
 
 /// Convert a bigdecimal `num` to `u64` for serialization in the protocol using the
 /// precision scheme defined by the Nash ME

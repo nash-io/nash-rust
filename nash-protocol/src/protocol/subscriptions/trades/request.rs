@@ -1,7 +1,7 @@
 use crate::graphql;
+use crate::types::Market;
 use graphql::subscribe_trades;
 use graphql_client::GraphQLQuery;
-use crate::types::Market;
 
 #[derive(Clone, Debug)]
 pub struct SubscribeTrades {

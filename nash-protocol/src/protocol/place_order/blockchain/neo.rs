@@ -4,10 +4,10 @@ use crate::types::neo::{Address, PublicKey};
 use crate::types::{Amount, Blockchain, Nonce, Rate};
 use crate::types::{AssetOrCrosschain, Prefix};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_neo_message};
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::curves::secp256_r1::Secp256r1Point;
 use mpc_wallet_lib::curves::traits::ECPoint;
+use mpc_wallet_lib::rust_bigint::traits::Converter;
+use mpc_wallet_lib::rust_bigint::BigInt;
 
 use super::super::super::signer::Signer;
 
@@ -114,8 +114,8 @@ impl FillOrder {
 #[cfg(test)]
 mod tests {
     use super::{FillOrder, PublicKey};
-    use crate::types::{Amount, Nonce, OrderRate, Rate};
     use crate::types::Asset;
+    use crate::types::{Amount, Nonce, OrderRate, Rate};
 
     #[test]
     fn test_sell_market() {
@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn run(){
+    fn run() {
         let bytes = hex::decode("53b7577befb37d4d3b95a02f60f5da8933ab5f04").unwrap();
         let rev_bytes: Vec<u8> = bytes.iter().rev().map(|x| x.clone()).collect();
         println!("{}", hex::encode(&rev_bytes));

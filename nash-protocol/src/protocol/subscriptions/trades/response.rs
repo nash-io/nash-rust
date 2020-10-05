@@ -1,9 +1,9 @@
 use super::super::super::ResponseOrError;
+use super::request::SubscribeTrades;
 use crate::errors::Result;
 use crate::graphql;
-use crate::types::{BuyOrSell, SubscriptionTrade, Market};
+use crate::types::{BuyOrSell, Market, SubscriptionTrade};
 use graphql::subscribe_trades;
-use super::request::SubscribeTrades;
 
 #[derive(Clone, Debug)]
 pub struct TradesResponse {

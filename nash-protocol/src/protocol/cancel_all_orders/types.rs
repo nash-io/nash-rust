@@ -1,5 +1,5 @@
 use super::super::{
-    try_response_from_json, serializable_to_json, NashProtocol, ResponseOrError, State,
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
 };
 use crate::errors::Result;
 use crate::graphql::cancel_all_orders;

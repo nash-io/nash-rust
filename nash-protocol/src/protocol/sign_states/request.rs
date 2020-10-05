@@ -1,12 +1,12 @@
 use super::super::{general_canonical_string, RequestPayloadSignature};
 use super::blockchain::sign_state_data;
 use super::types::{ClientSignedState, SignStatesRequest};
+use crate::errors::{ProtocolError, Result};
 use crate::graphql;
 use crate::graphql::sign_states;
 use crate::types::Blockchain;
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, current_time_as_i64};
 use graphql_client::GraphQLQuery;
-use crate::errors::{Result, ProtocolError};
 
 use super::super::signer::Signer;
 
@@ -20,11 +20,12 @@ impl SignStatesRequest {
         let (signed_orders, signed_states) = match &self.input_states {
             None => (vec![], vec![]),
             Some(states) => {
-
                 let mut signed_orders = Vec::new();
                 for order in &states.recycled_orders {
                     if let false = order.verify() {
-                        return Err(ProtocolError("Recycled order payload failed to verify. Refusing to sign"))
+                        return Err(ProtocolError(
+                            "Recycled order payload failed to verify. Refusing to sign",
+                        ));
                     }
                     let signed = sign_state_data(order.state(), signer)?;
                     signed_orders.push(signed);
@@ -33,7 +34,9 @@ impl SignStatesRequest {
                 let mut signed_states = Vec::new();
                 for state in &states.states {
                     if let false = state.verify() {
-                        return Err(ProtocolError("State balance payload failed to verify. Refusing to sign"))
+                        return Err(ProtocolError(
+                            "State balance payload failed to verify. Refusing to sign",
+                        ));
                     }
                     let signed = sign_state_data(state.state(), signer)?;
                     signed_states.push(signed);
@@ -46,7 +49,9 @@ impl SignStatesRequest {
             payload: sign_states::SignStatesParams {
                 timestamp: current_time_as_i64(),
                 sync_all: Some(true),
-                signed_recycled_orders: Some(signed_orders.iter().map(|x| Some(x.into())).collect()),
+                signed_recycled_orders: Some(
+                    signed_orders.iter().map(|x| Some(x.into())).collect(),
+                ),
                 client_signed_states: Some(signed_states.iter().map(|x| Some(x.into())).collect()),
             },
             signature: RequestPayloadSignature::empty().into(),

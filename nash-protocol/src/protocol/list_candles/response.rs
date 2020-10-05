@@ -3,8 +3,8 @@ use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_candles;
 use crate::types::{Candle, CandleInterval, Market};
 use chrono::{DateTime, Utc};
-use std::str::FromStr;
 use std::convert::TryFrom;
+use std::str::FromStr;
 
 impl TryFrom<list_candles::ResponseData> for ListCandlesResponse {
     type Error = ProtocolError;

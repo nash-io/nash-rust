@@ -90,11 +90,23 @@ impl APIchildkeyCreator {
             None => return Err(()),
         };
         if curve == Curve::Secp256k1 {
-            let random = Zeroizing::<Secp256k1Scalar>::new(Secp256k1Scalar::new_random());
+            let random = match Secp256k1Scalar::new_random() {
+                Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
             // client's secret share is set to the full secret key
-            let secret_key = Zeroizing::<Secp256k1Scalar>::new(ECScalar::from(&self.secret_key));
-            let client_secret_share =
-                Zeroizing::<Secp256k1Scalar>::new(random.invert() * secret_key.deref());
+            let secret_key = match ECScalar::from(&self.secret_key) {
+                Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
+            let rand_inv = match random.invert() {
+                Ok(v) => v,
+                Err(_) => return Err(()),
+            };
+            let client_secret_share = match rand_inv * secret_key.deref() {
+                Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_bigint();
             let public_key =
@@ -109,11 +121,23 @@ impl APIchildkeyCreator {
                 server_secret_share_encrypted,
             })
         } else if curve == Curve::Secp256r1 {
-            let random = Zeroizing::<Secp256r1Scalar>::new(Secp256r1Scalar::new_random());
+            let random = match Secp256r1Scalar::new_random() {
+                Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
             // client's secret share is set to the full secret key
-            let secret_key = Zeroizing::<Secp256r1Scalar>::new(ECScalar::from(&self.secret_key));
-            let client_secret_share =
-                Zeroizing::<Secp256r1Scalar>::new(random.invert() * secret_key.deref());
+            let secret_key = match ECScalar::from(&self.secret_key) {
+                Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
+            let rand_inv = match random.invert() {
+                Ok(v) => v,
+                Err(_) => return Err(()),
+            };
+            let client_secret_share = match rand_inv * secret_key.deref() {
+                Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_bigint();
             let public_key =
@@ -262,23 +286,23 @@ pub fn fill_rpool_secp256r1(
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
-        let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].fe)
-            .to_bigint();
-        RPOOL_SECP256R1
-            .lock()
-            .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
+        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            Ok(r) => RPOOL_SECP256R1
+                        .lock()
+                        .unwrap()
+                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+            Err(_) => None,
+        };
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].fe)
-            .to_bigint();
-        RPOOL_SECP256R1
-            .lock()
-            .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
+        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            Ok(r) => RPOOL_SECP256R1
+                        .lock()
+                        .unwrap()
+                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+            Err(_) => None,
+        };
     });
     for i in &mut own_dh_secrets {
         i.zeroize();
@@ -299,23 +323,23 @@ pub fn fill_rpool_secp256k1(
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
-        let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].fe)
-            .to_bigint();
-        RPOOL_SECP256K1
-            .lock()
-            .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
+        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            Ok(r) => RPOOL_SECP256K1
+                        .lock()
+                        .unwrap()
+                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+            Err(_) => None,
+        };
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        let r = other_dh_publics[i]
-            .scalar_mul(&own_dh_secrets[i].fe)
-            .to_bigint();
-        RPOOL_SECP256K1
-            .lock()
-            .unwrap()
-            .insert(r, (Utc::now(), own_dh_secrets[i].to_bigint()));
+        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            Ok(r) => RPOOL_SECP256K1
+                        .lock()
+                        .unwrap()
+                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+            Err(_) => None,
+        };
     });
     for i in &mut own_dh_secrets {
         i.zeroize();
@@ -529,7 +553,7 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("8ea92bf3aa6f4ec4939b0888cd71dc6dc113f9cafe571c0bb501c8c9004bb47c")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("34bfa8dd79ff0777e32b89f22a19623ff4fe6fe63aaeb3e2d165fc12cbb2471db")
                 .unwrap(),
@@ -574,7 +598,7 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("EAB592977DF1A8E7D77DB58F4DAE73C860920D28B763A0737217D3793563D53E")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2366a21b029c2e4d627ac5f7e94769ed1b28727f2403b54c8deb076661cd685ae")
                 .unwrap(),
@@ -626,7 +650,7 @@ mod tests {
         let sk: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();

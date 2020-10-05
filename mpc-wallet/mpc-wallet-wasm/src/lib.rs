@@ -348,7 +348,12 @@ pub fn sign(secret_key_str: &str, msg_hash_str: &str) -> String {
             return serde_json::to_string(&(false, &"error deserializing secret_key")).unwrap()
         }
     };
-    let secret_key: Secp256k1Scalar = ECScalar::from(&secret_key_int);
+    let secret_key: Secp256k1Scalar = match ECScalar::from(&secret_key_int) {
+        Ok(v) => v,
+        Err(_) => {
+            return serde_json::to_string(&(false, &"invalid secret_key")).unwrap()
+        }
+    };
     let msg_hash = match BigInt::from_hex(&msg_hash_str) {
         Ok(v) => v,
         Err(_) => return serde_json::to_string(&(false, &"error deserializing msg_hash")).unwrap(),

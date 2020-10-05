@@ -45,8 +45,14 @@ pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r
     let mut dh_secrets: Vec<Secp256r1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256r1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = Secp256r1Scalar::new_random();
-        let dh_public = base * &dh_secret;
+        let dh_secret = match Secp256r1Scalar::new_random() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let dh_public = match base * &dh_secret {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -63,8 +69,14 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
     let mut dh_secrets: Vec<Secp256k1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256k1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = Secp256k1Scalar::new_random();
-        let dh_public = base * &dh_secret;
+        let dh_secret = match Secp256k1Scalar::new_random() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let dh_public = match base * &dh_secret {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -92,27 +104,85 @@ pub fn verify(
             Ok(v) => v,
             Err(_) => return false,
         };
-        let s_fe: Secp256k1Scalar = ECScalar::from(&s);
-        let rx_fe: Secp256k1Scalar = ECScalar::from(&r);
+        let s_fe: Secp256k1Scalar = match ECScalar::from(&s) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let rx_fe: Secp256k1Scalar = match ECScalar::from(&r) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
         q = Secp256k1Scalar::q();
-        let s_inv_fe = s_fe.invert();
-        let e_fe: Secp256k1Scalar = ECScalar::from(&msg_hash.mod_floor(&q));
-        let u1 = Secp256k1Point::generator() * &e_fe * &s_inv_fe;
-        let u2 = pk * &rx_fe * &s_inv_fe;
-        u1_plus_u2 = (u1 + u2).x_coor();
+        let s_inv_fe = match s_fe.invert() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let e_fe: Secp256k1Scalar = match ECScalar::from(&msg_hash.mod_floor(&q)) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1_ = match Secp256k1Point::generator() * &e_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1 = match u1_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2_ = match pk * &rx_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2 = match u2_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        u1_plus_u2 = match u1 + u2 {
+            Ok(v) => v.x_coor(),
+            Err(_) => return false,
+        };
     } else if curve == Curve::Secp256r1 {
         let pk = match Secp256r1Point::from_bytes(&pk_vec) {
             Ok(v) => v,
             Err(_) => return false,
         };
-        let s_fe: Secp256r1Scalar = ECScalar::from(&s);
-        let rx_fe: Secp256r1Scalar = ECScalar::from(&r);
+        let s_fe: Secp256r1Scalar = match ECScalar::from(&s) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let rx_fe: Secp256r1Scalar = match ECScalar::from(&r) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
         q = Secp256r1Scalar::q();
-        let s_inv_fe = s_fe.invert();
-        let e_fe: Secp256r1Scalar = ECScalar::from(&msg_hash.mod_floor(&q));
-        let u1 = Secp256r1Point::generator() * &e_fe * &s_inv_fe;
-        let u2 = pk * &rx_fe * &s_inv_fe;
-        u1_plus_u2 = (u1 + u2).x_coor();
+        let s_inv_fe = match s_fe.invert() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let e_fe: Secp256r1Scalar = match ECScalar::from(&msg_hash.mod_floor(&q)) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1_ = match Secp256r1Point::generator() * &e_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1 = match u1_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2_ = match pk * &rx_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2 = match u2_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        u1_plus_u2 = match u1 + u2 {
+            Ok(v) => v.x_coor(),
+            Err(_) => return false,
+        };
     } else {
         return false;
     }
@@ -125,14 +195,26 @@ pub fn verify(
 /// derive public key from secret key, in uncompressed format as expected by ME
 pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, ()> {
     if curve == Curve::Secp256k1 {
-        let secret_key = Zeroizing::<Secp256k1Scalar>::new(ECScalar::from(secret_key_int));
+        let secret_key = match ECScalar::from(secret_key_int) {
+            Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
+            Err(_) => return Err(()),
+        };
         let base: Secp256k1Point = ECPoint::generator();
-        let pk = base * secret_key.deref();
+        let pk = match base * secret_key.deref() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
         Ok("0".to_string()
             + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_str_radix(16))
     } else if curve == Curve::Secp256r1 {
-        let secret_key = Zeroizing::<Secp256r1Scalar>::new(ECScalar::from(secret_key_int));
-        let pk = Secp256r1Point::generator() * secret_key.deref();
+        let secret_key = match ECScalar::from(secret_key_int) {
+            Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
+            Err(_) => return Err(()),
+        };
+        let pk = match Secp256r1Point::generator() * secret_key.deref() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
         let mut b: [u8; 2 * MODBYTES as usize + 1] = [0; 2 * MODBYTES as usize + 1];
         pk.ge.tobytes(&mut b, false);
         let mut s = String::new();
@@ -315,7 +397,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -341,7 +423,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -367,7 +449,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -393,7 +475,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("2b3b5e8491a48ff6e1620732579807916eeb07beb6f9970dc5952bd444404f74")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -440,7 +522,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("1000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -466,7 +548,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -492,7 +574,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -518,7 +600,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -544,7 +626,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("a8b5559fa5b697360dc7633f7782fd9f1ec4ba090dc362fd79ee7e6313d755a4")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -591,7 +673,7 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        ).unwrap();
         let msg_hash =
             BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();

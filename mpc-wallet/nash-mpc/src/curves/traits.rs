@@ -2,15 +2,18 @@
 
 use rust_bigint::BigInt;
 
-pub trait ECScalar<SK> {
-    fn new_random() -> Self;
-    fn from(n: &BigInt) -> Self;
+pub trait ECScalar<SK>
+where
+    Self: Sized,
+{
+    fn new_random() -> Result<Self, ()>;
+    fn from(n: &BigInt) -> Result<Self, ()>;
     fn to_bigint(&self) -> BigInt;
     fn q() -> BigInt;
-    fn add(&self, other: &SK) -> Self;
-    fn mul(&self, other: &SK) -> Self;
-    fn sub(&self, other: &SK) -> Self;
-    fn invert(&self) -> Self;
+    fn add(&self, other: &SK) -> Result<Self, ()>;
+    fn mul(&self, other: &SK) -> Result<Self, ()>;
+    fn sub(&self, other: &SK) -> Result<Self, ()>;
+    fn invert(&self) -> Result<Self, ()>;
     fn to_vec(&self) -> Vec<u8>;
 }
 
@@ -24,10 +27,10 @@ where
     fn to_bigint(&self) -> BigInt;
     fn from_bytes(bytes: &[u8]) -> Result<Self, ()>;
     fn to_vec(&self) -> Vec<u8>;
-    fn scalar_mul(&self, fe: &SK) -> Self;
-    fn add_point(&self, other: &PK) -> Self;
-    fn sub_point(&self, other: &PK) -> Self;
-    fn from_coor(x: &BigInt, y: &BigInt) -> Self;
+    fn scalar_mul(&self, fe: &SK) -> Result<Self, ()>;
+    fn add_point(&self, other: &PK) -> Result<Self, ()>;
+    fn sub_point(&self, other: &PK) -> Result<Self, ()>;
+    fn from_coor(x: &BigInt, y: &BigInt) -> Result<Self, ()>;
     fn to_hex(&self) -> String;
     fn from_hex(s: &str) -> Result<Self, ()>;
 }

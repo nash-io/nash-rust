@@ -45,15 +45,18 @@ pub fn compute_rpool_secp256r1(
     }
     // execute scalar multiplication in parallel
     tmp.par_iter_mut().for_each(|i| {
-        *i = format!(
-            // use strings with leading zeros for ME
-            "{:0>66}",
-            client_dh_publics[i.parse::<usize>().unwrap()]
-                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
-                .to_bigint()
-                .to_hex()
-        )
+        *i = match client_dh_publics[i.parse::<usize>().unwrap()].scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe) {
+            // use string with leading zeros for ME
+            Ok(v) => format!("{:0>66}",v.to_bigint().to_hex()),
+            Err(_) => "".to_string(),
+        };
     });
+    // check if any scalar multiplication failed during parallel execution
+    for item in tmp.iter().take(server_dh_secrets.len()) {        
+        if item.is_empty() {
+            return Err(());
+        }
+    }
     for i in 0..server_dh_secrets.len() {
         rpool_new.insert(tmp[i].clone(), server_dh_secrets[i].clone());
     }
@@ -75,18 +78,20 @@ pub fn compute_rpool_secp256k1(
     }
     // execute scalar multiplication in parallel
     tmp.par_iter_mut().for_each(|i| {
-        *i = format!(
-            // use strings with leading zeros for ME
-            "{:0>66}",
-            client_dh_publics[i.parse::<usize>().unwrap()]
-                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
-                .to_bigint()
-                .to_hex()
-        )
+        *i = match client_dh_publics[i.parse::<usize>().unwrap()].scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe) {
+            // use string with leading zeros for ME
+            Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
+            Err(_) => "".to_string(),
+        };
     });
+    // check if any scalar multiplication failed during parallel execution
+    for item in tmp.iter().take(server_dh_secrets.len()) {        
+        if item.is_empty() {
+            return Err(());
+        }
+    }
     for i in 0..server_dh_secrets.len() {
-        let to_insert = server_dh_secrets[i].clone();
-        rpool_new.insert(tmp[i].clone(), to_insert);
+        rpool_new.insert(tmp[i].clone(), server_dh_secrets[i].clone());
     }
     Ok(rpool_new)
 }
@@ -224,7 +229,7 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("ffa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -246,7 +251,7 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("efa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -268,7 +273,7 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("ffa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("3ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -290,7 +295,7 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("953fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("2dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -312,7 +317,7 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("a53fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("2dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -334,7 +339,7 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("953fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        );
+        ).unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("3dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),

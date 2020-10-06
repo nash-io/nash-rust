@@ -5,7 +5,8 @@
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use amcl::nist256::big::MODBYTES;
+use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use p256::{AffinePoint, EncodedPoint};
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
@@ -215,14 +216,15 @@ pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        let mut b: [u8; 2 * MODBYTES as usize + 1] = [0; 2 * MODBYTES as usize + 1];
-        pk.ge.tobytes(&mut b, false);
-        let mut s = String::new();
-        for byte in b.iter() {
-            s += &format!("{:02x}", byte);
+        let tmp = AffinePoint::from_encoded_point(&EncodedPoint::from(&pk.ge));
+        if bool::from(tmp.is_none()) {
+            return Err(())
         }
         // add leading zeros if necessary
-        Ok(format!("{:0>66}", s))
+        Ok(format!(
+            "{:0>130}",
+            BigInt::from_bytes(&tmp.unwrap().to_encoded_point(false).as_bytes()).to_hex()
+        ))
     } else {
         Err(())
     }

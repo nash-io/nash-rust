@@ -1,15 +1,16 @@
 // NIST P-256/secp256r1 elliptic curve utility functions.
 
 use super::traits::{ECPoint, ECScalar};
-use amcl::nist256::big::{BIG, MODBYTES};
-use amcl::nist256::ecp::ECP;
-use amcl::nist256::fp::FP;
-use amcl::nist256::rom::CURVE_ORDER;
-use rust_bigint::traits::Converter;
-use rust_bigint::BigInt;
+use generic_array::typenum::U32;
+use generic_array::GenericArray;
 use getrandom::getrandom;
 #[cfg(feature = "num_bigint")]
-use num_traits::Num;
+use num_traits::identities::Zero;
+use p256::ecdsa::VerifyKey;
+use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use p256::{AffinePoint, EncodedPoint, ProjectivePoint, Scalar};
+use rust_bigint::traits::Converter;
+use rust_bigint::BigInt;
 use serde::de;
 use serde::de::Visitor;
 use serde::ser::{Serialize, Serializer};
@@ -22,104 +23,118 @@ use zeroize::Zeroize;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Secp256r1Scalar {
     purpose: &'static str,
-    pub(crate) fe: FP,
+    pub(crate) fe: Scalar,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Secp256r1Point {
     purpose: &'static str,
-    pub(crate) ge: ECP,
+    pub(crate) ge: VerifyKey,
 }
 
 impl Zeroize for Secp256r1Scalar {
     fn zeroize(&mut self) {
-        let zero = Secp256r1Scalar {
+        let zero_arr = [0u8; 32];
+        let zero = unsafe { std::mem::transmute::<[u8; 32], Scalar>(zero_arr) };
+        let zero_scalar = Secp256r1Scalar {
             purpose: "zero",
-            fe: FP::new(),
+            fe: zero,
         };
-        unsafe { ptr::write_volatile(self, zero) };
+        unsafe { ptr::write_volatile(self, zero_scalar) };
         atomic::fence(atomic::Ordering::SeqCst);
         atomic::compiler_fence(atomic::Ordering::SeqCst);
     }
 }
 
-impl ECScalar<FP> for Secp256r1Scalar {
+impl ECScalar<Scalar> for Secp256r1Scalar {
     fn new_random() -> Result<Secp256r1Scalar, ()> {
-        let mut rand_arr = [0u8; 32];
-        match getrandom(&mut rand_arr) {
+        let mut rand_arr_tmp = [0u8; 32];
+        match getrandom(&mut rand_arr_tmp) {
             Ok(_) => (),
             Err(_) => return Err(()),
         };
-        let mut fp = FP::new();
-        fp.x = BIG::frombytes(&rand_arr);
+        let rand_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&rand_arr_tmp);
         Ok(Secp256r1Scalar {
             purpose: "random",
-            fe: fp,
+            fe: Scalar::from_bytes_reduced(&rand_arr),
         })
     }
 
     fn from(n: &BigInt) -> Result<Secp256r1Scalar, ()> {
+        if n >= &Secp256r1Scalar::q() || n < &BigInt::zero() {
+            return Err(());
+        }
+        let tmp = BigInt::to_vec(n);
+        let mut vec = vec!(0; 32 - tmp.len());
+        vec.extend(&tmp);
+        let arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec);
         Ok(Secp256r1Scalar {
             purpose: "from_big_int",
-            fe: FP::from_hex(format!("1 {}", n.to_hex())),
+            fe: Scalar::from_bytes_reduced(&arr),
         })
     }
 
     fn to_bigint(&self) -> BigInt {
-        BigInt::from_hex(&self.fe.clone().x.tostring()).unwrap()
+        BigInt::from_bytes(&self.fe.to_bytes())
     }
 
     fn q() -> BigInt {
-        let q = BIG::new_ints(&CURVE_ORDER).to_hex();
-        BigInt::from_hex(&q).unwrap()
+        const CURVE_ORDER: [u8; 32] = [
+            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2,
+            0xfc, 0x63, 0x25, 0x51,
+        ];
+        BigInt::from_bytes(&CURVE_ORDER.as_ref())
     }
 
-    fn add(&self, other: &FP) -> Result<Secp256r1Scalar, ()> {
-        let mut scalar = self.fe.clone();
-        scalar.add(&other);
+    fn add(&self, other: &Scalar) -> Result<Secp256r1Scalar, ()> {
+        let res = self.fe + other;
+        if bool::from(res.is_zero()) {
+            return Err(());
+        }
         Ok(Secp256r1Scalar {
             purpose: "add",
-            fe: scalar,
+            fe: res,
         })
     }
 
-    fn mul(&self, other: &FP) -> Result<Secp256r1Scalar, ()> {
-        let mut scalar = FP::new();
-        scalar.x = BIG::modmul(
-            &self.fe.x,
-            &other.x,
-            &BIG::new_ints(&CURVE_ORDER),
-        );
+    fn mul(&self, other: &Scalar) -> Result<Secp256r1Scalar, ()> {
+        let res = self.fe * other;
+        if bool::from(res.is_zero()) {
+            return Err(());
+        }
         Ok(Secp256r1Scalar {
             purpose: "mul",
-            fe: scalar,
+            fe: res,
         })
     }
 
-    fn sub(&self, other: &FP) -> Result<Secp256r1Scalar, ()> {
-        let mut scalar = self.fe.clone();
-        scalar.sub(&other);
+    fn sub(&self, other: &Scalar) -> Result<Secp256r1Scalar, ()> {
+        let res = self.fe - other;
+        if bool::from(res.is_zero()) {
+            return Err(());
+        }
         Ok(Secp256r1Scalar {
             purpose: "sub",
-            fe: scalar,
+            fe: res,
         })
     }
 
     fn invert(&self) -> Result<Secp256r1Scalar, ()> {
-        let mut big = self.fe.clone().x;
-        big.invmodp(&BIG::new_ints(&CURVE_ORDER));
-        let mut fp = FP::new();
-        fp.x = big;
+        let res = self.fe.invert();
+        if bool::from(res.is_none()) {
+            return Err(());
+        }
         Ok(Secp256r1Scalar {
             purpose: "invert",
-            fe: fp,
+            fe: res.unwrap(),
         })
     }
 
     /// convert to vector and pad with zeros if necessary
     fn to_vec(&self) -> Vec<u8> {
         let vec = BigInt::to_vec(&self.to_bigint());
-        let mut v = vec![0; MODBYTES - vec.len()];
+        let mut v = vec![0; 32 - vec.len()];
         v.extend(&vec);
         v
     }
@@ -201,86 +216,122 @@ impl<'de> Visitor<'de> for Secp256r1ScalarVisitor {
         };
         match ECScalar::from(&v) {
             Ok(v) => Ok(v),
-            Err(_) => return Err(de::Error::custom(format!("Invalid Secp256r1Scalar: {}", s))),
+            Err(_) => Err(de::Error::custom(format!("Invalid Secp256r1Scalar: {}", s))),
         }
     }
 }
 
-impl ECPoint<ECP, FP> for Secp256r1Point {
+impl Zeroize for Secp256r1Point {
+    fn zeroize(&mut self) {
+        unsafe { ptr::write_volatile(self, Secp256r1Point::generator()) };
+        atomic::fence(atomic::Ordering::SeqCst);
+        atomic::compiler_fence(atomic::Ordering::SeqCst);
+    }
+}
+
+impl ECPoint<VerifyKey, Scalar> for Secp256r1Point {
     fn generator() -> Secp256r1Point {
         Secp256r1Point {
             purpose: "base_fe",
-            ge: ECP::generator(),
+            ge: VerifyKey::from_encoded_point(&AffinePoint::generator().to_encoded_point(false)).unwrap(),
         }
     }
 
     fn to_bigint(&self) -> BigInt {
-        let mut b: [u8; MODBYTES as usize + 1] = [0; MODBYTES as usize + 1];
-        self.ge.tobytes(&mut b, true);
-        BigInt::from_bytes(&b)
+        BigInt::from_bytes(&self.ge.to_encoded_point(true).as_bytes())
     }
 
     fn x_coor(&self) -> BigInt {
-        BigInt::from_hex(&self.ge.getx().tostring()).unwrap()
+        BigInt::from_bytes(&EncodedPoint::from(&self.ge).x())
     }
 
     fn y_coor(&self) -> BigInt {
-        BigInt::from_hex(&self.ge.gety().tostring()).unwrap()
+        // unwrap() is safe because self has been validated on creation
+        let tmp = AffinePoint::from_encoded_point(&self.ge.to_encoded_point(false)).unwrap();
+        // unwrap() is safe because EncodedPoint is uncompressed (see previous line)
+        BigInt::from_bytes(&tmp.to_encoded_point(false).y().unwrap())
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Secp256r1Point, ()> {
-        if bytes.len() != MODBYTES as usize + 1 && bytes.len() != 2 * MODBYTES as usize + 1 {
-            return Err(());
+        match VerifyKey::new(&bytes) {
+            Ok(v) => Ok(Secp256r1Point {
+                purpose: "random",
+                ge: v,
+            }),
+            Err(_) => Err(()),
         }
-        let point = Secp256r1Point {
-            purpose: "random",
-            ge: ECP::frombytes(&bytes),
-        };
-        // verify that public key is valid
-        if point.ge == ECP::new() {
-            return Err(());
-        }
-        Ok(point)
     }
 
     fn to_vec(&self) -> Vec<u8> {
-        let mut b: [u8; 2 * MODBYTES as usize + 1] = [0; 2 * MODBYTES as usize + 1];
-        self.ge.tobytes(&mut b, false);
-        b.to_vec()
+        // unwrap() is safe because self has been validated on creation
+        let tmp = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge)).unwrap();
+        tmp.to_encoded_point(false).as_ref().to_vec()
     }
 
-    fn scalar_mul(&self, fe: &FP) -> Result<Secp256r1Point, ()> {
-        Ok(Secp256r1Point {
-            purpose: "mul",
-            ge: self.ge.mul(&fe.x),
-        })
+    fn scalar_mul(&self, fe: &Scalar) -> Result<Secp256r1Point, ()> {
+        let point = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
+        if bool::from(point.is_none()) {
+            return Err(());
+        }
+        match VerifyKey::from_encoded_point(&(ProjectivePoint::from(point.unwrap()) * fe).to_affine().to_encoded_point(true)) {
+            Ok(v) => Ok(Secp256r1Point {
+                purpose: "mul",
+                ge: v,
+            }),
+            Err(_) => Err(()),
+        }
     }
 
-    fn add_point(&self, other: &ECP) -> Result<Secp256r1Point, ()> {
-        let mut point = self.ge.clone();
-        point.add(other);
-        Ok(Secp256r1Point {
-            purpose: "combine",
-            ge: point,
-        })
+    fn add_point(&self, other: &VerifyKey) -> Result<Secp256r1Point, ()> {
+        let point1 = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
+        let point2 = AffinePoint::from_encoded_point(&EncodedPoint::from(other));
+        if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
+            return Err(());
+        }
+        match VerifyKey::from_encoded_point(&(ProjectivePoint::from(point1.unwrap()) + ProjectivePoint::from(point2.unwrap())).to_affine().to_encoded_point(true)) {
+            Ok(v) => Ok(Secp256r1Point {
+                purpose: "combine",
+                ge: v,
+            }),
+            Err(_) => Err(()),
+        }
     }
 
-    fn sub_point(&self, other: &ECP) -> Result<Secp256r1Point, ()> {
-        let mut point = self.ge.clone();
-        point.sub(other);
-        Ok(Secp256r1Point {
-            purpose: "sub",
-            ge: point,
-        })
+    fn sub_point(&self, other: &VerifyKey) -> Result<Secp256r1Point, ()> {
+        let point1 = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
+        let point2 = AffinePoint::from_encoded_point(&EncodedPoint::from(other));
+        if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
+            return Err(());
+        }
+        match VerifyKey::from_encoded_point(&(ProjectivePoint::from(point1.unwrap()) - ProjectivePoint::from(point2.unwrap())).to_affine().to_encoded_point(true)) {
+            Ok(v) => Ok(Secp256r1Point {
+                purpose: "sub",
+                ge: v,
+            }),
+            Err(_) => Err(()),
+        }
     }
 
     fn from_coor(x: &BigInt, y: &BigInt) -> Result<Secp256r1Point, ()> {
-        let ix = BIG::from_hex(x.to_hex());
-        let iy = BIG::from_hex(y.to_hex());
-        Ok(Secp256r1Point {
-            purpose: "base_fe",
-            ge: ECP::new_bigs(&ix, &iy),
-        })
+        const COOR_SIZE: usize = 32;
+        let vec_x_tmp = BigInt::to_vec(x);
+        // pad with zeros if necessary
+        let mut vec_x = vec![0; COOR_SIZE - vec_x_tmp.len()];
+        vec_x.extend(vec_x_tmp);
+        let vec_y_tmp = BigInt::to_vec(y);
+        // pad with zeros if necessary
+        let mut vec_y = vec![0; COOR_SIZE - vec_y_tmp.len()];
+        vec_y.extend(vec_y_tmp);
+
+        let x_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec_x);
+        let y_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec_y);
+        match VerifyKey::from_encoded_point(&EncodedPoint::from_affine_coordinates(&x_arr, &y_arr, false)) {
+            Ok(v) => Ok(Secp256r1Point {
+                purpose: "base_fe",
+                ge: v,
+            }),
+            Err(_) => Err(()),
+        }
     }
 
     fn to_hex(&self) -> String {
@@ -303,16 +354,10 @@ impl ECPoint<ECP, FP> for Secp256r1Point {
 impl Secp256r1Point {
     // derive point from BigInt
     pub fn from_bigint(i: &BigInt) -> Result<Secp256r1Point, ()> {
-        let vec = BigInt::to_vec(i);
-        let point = ECP::frombytes(&vec);
-        // check if point is valid
-        if point == ECP::new() {
-            return Err(());
+        match Secp256r1Point::from_bytes(&BigInt::to_vec(i)) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(()),
         }
-        Ok(Secp256r1Point {
-            purpose: "from_bigint",
-            ge: point,
-        })
     }
 }
 
@@ -458,24 +503,24 @@ mod tests {
     #[test]
     fn serialize_rand_pk_verify_pad() {
         let vx = BigInt::from_hex(
-            &"ccaf75ab7960a01eb421c0e2705f6e84585bd0a094eb6af928c892a4a2912508".to_string(),
+            &"9e6b4c9775d5af0aff94a55035a2b039f7cfc19b9e67004f190ddfaada82b405".to_string(),
         )
         .unwrap();
 
         let vy = BigInt::from_hex(
-            &"e788e294bd64eee6a73d2fc966897a31eb370b7e8e9393b0d8f4f820b48048df".to_string(),
+            &"d3fa4d180ea04d8da373bb61782bc6b509f7b6e374d6a47b253e4853ad1cd5fc".to_string(),
         )
         .unwrap();
 
         Secp256r1Point::from_coor(&vx, &vy).unwrap(); // x and y of size 32
 
         let x = BigInt::from_hex(
-            &"5f6853305467a385b56a5d87f382abb52d10835a365ec265ce510e04b3c3366f".to_string(),
+            &"2d054d254d1d112b1e7a134780ae7975a2a57b35089b2afa45dc42ed9afe1b".to_string(),
         )
         .unwrap();
 
         let y = BigInt::from_hex(
-            &"b868891567ca1ee8c44706c0dc190dd7779fe6f9b92ced909ad870800451e3".to_string(),
+            &"16f436c897a9733a4d83eed96147b273348c98fb680d7361d915ec6b5ce761ca".to_string(),
         )
         .unwrap();
 
@@ -656,12 +701,12 @@ mod tests {
         let int: Secp256r1Scalar = ECScalar::from(&BigInt::from(1)).unwrap();
         let test = (base_point * int).unwrap();
         assert_eq!(
-            test.ge.getx().to_hex(),
-            "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296"
+            test.x_coor().to_hex(),
+            "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296".to_lowercase()
         );
         assert_eq!(
-            test.ge.gety().to_hex(),
-            "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"
+            test.y_coor().to_hex(),
+            "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5".to_lowercase()
         );
     }
 
@@ -671,12 +716,12 @@ mod tests {
         let int: Secp256r1Scalar = ECScalar::from(&BigInt::from(2)).unwrap();
         let test = (base_point * int).unwrap();
         assert_eq!(
-            test.ge.getx().to_hex(),
-            "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978"
+            test.x_coor().to_hex(),
+            "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978".to_lowercase()
         );
         assert_eq!(
-            test.ge.gety().to_hex(),
-            "07775510DB8ED040293D9AC69F7430DBBA7DADE63CE982299E04B79D227873D1"
+            format!("{:0>64}", test.y_coor().to_hex()),
+            "07775510DB8ED040293D9AC69F7430DBBA7DADE63CE982299E04B79D227873D1".to_lowercase()
         );
     }
 
@@ -689,12 +734,12 @@ mod tests {
         ).unwrap();
         let test = (base_point * int).unwrap();
         assert_eq!(
-            test.ge.getx().to_hex(),
-            "4F6DD42033C0666A04DFC107F4CB4D5D22E33AE178006803D967CB25D95B7DB4"
+            test.x_coor().to_hex(),
+            "4F6DD42033C0666A04DFC107F4CB4D5D22E33AE178006803D967CB25D95B7DB4".to_lowercase()
         );
         assert_eq!(
-            test.ge.gety().to_hex(),
-            "085DB1B0952D8E081A3E13398A89911A038AAB054AE3E26718A5E582ED9FDD38"
+            format!("{:0>64}", test.y_coor().to_hex()),
+            "085DB1B0952D8E081A3E13398A89911A038AAB054AE3E26718A5E582ED9FDD38".to_lowercase()
         );
     }
 

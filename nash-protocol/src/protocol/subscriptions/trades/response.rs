@@ -5,6 +5,7 @@ use crate::graphql;
 use crate::types::{BuyOrSell, Market, SubscriptionTrade};
 use graphql::subscribe_trades;
 
+/// List of new incoming trades for a market via subscription.
 #[derive(Clone, Debug)]
 pub struct TradesResponse {
     pub market: Market,

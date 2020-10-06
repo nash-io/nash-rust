@@ -9,11 +9,13 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+/// Lookup order information via id
 #[derive(Clone, Debug)]
 pub struct GetAccountOrderRequest {
     pub order_id: String,
 }
 
+/// Response contains an `Order` with associated information
 #[derive(Clone, Debug)]
 pub struct GetAccountOrderResponse {
     pub order: Order,

@@ -16,6 +16,7 @@ pub struct CancelAllOrders {
     pub market: Market,
 }
 
+/// Response indicates whether the ME accepted the request to cancel all orders
 #[derive(Clone, Copy, Debug)]
 pub struct CancelAllOrdersResponse {
     pub accepted: bool,

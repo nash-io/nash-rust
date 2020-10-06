@@ -1,4 +1,9 @@
-pub mod blockchain;
-pub mod request;
-pub mod response;
-pub mod types;
+//! Place limit orders
+
+// TODO: is a sign that things need some restructuring
+pub(crate) mod blockchain;
+mod request;
+mod response;
+mod types;
+
+pub use types::{LimitOrderRequest, LimitOrderResponse};

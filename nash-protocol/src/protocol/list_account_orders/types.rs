@@ -9,6 +9,24 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+/// List orders associated with current account session filtered by several optional fields.
+/// ```
+/// use nash_protocol::protocol::list_account_orders::ListAccountOrdersRequest;
+/// use nash_protocol::types::{Market, BuyOrSell, OrderStatus, OrderType, DateTimeRange};
+/// use chrono::{DateTime, Utc, TimeZone};
+/// let request = ListAccountOrdersRequest {
+///   market: Market::eth_usdc(), // require for now, this needs to be fixed on backend
+///   before: None, // used for paging
+///   buy_or_sell: Some(BuyOrSell::Buy), // just buy orders
+///   limit: Some(10), // just return 10 orders
+///   status: Some(vec![OrderStatus::Filled]), // only filled orders
+///   order_type: Some(vec![OrderType::Limit]), // only limit orders
+///   range: Some(DateTimeRange {
+///     start: Utc.ymd(2020, 9, 12).and_hms(0, 0, 0), // after 9/12/2020
+///     stop: Utc.ymd(2020, 9, 16).and_hms(0, 10, 0), // before 9/16/2020
+///   }) 
+/// };
+/// ```
 #[derive(Clone, Debug)]
 pub struct ListAccountOrdersRequest {
     /// FIXME: this is a required field because of a backend bug, it should be optional
@@ -23,6 +41,8 @@ pub struct ListAccountOrdersRequest {
     pub range: Option<DateTimeRange>,
 }
 
+/// List of orders that meet critera of the request. Includes an optional paging field
+/// if more orders exist.
 #[derive(Debug)]
 pub struct ListAccountOrdersResponse {
     pub orders: Vec<Order>,

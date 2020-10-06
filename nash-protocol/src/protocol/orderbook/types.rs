@@ -9,11 +9,13 @@ use super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocol, ResponseOrError, State,
 };
 
+/// Get order book data for the provided market
 #[derive(Clone, Debug)]
 pub struct OrderbookRequest {
     pub market: Market,
 }
 
+/// An order book is a list of bid and ask orders
 #[derive(Debug)]
 pub struct OrderbookResponse {
     pub asks: Vec<OrderbookOrder>,

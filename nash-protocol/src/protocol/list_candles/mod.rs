@@ -1,3 +1,7 @@
-pub mod request;
-pub mod response;
-pub mod types;
+//! Get exchange candle data
+
+mod request;
+mod response;
+mod types;
+
+pub use types::{ListCandlesRequest, ListCandlesResponse};

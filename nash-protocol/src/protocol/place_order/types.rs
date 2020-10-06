@@ -1,7 +1,7 @@
-use super::super::asset_nonces::types::AssetNoncesRequest;
-use super::super::dh_fill_pool::types::DhFillPoolRequest;
-use super::super::list_markets::types::ListMarketsRequest;
-use super::super::sign_all_states::types::SignAllStates;
+use super::super::asset_nonces::AssetNoncesRequest;
+use super::super::dh_fill_pool::DhFillPoolRequest;
+use super::super::list_markets::ListMarketsRequest;
+use super::super::sign_all_states::SignAllStates;
 use super::super::{
     serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
 };

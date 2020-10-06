@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+/// List trades associated with current account session filtered by several optional fields.
 #[derive(Clone, Debug)]
 pub struct ListAccountTradesRequest {
     /// FIXME: this is a required field because of a backend bug, it should be optional
@@ -20,6 +21,7 @@ pub struct ListAccountTradesRequest {
     pub range: Option<DateTimeRange>,
 }
 
+/// List of trades and optional link to the next page of data
 #[derive(Debug)]
 pub struct ListAccountTradesResponse {
     pub trades: Vec<Trade>,

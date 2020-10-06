@@ -573,8 +573,8 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{Client, Environment};
-    use nash_protocol::protocol::asset_nonces::types::AssetNoncesRequest;
-    use nash_protocol::protocol::cancel_all_orders::types::CancelAllOrders;
+    use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
+    use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::types::CancelOrderRequest;
     use nash_protocol::protocol::dh_fill_pool::types::DhFillPoolRequest;
     use nash_protocol::protocol::get_account_order::types::GetAccountOrderRequest;

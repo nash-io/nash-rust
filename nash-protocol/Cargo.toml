@@ -6,6 +6,7 @@ edition = "2018"
 license = "MIT"
 repository = "https://github.com/nash-io/nash-rust/nash-protocol"
 keywords = ["nash", "cryptography", "protocol", "graphql", "api"]
+description = "state management and cryptography for interacting with nash exchange protocol"
 
 [features]
 default = ["rust_gmp"]

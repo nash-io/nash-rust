@@ -3,6 +3,7 @@ use crate::types::Market;
 use graphql::subscribe_trades;
 use graphql_client::GraphQLQuery;
 
+/// Initiate subscription to get new trades
 #[derive(Clone, Debug)]
 pub struct SubscribeTrades {
     pub market: Market,

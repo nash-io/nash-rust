@@ -575,19 +575,19 @@ mod tests {
     use super::{Client, Environment};
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
-    use nash_protocol::protocol::cancel_order::types::CancelOrderRequest;
-    use nash_protocol::protocol::dh_fill_pool::types::DhFillPoolRequest;
-    use nash_protocol::protocol::get_account_order::types::GetAccountOrderRequest;
-    use nash_protocol::protocol::get_ticker::types::TickerRequest;
-    use nash_protocol::protocol::list_account_balances::types::ListAccountBalancesRequest;
-    use nash_protocol::protocol::list_account_orders::types::ListAccountOrdersRequest;
-    use nash_protocol::protocol::list_account_trades::types::ListAccountTradesRequest;
-    use nash_protocol::protocol::list_candles::types::ListCandlesRequest;
-    use nash_protocol::protocol::list_markets::types::ListMarketsRequest;
-    use nash_protocol::protocol::orderbook::types::OrderbookRequest;
-    use nash_protocol::protocol::place_order::types::LimitOrderRequest;
+    use nash_protocol::protocol::cancel_order::CancelOrderRequest;
+    use nash_protocol::protocol::dh_fill_pool::DhFillPoolRequest;
+    use nash_protocol::protocol::get_account_order::GetAccountOrderRequest;
+    use nash_protocol::protocol::get_ticker::TickerRequest;
+    use nash_protocol::protocol::list_account_balances::ListAccountBalancesRequest;
+    use nash_protocol::protocol::list_account_orders::ListAccountOrdersRequest;
+    use nash_protocol::protocol::list_account_trades::ListAccountTradesRequest;
+    use nash_protocol::protocol::list_candles::ListCandlesRequest;
+    use nash_protocol::protocol::list_markets::ListMarketsRequest;
+    use nash_protocol::protocol::orderbook::OrderbookRequest;
+    use nash_protocol::protocol::place_order::LimitOrderRequest;
     use nash_protocol::protocol::sign_all_states::SignAllStates;
-    use nash_protocol::protocol::subscriptions::updated_orderbook::request::SubscribeOrderbook;
+    use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, Market, OrderCancellationPolicy, OrderStatus,
         OrderType,

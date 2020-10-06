@@ -17,7 +17,7 @@ use std::sync::Arc;
 /// client to sign until no unsigned states remain.
 #[derive(Clone, Debug)]
 pub struct SignStatesRequest {
-    pub input_states: Option<SignStatesResponseData>,
+    pub input_states: Option<SignStatesResponse>,
 }
 
 impl SignStatesRequest {
@@ -26,7 +26,7 @@ impl SignStatesRequest {
         Self { input_states: None }
     }
     /// Create new SignStates request using response from a prior request
-    pub fn from_response(sign_states: SignStatesResponseData) -> Self {
+    pub fn from_response(sign_states: SignStatesResponse) -> Self {
         Self {
             input_states: Some(sign_states),
         }
@@ -40,13 +40,13 @@ impl SignStatesRequest {
 /// argument when creating a `SignStatesRequest`, as the function is used both to get
 /// a list of states to sign as well as to submit client signed states.
 #[derive(Clone, Debug)]
-pub struct SignStatesResponseData {
+pub struct SignStatesResponse {
     pub recycled_orders: Vec<RecycledOrder>,
     pub server_signed_states: Vec<ServerSignedData>,
     pub states: Vec<ContractBalanceState>,
 }
 
-impl SignStatesResponseData {
+impl SignStatesResponse {
     /// Return true if response data has states for the client to sign
     pub fn has_states_to_sign(&self) -> bool {
         self.recycled_orders.len() > 0 || self.states.len() > 0
@@ -109,7 +109,7 @@ impl ClientSignedState {
 /// Implement protocol bindings for SignStatesRequest
 #[async_trait]
 impl NashProtocol for SignStatesRequest {
-    type Response = SignStatesResponseData;
+    type Response = SignStatesResponse;
     /// Serialize a SignStates protocol request to a GraphQL string
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
         let mut state = state.lock().await;
@@ -122,6 +122,6 @@ impl NashProtocol for SignStatesRequest {
         &self,
         response: serde_json::Value,
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<SignStatesResponseData, sign_states::ResponseData>(response)
+        try_response_from_json::<SignStatesResponse, sign_states::ResponseData>(response)
     }
 }

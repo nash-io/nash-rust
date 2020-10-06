@@ -2,6 +2,8 @@ use crate::graphql;
 use crate::types::Market;
 use graphql::updated_orderbook;
 use graphql_client::GraphQLQuery;
+
+// Subscribe to order book updates on `Market`.
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbook {
     pub market: Market,

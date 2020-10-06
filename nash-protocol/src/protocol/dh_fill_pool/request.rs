@@ -3,7 +3,7 @@ use graphql::dh_fill_pool;
 use graphql_client::GraphQLQuery;
 use nash_mpc::curves::traits::ECPoint;
 
-use super::types::{DhFillPoolRequest, K1FillPool, R1FillPool};
+use super::{DhFillPoolRequest, K1FillPool, R1FillPool};
 use crate::types::Blockchain;
 
 impl DhFillPoolRequest {

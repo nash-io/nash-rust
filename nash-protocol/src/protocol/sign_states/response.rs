@@ -1,14 +1,14 @@
 //! Response processing for state signing
 
 use super::types::{
-    ContractBalanceState, RecycledOrder, ServerSignedData, SignStatesResponseData, StateData,
+    ContractBalanceState, RecycledOrder, ServerSignedData, SignStatesResponse, StateData,
 };
 use crate::graphql::sign_states;
 use crate::types::Blockchain;
 
 /// Convert from the ugly auto-generated GraphQL type into a more ergonomic
 /// response that we can manipulate
-impl From<sign_states::ResponseData> for SignStatesResponseData {
+impl From<sign_states::ResponseData> for SignStatesResponse {
     fn from(res: sign_states::ResponseData) -> Self {
         let mut recycled_orders = Vec::new();
         let mut server_signed_states = Vec::new();

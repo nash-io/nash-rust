@@ -28,7 +28,7 @@ impl CancelOrderRequest {
     }
 }
 
-pub fn cancel_all_canonical_string(variables: &cancel_order::Variables) -> String {
+fn cancel_all_canonical_string(variables: &cancel_order::Variables) -> String {
     let serialized_all = serde_json::to_string(variables).unwrap();
     general_canonical_string(
         "cancel_order".to_string(),

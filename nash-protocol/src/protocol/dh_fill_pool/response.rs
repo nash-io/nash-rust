@@ -1,5 +1,5 @@
 use super::super::State;
-use super::types::{DhFillPoolRequest, DhFillPoolResponse, ServerPublics};
+use super::{DhFillPoolRequest, DhFillPoolResponse, ServerPublics};
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::dh_fill_pool;
 use crate::types::Blockchain;

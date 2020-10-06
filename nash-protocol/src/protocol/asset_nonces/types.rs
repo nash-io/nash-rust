@@ -1,4 +1,4 @@
-use super::super::list_markets::types::ListMarketsRequest;
+use super::super::list_markets::ListMarketsRequest;
 use super::super::{
     serializable_to_json, try_response_from_json, NashProtocol, NashProtocolRequest, ProtocolHook,
     ResponseOrError, State,
@@ -11,6 +11,9 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+/// Retrieve asset nonces from Nash server. Asset nonces increment over time with
+/// the property that orders and state signed with older nonces is considered
+/// invalid by smart contracts on Ethereum and NEO.
 #[derive(Clone, Debug)]
 pub struct AssetNoncesRequest;
 
@@ -20,6 +23,8 @@ impl AssetNoncesRequest {
     }
 }
 
+/// Response contains a `HashMap` which connects the symbol of an asset with its
+/// associate nonce.
 #[derive(Clone, Debug)]
 pub struct AssetNoncesResponse {
     pub nonces: HashMap<String, Vec<u32>>,

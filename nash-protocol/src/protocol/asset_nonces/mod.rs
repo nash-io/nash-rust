@@ -4,6 +4,9 @@
 //! previous activity. Generally, only payloads with a higher nonce
 //! than the last seen nonce for an asset are considered valid. For
 //! fill order payloads, the nonce must equal the current nonce.
-pub mod request;
-pub mod response;
-pub mod types;
+mod request;
+mod response;
+mod types;
+
+pub use request::asset_nonces_canonical_string;
+pub use types::{AssetNoncesRequest, AssetNoncesResponse};

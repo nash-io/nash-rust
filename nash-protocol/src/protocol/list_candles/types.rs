@@ -8,20 +8,22 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+/// Get candles associated with market, filtering on several optional fields.
 #[derive(Clone, Debug)]
 pub struct ListCandlesRequest {
     pub market: Market,
     /// page before if using pagination
     pub before: Option<String>,
     pub chronological: Option<bool>,
+    /// what kind of candle interval do we want?
     pub interval: Option<CandleInterval>,
     /// max trades to return
     pub limit: Option<i64>,
-    /// the graphql schema does not specify this, but if using `rangeStart` or `rangeEnd`
-    /// *both* must be provided, so one struct for that here
+    /// range of time to get candles
     pub range: Option<DateTimeRange>,
 }
 
+/// List of candles as well as an optional link to the next page of data.
 #[derive(Debug)]
 pub struct ListCandlesResponse {
     pub candles: Vec<Candle>,

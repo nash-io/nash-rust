@@ -1,3 +1,5 @@
+//! Error types defined for nash_protocol
+
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, ProtocolError>;

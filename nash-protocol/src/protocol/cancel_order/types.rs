@@ -9,14 +9,15 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
-/// Request to cancel all orders in a given market. To prove orders have been canceled,
+/// Request to cancel a single order in a given market. Note: to prove orders have been canceled,
 /// the client must sign and sync nonces on the assets in question.
 #[derive(Clone, Debug)]
 pub struct CancelOrderRequest {
-    pub order_id: String,
+    pub order_id: String, // TODO: ME bug, this should not be required field
     pub market: Market,
 }
 
+/// Response contains the order id of the canceled order if successful
 #[derive(Clone, Debug)]
 pub struct CancelOrderResponse {
     pub order_id: String,

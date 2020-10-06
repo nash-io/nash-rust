@@ -5,8 +5,8 @@ use super::response;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::dh_fill_pool;
 use crate::types::Blockchain;
-use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 
 use async_trait::async_trait;
 use futures::lock::Mutex;
@@ -55,7 +55,7 @@ pub struct K1FillPool {
 
 impl K1FillPool {
     pub fn new() -> Result<Self> {
-        let (secrets, publics) = mpc_wallet_lib::common::dh_init_secp256k1(100)
+        let (secrets, publics) = nash_mpc::common::dh_init_secp256k1(100)
             .map_err(|_| ProtocolError("Could not initialize k1 values"))?;
         Ok(Self { publics, secrets })
     }
@@ -70,7 +70,7 @@ pub struct R1FillPool {
 
 impl R1FillPool {
     pub fn new() -> Result<Self> {
-        let (secrets, publics) = mpc_wallet_lib::common::dh_init_secp256r1(100)
+        let (secrets, publics) = nash_mpc::common::dh_init_secp256r1(100)
             .map_err(|_| ProtocolError("Could not initialize r1 values"))?;
         Ok(Self { publics, secrets })
     }

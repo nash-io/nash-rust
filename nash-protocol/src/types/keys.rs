@@ -4,8 +4,8 @@
 
 use crate::errors::{ProtocolError, Result as ProtocolResult};
 pub use crate::types::Blockchain;
-use mpc_wallet_lib::paillier_common;
-use mpc_wallet_lib::rust_bigint::BigInt;
+use nash_mpc::paillier_common;
+use nash_mpc::rust_bigint::BigInt;
 use serde::de::{Deserializer, Error};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -64,9 +64,9 @@ where
 pub struct KeyfileChildKey {
     pub address: String,
     pub public_key: String,
-    #[serde(with = "mpc_wallet_lib::rust_bigint::serialize::bigint")]
+    #[serde(with = "nash_mpc::rust_bigint::serialize::bigint")]
     pub client_secret_share: BigInt,
-    #[serde(with = "mpc_wallet_lib::rust_bigint::serialize::bigint")]
+    #[serde(with = "nash_mpc::rust_bigint::serialize::bigint")]
     pub server_secret_share_encrypted: BigInt,
 }
 
@@ -75,9 +75,9 @@ pub struct KeyfileChildKey {
 pub struct KeyMap {
     pub child_keys: HashMap<String, KeyfileChildKey>,
     pub paillier_pk: paillier_common::EncryptionKey,
-    #[serde(with = "mpc_wallet_lib::rust_bigint::serialize::bigint")]
+    #[serde(with = "nash_mpc::rust_bigint::serialize::bigint")]
     pub payload_public_key: BigInt,
-    #[serde(with = "mpc_wallet_lib::rust_bigint::serialize::bigint")]
+    #[serde(with = "nash_mpc::rust_bigint::serialize::bigint")]
     pub payload_signing_key: BigInt,
     pub version: u32,
 }

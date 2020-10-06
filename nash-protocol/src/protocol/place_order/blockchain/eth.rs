@@ -3,7 +3,7 @@ use crate::graphql::place_limit_order;
 use crate::types::eth::Address;
 use crate::types::{Amount, AssetOrCrosschain, Blockchain, Nonce, Prefix, Rate};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_eth_message};
-use mpc_wallet_lib::rust_bigint::BigInt;
+use nash_mpc::rust_bigint::BigInt;
 use std::convert::TryInto;
 
 use super::super::super::signer::Signer;

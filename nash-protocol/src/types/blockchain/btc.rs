@@ -1,8 +1,8 @@
 //! Bitcoin specific types shared across protocol requests
 
 use crate::errors::{ProtocolError, Result};
-use mpc_wallet_lib::curves::secp256_k1::Secp256k1Point;
-use mpc_wallet_lib::curves::traits::ECPoint;
+use nash_mpc::curves::secp256_k1::Secp256k1Point;
+use nash_mpc::curves::traits::ECPoint;
 
 /// Placeholder for BTC address
 #[derive(Clone, Debug, PartialEq)]

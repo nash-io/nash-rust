@@ -1,7 +1,7 @@
 use crate::graphql;
 use graphql::dh_fill_pool;
 use graphql_client::GraphQLQuery;
-use mpc_wallet_lib::curves::traits::ECPoint;
+use nash_mpc::curves::traits::ECPoint;
 
 use super::types::{DhFillPoolRequest, K1FillPool, R1FillPool};
 use crate::types::Blockchain;

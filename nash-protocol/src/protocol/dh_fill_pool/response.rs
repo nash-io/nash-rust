@@ -3,9 +3,9 @@ use super::types::{DhFillPoolRequest, DhFillPoolResponse, ServerPublics};
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::dh_fill_pool;
 use crate::types::Blockchain;
-use mpc_wallet_lib::curves::secp256_k1::Secp256k1Point;
-use mpc_wallet_lib::curves::secp256_r1::Secp256r1Point;
-use mpc_wallet_lib::curves::traits::ECPoint;
+use nash_mpc::curves::secp256_k1::Secp256k1Point;
+use nash_mpc::curves::secp256_r1::Secp256r1Point;
+use nash_mpc::curves::traits::ECPoint;
 
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -90,7 +90,7 @@ pub async fn fill_pool(
         DhFillPoolRequest::Bitcoin(request) | DhFillPoolRequest::Ethereum(request) => {
             let k1_secrets = request.secrets.clone();
             let k1_server_publics = server_publics.publics_for_k1()?;
-            mpc_wallet_lib::client::fill_rpool_secp256k1(
+            nash_mpc::client::fill_rpool_secp256k1(
                 k1_secrets,
                 &k1_server_publics,
                 paillier_pk,
@@ -100,7 +100,7 @@ pub async fn fill_pool(
         DhFillPoolRequest::NEO(request) => {
             let r1_secrets = request.secrets.clone();
             let r1_server_publics = server_publics.publics_for_r1()?;
-            mpc_wallet_lib::client::fill_rpool_secp256r1(
+            nash_mpc::client::fill_rpool_secp256r1(
                 r1_secrets,
                 &r1_server_publics,
                 paillier_pk,

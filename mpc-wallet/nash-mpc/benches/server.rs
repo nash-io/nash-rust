@@ -2,8 +2,8 @@
 extern crate criterion;
 
 use criterion::{black_box, Criterion};
-use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, Curve};
-use mpc_wallet_lib::server::{
+use nash_mpc::common::{dh_init_secp256k1, dh_init_secp256r1, Curve};
+use nash_mpc::server::{
     complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
 };
 use paillier_common::{DecryptionKey, MinimalDecryptionKey};

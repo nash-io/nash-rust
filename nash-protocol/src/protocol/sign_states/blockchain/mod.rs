@@ -3,7 +3,7 @@ use super::types::{ClientSignedState, ContractBalanceState, RecycledOrder, State
 use crate::errors::{ProtocolError, Result};
 use crate::types::Blockchain;
 use crate::utils::{decode_hexstr, hash_eth_message, hash_neo_message};
-use mpc_wallet_lib::rust_bigint::BigInt;
+use nash_mpc::rust_bigint::BigInt;
 
 use super::super::signer::Signer;
 #[cfg(feature = "num_bigint")]

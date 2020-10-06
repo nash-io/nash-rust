@@ -2,7 +2,7 @@
 members = [
 "nash-protocol",
 "nash-native-client",
-"mpc-wallet/mpc-wallet-lib",
+"mpc-wallet/nash-mpc",
 ]
 
 exclude = [

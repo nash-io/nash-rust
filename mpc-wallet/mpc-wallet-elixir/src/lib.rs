@@ -5,12 +5,12 @@
 #[macro_use]
 extern crate rustler;
 
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
-use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use mpc_wallet_lib::paillier_common::{DecryptionKey, EncryptionKey};
-use mpc_wallet_lib::{client, common, server};
+use nash_mpc::rust_bigint::traits::Converter;
+use nash_mpc::rust_bigint::BigInt;
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+use nash_mpc::paillier_common::{DecryptionKey, EncryptionKey};
+use nash_mpc::{client, common, server};
 use rustler::{Encoder, Env, Error, Term};
 
 rustler_export_nifs! {

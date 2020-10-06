@@ -2,13 +2,13 @@
  * WASM client interface to MPC-based API keys
  */
 
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
-use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use mpc_wallet_lib::curves::traits::ECScalar;
-use mpc_wallet_lib::paillier_common::EncryptionKey;
-use mpc_wallet_lib::{client, common};
+use nash_mpc::rust_bigint::traits::Converter;
+use nash_mpc::rust_bigint::BigInt;
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+use nash_mpc::curves::traits::ECScalar;
+use nash_mpc::paillier_common::EncryptionKey;
+use nash_mpc::{client, common};
 use wasm_bindgen::prelude::*;
 
 /// Generate shared random values using Diffie-Hellman
@@ -380,7 +380,7 @@ mod tests {
         init_api_childkey_creator, init_api_childkey_creator_with_verified_paillier,
         publickey_from_secretkey, sign, verify, verify_paillier,
     };
-    use mpc_wallet_lib::client::{APIchildkey, APIchildkeyCreator};
+    use nash_mpc::client::{APIchildkey, APIchildkeyCreator};
 
     #[test]
     fn test_dh_init_ok() {

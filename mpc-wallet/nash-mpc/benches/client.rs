@@ -2,11 +2,11 @@
 extern crate criterion;
 
 use criterion::{black_box, Criterion};
-use mpc_wallet_lib::client::{
+use nash_mpc::client::{
     compute_presig, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
     get_rpool_size, APIchildkeyCreator,
 };
-use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
+use nash_mpc::common::{dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
 use paillier_common::{EncryptionKey, MinimalEncryptionKey};
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;

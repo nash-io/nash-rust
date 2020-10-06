@@ -2,13 +2,13 @@
  * Node.js client interface to MPC-based API keys
  */
 
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
-use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use mpc_wallet_lib::curves::traits::ECScalar;
-use mpc_wallet_lib::paillier_common::EncryptionKey;
-use mpc_wallet_lib::{client, common};
+use nash_mpc::rust_bigint::traits::Converter;
+use nash_mpc::rust_bigint::BigInt;
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+use nash_mpc::curves::traits::ECScalar;
+use nash_mpc::paillier_common::EncryptionKey;
+use nash_mpc::{client, common};
 use neon::prelude::register_module;
 use neon_serde::export;
 
@@ -165,7 +165,7 @@ export! {
 #[cfg(test)]
 mod tests {
     use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size, sign};
-    use mpc_wallet_lib::common::Curve;
+    use nash_mpc::common::Curve;
 
     #[test]
     fn test_dh_init_ok() {

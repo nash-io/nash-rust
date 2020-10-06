@@ -6,9 +6,9 @@ edition = "2018"
 
 [features]
 default = ["rust_gmp"]
-rust_gmp = ["mpc-wallet-lib/rust_gmp"]
-num_bigint = ["mpc-wallet-lib/num_bigint"]
-wasm = ["mpc-wallet-lib/wasm"]
+rust_gmp = ["nash-mpc/rust_gmp"]
+num_bigint = ["nash-mpc/num_bigint"]
+wasm = ["nash-mpc/wasm"]
 
 [lib]
 name = "nash_protocol"
@@ -22,7 +22,7 @@ byteorder = "1.3"
 graphql_client = "0.9"
 hex = "0.4"
 Inflector = "0.11"
-mpc-wallet-lib = { version = "*", path = "../mpc-wallet/mpc-wallet-lib/", default-features = false }
+nash-mpc = { version = "*", path = "../mpc-wallet/nash-mpc/", default-features = false }
 num-traits = "0.2"
 ripemd160 = "0.9"
 serde = "1.0"

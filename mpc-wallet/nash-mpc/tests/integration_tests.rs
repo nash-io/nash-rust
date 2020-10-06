@@ -1,11 +1,11 @@
-use mpc_wallet_lib::client::{
+use nash_mpc::client::{
     compute_presig, fill_rpool_secp256k1, fill_rpool_secp256r1, APIchildkeyCreator,
 };
-use mpc_wallet_lib::common::{
+use nash_mpc::common::{
     dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify, Curve,
 };
-use mpc_wallet_lib::curves::traits::ECScalar;
-use mpc_wallet_lib::server::{
+use nash_mpc::curves::traits::ECScalar;
+use nash_mpc::server::{
     complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_keypair,
     generate_paillier_proof,
 };

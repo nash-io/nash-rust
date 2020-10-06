@@ -4,12 +4,12 @@ use crate::types::ApiKeys;
 use crate::types::Blockchain;
 use crate::types::PublicKey;
 use crate::utils::{der_encode_sig, hash_message};
-use mpc_wallet_lib::client::APIchildkey;
-use mpc_wallet_lib::common::Curve;
-use mpc_wallet_lib::curves::secp256_k1::Secp256k1Scalar;
-use mpc_wallet_lib::curves::traits::ECScalar;
-use mpc_wallet_lib::paillier_common;
-use mpc_wallet_lib::rust_bigint::BigInt;
+use nash_mpc::client::APIchildkey;
+use nash_mpc::common::Curve;
+use nash_mpc::curves::secp256_k1::Secp256k1Scalar;
+use nash_mpc::curves::traits::ECScalar;
+use nash_mpc::paillier_common;
+use nash_mpc::rust_bigint::BigInt;
 
 pub fn chain_path(chain: Blockchain) -> &'static str {
     match chain {
@@ -71,7 +71,7 @@ impl Signer {
             Blockchain::NEO => Curve::Secp256r1,
         };
         // FIX ME: Right now the pools are under a global mutex. Make them managed
-        let (sig, r) = mpc_wallet_lib::client::compute_presig(&key, &data, curve)
+        let (sig, r) = nash_mpc::client::compute_presig(&key, &data, curve)
             .map_err(|_| ProtocolError("Error computing presignature"))?;
         // Track the fact that we now have one less R value
         self.decrement_r_val(chain);

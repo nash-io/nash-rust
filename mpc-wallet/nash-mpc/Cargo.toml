@@ -1,8 +1,12 @@
 [package]
-name = "mpc-wallet-lib"
+name = "nash-mpc"
 version = "1.1.3"
 edition = "2018"
-description = "MPC wallet library"
+description = "MPC wallet library providing threshold signatures for Nash exchange"
+authors = ["Robert Annessi <robert@nash.io>", "Ethan Fast <ethan@nash.io>"]
+license = "MIT"
+repository = "https://github.com/nash-io/nash-rust/mpc-wallet/nash-mpc"
+keywords = ["nash", "exchange", "cryptography", "threshold", "signature", "mpc"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

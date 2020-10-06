@@ -2,7 +2,7 @@
 extern crate criterion;
 
 use criterion::{black_box, Criterion};
-use mpc_wallet_lib::common::{
+use nash_mpc::common::{
     dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify, Curve,
 };
 use rust_bigint::traits::Converter;

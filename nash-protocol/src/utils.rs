@@ -2,8 +2,8 @@
 
 use crate::errors::{ProtocolError, Result};
 use bigdecimal::BigDecimal;
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
+use nash_mpc::rust_bigint::traits::Converter;
+use nash_mpc::rust_bigint::BigInt;
 use sha3::{Digest, Keccak256};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};

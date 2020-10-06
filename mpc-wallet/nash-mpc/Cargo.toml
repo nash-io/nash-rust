@@ -6,7 +6,7 @@ description = "MPC wallet library providing threshold signatures for Nash exchan
 authors = ["Robert Annessi <robert@nash.io>", "Ethan Fast <ethan@nash.io>"]
 license = "MIT"
 repository = "https://github.com/nash-io/nash-rust/mpc-wallet/nash-mpc"
-keywords = ["nash", "exchange", "cryptography", "threshold", "signature", "mpc"]
+keywords = ["nash", "cryptography", "threshold", "signature", "mpc"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

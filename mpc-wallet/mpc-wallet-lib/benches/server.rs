@@ -4,7 +4,7 @@ extern crate criterion;
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;
 use criterion::{black_box, Criterion};
-use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, Curve};
+use mpc_wallet_lib::common::{dh_init_secp256k1, dh_init_secp256r1, Curve, publickey_from_secretkey};
 use mpc_wallet_lib::server::{
     complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
 };
@@ -38,7 +38,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             .unwrap();
     let k_k1 = BigInt::from_hex("b95d4e79d09b35bdfc863cdeb8bbfd85d557546e75fe2582961fbe0497525f6e")
         .unwrap();
-    let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+    let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), Curve::Secp256k1).unwrap();
     let msg_hash =
         BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
             .unwrap();

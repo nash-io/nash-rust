@@ -65,7 +65,7 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
             return Err(());
         }
         let tmp = BigInt::to_vec(n);
-        let mut vec = vec!(0; 32 - tmp.len());
+        let mut vec = vec![0; 32 - tmp.len()];
         vec.extend(&tmp);
         let arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec);
         Ok(Secp256r1Scalar {
@@ -233,7 +233,8 @@ impl ECPoint<VerifyKey, Scalar> for Secp256r1Point {
     fn generator() -> Secp256r1Point {
         Secp256r1Point {
             purpose: "base_fe",
-            ge: VerifyKey::from_encoded_point(&AffinePoint::generator().to_encoded_point(false)).unwrap(),
+            ge: VerifyKey::from_encoded_point(&AffinePoint::generator().to_encoded_point(false))
+                .unwrap(),
         }
     }
 
@@ -273,7 +274,11 @@ impl ECPoint<VerifyKey, Scalar> for Secp256r1Point {
         if bool::from(point.is_none()) {
             return Err(());
         }
-        match VerifyKey::from_encoded_point(&(ProjectivePoint::from(point.unwrap()) * fe).to_affine().to_encoded_point(true)) {
+        match VerifyKey::from_encoded_point(
+            &(ProjectivePoint::from(point.unwrap()) * fe)
+                .to_affine()
+                .to_encoded_point(true),
+        ) {
             Ok(v) => Ok(Secp256r1Point {
                 purpose: "mul",
                 ge: v,
@@ -288,7 +293,11 @@ impl ECPoint<VerifyKey, Scalar> for Secp256r1Point {
         if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
             return Err(());
         }
-        match VerifyKey::from_encoded_point(&(ProjectivePoint::from(point1.unwrap()) + ProjectivePoint::from(point2.unwrap())).to_affine().to_encoded_point(true)) {
+        match VerifyKey::from_encoded_point(
+            &(ProjectivePoint::from(point1.unwrap()) + ProjectivePoint::from(point2.unwrap()))
+                .to_affine()
+                .to_encoded_point(true),
+        ) {
             Ok(v) => Ok(Secp256r1Point {
                 purpose: "combine",
                 ge: v,
@@ -303,7 +312,11 @@ impl ECPoint<VerifyKey, Scalar> for Secp256r1Point {
         if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
             return Err(());
         }
-        match VerifyKey::from_encoded_point(&(ProjectivePoint::from(point1.unwrap()) - ProjectivePoint::from(point2.unwrap())).to_affine().to_encoded_point(true)) {
+        match VerifyKey::from_encoded_point(
+            &(ProjectivePoint::from(point1.unwrap()) - ProjectivePoint::from(point2.unwrap()))
+                .to_affine()
+                .to_encoded_point(true),
+        ) {
             Ok(v) => Ok(Secp256r1Point {
                 purpose: "sub",
                 ge: v,
@@ -325,7 +338,9 @@ impl ECPoint<VerifyKey, Scalar> for Secp256r1Point {
 
         let x_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec_x);
         let y_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec_y);
-        match VerifyKey::from_encoded_point(&EncodedPoint::from_affine_coordinates(&x_arr, &y_arr, false)) {
+        match VerifyKey::from_encoded_point(&EncodedPoint::from_affine_coordinates(
+            &x_arr, &y_arr, false,
+        )) {
             Ok(v) => Ok(Secp256r1Point {
                 purpose: "base_fe",
                 ge: v,
@@ -483,7 +498,9 @@ mod tests {
 
     fn random_point() -> Secp256r1Point {
         let random_scalar: Secp256r1Scalar = Secp256r1Scalar::new_random().unwrap();
-        let pk = Secp256r1Point::generator().scalar_mul(&random_scalar.fe).unwrap();
+        let pk = Secp256r1Point::generator()
+            .scalar_mul(&random_scalar.fe)
+            .unwrap();
         Secp256r1Point {
             purpose: "random_point",
             ge: pk.ge,
@@ -731,7 +748,8 @@ mod tests {
         let int: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let test = (base_point * int).unwrap();
         assert_eq!(
             test.x_coor().to_hex(),
@@ -816,7 +834,10 @@ mod tests {
         let g = Secp256r1Point::generator();
         let i: Secp256r1Scalar = ECScalar::from(&BigInt::from(3)).unwrap();
         assert_eq!(((g + g).unwrap() + g).unwrap().ge, (g * i).unwrap().ge);
-        assert_eq!((g + g).unwrap().ge, (((g + g).unwrap() - g).unwrap() + g).unwrap().ge);
+        assert_eq!(
+            (g + g).unwrap().ge,
+            (((g + g).unwrap() - g).unwrap() + g).unwrap().ge
+        );
     }
 
     #[test]
@@ -825,7 +846,9 @@ mod tests {
         let j: Secp256r1Scalar = ECScalar::from(&BigInt::from(2)).unwrap();
         assert_eq!((i.clone() + i.clone()).unwrap().fe, j.fe);
         assert_eq!(
-            (((i.clone() + i.clone()).unwrap() + i.clone()).unwrap() + i.clone()).unwrap().fe,
+            (((i.clone() + i.clone()).unwrap() + i.clone()).unwrap() + i.clone())
+                .unwrap()
+                .fe,
             (j.clone() + j.clone()).unwrap().fe
         );
     }

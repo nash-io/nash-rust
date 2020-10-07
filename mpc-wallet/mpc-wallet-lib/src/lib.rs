@@ -5,5 +5,5 @@ pub mod client;
 pub mod common;
 pub mod curves;
 pub mod server;
-pub use rust_bigint;
 pub use paillier_common;
+pub use rust_bigint;

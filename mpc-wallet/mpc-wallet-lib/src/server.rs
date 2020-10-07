@@ -2,18 +2,18 @@
  * Server functions for MPC-based API keys
  */
 
-use crate::common::{correct_key_proof_rho, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE, verify};
+use crate::common::{correct_key_proof_rho, verify, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use rust_bigint::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
-use rust_bigint::BigInt;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
 use paillier_common::{
     extract_nroot, Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext,
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rust_bigint::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
+use rust_bigint::BigInt;
 use std::cmp;
 use std::collections::HashMap;
 
@@ -45,14 +45,16 @@ pub fn compute_rpool_secp256r1(
     }
     // execute scalar multiplication in parallel
     tmp.par_iter_mut().for_each(|i| {
-        *i = match client_dh_publics[i.parse::<usize>().unwrap()].scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe) {
+        *i = match client_dh_publics[i.parse::<usize>().unwrap()]
+            .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
+        {
             // use string with leading zeros for ME
-            Ok(v) => format!("{:0>66}",v.to_bigint().to_hex()),
+            Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
             Err(_) => "".to_string(),
         };
     });
     // check if any scalar multiplication failed during parallel execution
-    for item in tmp.iter().take(server_dh_secrets.len()) {        
+    for item in tmp.iter().take(server_dh_secrets.len()) {
         if item.is_empty() {
             return Err(());
         }
@@ -78,14 +80,16 @@ pub fn compute_rpool_secp256k1(
     }
     // execute scalar multiplication in parallel
     tmp.par_iter_mut().for_each(|i| {
-        *i = match client_dh_publics[i.parse::<usize>().unwrap()].scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe) {
+        *i = match client_dh_publics[i.parse::<usize>().unwrap()]
+            .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
+        {
             // use string with leading zeros for ME
             Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
             Err(_) => "".to_string(),
         };
     });
     // check if any scalar multiplication failed during parallel execution
-    for item in tmp.iter().take(server_dh_secrets.len()) {        
+    for item in tmp.iter().take(server_dh_secrets.len()) {
         if item.is_empty() {
             return Err(());
         }
@@ -175,7 +179,7 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
 
 #[cfg(test)]
 mod tests {
-    use crate::common::{CorrectKeyProof, Curve, PAILLIER_KEY_SIZE, publickey_from_secretkey};
+    use crate::common::{publickey_from_secretkey, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
@@ -183,9 +187,9 @@ mod tests {
         complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, correct_key_proof_sigma,
         generate_paillier_keypair, generate_paillier_proof,
     };
+    use paillier_common::{DecryptionKey, MinimalDecryptionKey};
     use rust_bigint::traits::{Converter, NumberTests};
     use rust_bigint::BigInt;
-    use paillier_common::{DecryptionKey, MinimalDecryptionKey};
     use std::collections::HashMap;
 
     #[test]
@@ -229,7 +233,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("ffa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -251,7 +256,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("efa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -273,7 +279,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("ffa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("3ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -295,7 +302,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("953fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("2dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -317,7 +325,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("a53fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("2dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -339,7 +348,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("953fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("3dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -367,11 +377,17 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        let (r_, s, recid) =
+            complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
         assert_eq!(
             r_,
             BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
@@ -397,7 +413,12 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -416,7 +437,12 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -435,7 +461,12 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -454,7 +485,12 @@ mod tests {
             BigInt::from_hex("a8779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -473,7 +509,12 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -491,11 +532,17 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        let (r_, s, recid) =
+            complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
         assert_eq!(
             r_,
             BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
@@ -521,7 +568,12 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -540,7 +592,12 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -559,7 +616,12 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -578,7 +640,12 @@ mod tests {
             BigInt::from_hex("f1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -597,7 +664,12 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let pk = publickey_from_secretkey(&BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1").unwrap(), curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();

@@ -8,8 +8,6 @@ use crate::common::{
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
-use rust_bigint::BigInt;
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use indexmap::{IndexMap, IndexSet};
@@ -25,6 +23,8 @@ use paillier_common::{
 };
 #[cfg(not(feature = "wasm"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
+use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use zeroize::Zeroize;
@@ -288,9 +288,9 @@ pub fn fill_rpool_secp256r1(
     for i in 0..own_dh_secrets.len() {
         match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
             Ok(r) => RPOOL_SECP256R1
-                        .lock()
-                        .unwrap()
-                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+                .lock()
+                .unwrap()
+                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
             Err(_) => None,
         };
     }
@@ -298,9 +298,9 @@ pub fn fill_rpool_secp256r1(
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
         match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
             Ok(r) => RPOOL_SECP256R1
-                        .lock()
-                        .unwrap()
-                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+                .lock()
+                .unwrap()
+                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
             Err(_) => None,
         };
     });
@@ -325,9 +325,9 @@ pub fn fill_rpool_secp256k1(
     for i in 0..own_dh_secrets.len() {
         match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
             Ok(r) => RPOOL_SECP256K1
-                        .lock()
-                        .unwrap()
-                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+                .lock()
+                .unwrap()
+                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
             Err(_) => None,
         };
     }
@@ -335,9 +335,9 @@ pub fn fill_rpool_secp256k1(
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
         match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
             Ok(r) => RPOOL_SECP256K1
-                        .lock()
-                        .unwrap()
-                        .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+                .lock()
+                .unwrap()
+                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
             Err(_) => None,
         };
     });
@@ -426,9 +426,9 @@ mod tests {
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
+    use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use rust_bigint::traits::Converter;
     use rust_bigint::BigInt;
-    use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use std::sync::Mutex;
 
     lazy_static! {
@@ -553,7 +553,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("8ea92bf3aa6f4ec4939b0888cd71dc6dc113f9cafe571c0bb501c8c9004bb47c")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("34bfa8dd79ff0777e32b89f22a19623ff4fe6fe63aaeb3e2d165fc12cbb2471db")
                 .unwrap(),
@@ -598,7 +599,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("EAB592977DF1A8E7D77DB58F4DAE73C860920D28B763A0737217D3793563D53E")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2366a21b029c2e4d627ac5f7e94769ed1b28727f2403b54c8deb076661cd685ae")
                 .unwrap(),
@@ -650,7 +652,8 @@ mod tests {
         let sk: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();

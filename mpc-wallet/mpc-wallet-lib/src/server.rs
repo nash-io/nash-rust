@@ -3,7 +3,10 @@
  */
 
 use crate::common::{correct_key_proof_rho, verify, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 #[cfg(feature = "num_bigint")]
@@ -180,7 +183,10 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
 #[cfg(test)]
 mod tests {
     use crate::common::{publickey_from_secretkey, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
     use crate::server::{

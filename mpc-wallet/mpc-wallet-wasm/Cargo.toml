@@ -7,6 +7,11 @@ edition = "2018"
 name = "mpc_wallet_wasm"
 crate-type = ["cdylib"]
 
+[features]
+default = ["secp256k1"]
+k256 = ["mpc-wallet-lib/k256"]
+secp256k1 = ["mpc-wallet-lib/secp256k1"]
+
 [dependencies]
 console_error_panic_hook = { version = "0.1", optional = true }
 mpc-wallet-lib = { version = "*", path = '../mpc-wallet-lib', default-features = false, features = ["num_bigint", "wasm"] }

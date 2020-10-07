@@ -2,9 +2,11 @@
  * WASM client interface to MPC-based API keys
  */
 
+#[cfg(feature = "secp256k1")]
 use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use mpc_wallet_lib::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use mpc_wallet_lib::curves::traits::ECScalar;
 use mpc_wallet_lib::paillier_common::EncryptionKey;
 use mpc_wallet_lib::rust_bigint::traits::Converter;
 use mpc_wallet_lib::rust_bigint::BigInt;
@@ -337,40 +339,12 @@ pub fn publickey_from_secretkey(secret_key_str: &str, curve_str: &str) -> String
     serde_json::to_string(&(&true, &public_key)).unwrap()
 }
 
-/// Generate signature for given message hash under given secret key
-/// Input: secret_key: full secret key, msg_hash: message hash
-/// Output: (r, s): ECDSA signature
-#[wasm_bindgen]
-pub fn sign(secret_key_str: &str, msg_hash_str: &str) -> String {
-    let secret_key_int = match BigInt::from_hex(&secret_key_str) {
-        Ok(v) => v,
-        Err(_) => {
-            return serde_json::to_string(&(false, &"error deserializing secret_key")).unwrap()
-        }
-    };
-    let secret_key: Secp256k1Scalar = match ECScalar::from(&secret_key_int) {
-        Ok(v) => v,
-        Err(_) => return serde_json::to_string(&(false, &"invalid secret_key")).unwrap(),
-    };
-    let msg_hash = match BigInt::from_hex(&msg_hash_str) {
-        Ok(v) => v,
-        Err(_) => return serde_json::to_string(&(false, &"error deserializing msg_hash")).unwrap(),
-    };
-    let (r, s) = client::sign(&secret_key, &msg_hash);
-    serde_json::to_string(&(
-        &true,
-        &format!("{:0>64}", r.to_hex()),
-        &format!("{:0>64}", s.to_hex()),
-    ))
-    .unwrap()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
         compute_presig, create_api_childkey, dh_init, fill_rpool, get_rpool_size,
         init_api_childkey_creator, init_api_childkey_creator_with_verified_paillier,
-        publickey_from_secretkey, sign, verify, verify_paillier,
+        publickey_from_secretkey, verify, verify_paillier,
     };
     use mpc_wallet_lib::client::{APIchildkey, APIchildkeyCreator};
 
@@ -921,36 +895,6 @@ mod tests {
             "\"Secp256k1\""
         );
         let success: bool = serde_json::from_str(&result).unwrap();
-        assert!(!success);
-    }
-
-    #[test]
-    fn test_sign_ok() {
-        let result = sign(
-            "4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1",
-            "100000000000000fffffffffffffffffff00000000000000ffffffffff000000",
-        );
-        let (success, _, _): (bool, String, String) = serde_json::from_str(&result).unwrap();
-        assert!(success);
-    }
-
-    #[test]
-    fn test_sign_wrong_sk() {
-        let result = sign(
-            "z794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1",
-            "100000000000000fffffffffffffffffff00000000000000ffffffffff000000",
-        );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert!(!success);
-    }
-
-    #[test]
-    fn test_sign_wrong_hash() {
-        let result = sign(
-            "4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1",
-            "\\00000000000000fffffffffffffffffff00000000000000ffffffffff000000",
-        );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
         assert!(!success);
     }
 }

@@ -5,11 +5,14 @@
 #[macro_use]
 extern crate rustler;
 
-use mpc_wallet_lib::rust_bigint::traits::Converter;
-use mpc_wallet_lib::rust_bigint::BigInt;
+#[cfg(feature = "secp256k1")]
 use mpc_wallet_lib::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use mpc_wallet_lib::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use mpc_wallet_lib::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use mpc_wallet_lib::paillier_common::{DecryptionKey, EncryptionKey};
+use mpc_wallet_lib::rust_bigint::traits::Converter;
+use mpc_wallet_lib::rust_bigint::BigInt;
 use mpc_wallet_lib::{client, common, server};
 use rustler::{Encoder, Env, Error, Term};
 
@@ -200,10 +203,13 @@ fn complete_sig<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> 
         Err(_) => return Ok((atoms::error(), &"error deserializing msg_hash").encode(env)),
     };
 
-    let (r, s, recid) = match server::complete_sig(&paillier_sk, &presig, &r, &k, curve, &pubkey, &msg_hash) {
-        Ok(v) => v,
-        Err(_) => return Ok((atoms::error(), &"error: completing signature failed").encode(env)),
-    };
+    let (r, s, recid) =
+        match server::complete_sig(&paillier_sk, &presig, &r, &k, curve, &pubkey, &msg_hash) {
+            Ok(v) => v,
+            Err(_) => {
+                return Ok((atoms::error(), &"error: completing signature failed").encode(env))
+            }
+        };
     // add leading zeros if necessary
     Ok((
         atoms::ok(),

@@ -6,10 +6,9 @@ use getrandom::getrandom;
 use rust_bigint::traits::{Converter, Modulo};
 use rust_bigint::BigInt;
 use secp256k1::constants::{
-    COMPACT_SIGNATURE_SIZE, CURVE_ORDER, GENERATOR_X, GENERATOR_Y, MESSAGE_SIZE, SECRET_KEY_SIZE,
-    UNCOMPRESSED_PUBLIC_KEY_SIZE,
+    CURVE_ORDER, GENERATOR_X, GENERATOR_Y, SECRET_KEY_SIZE, UNCOMPRESSED_PUBLIC_KEY_SIZE,
 };
-use secp256k1::{All, Message, PublicKey, Secp256k1, SecretKey};
+use secp256k1::{All, PublicKey, Secp256k1, SecretKey};
 use serde::de;
 use serde::de::Visitor;
 use serde::ser::{Serialize, Serializer};
@@ -30,22 +29,6 @@ pub struct Secp256k1Scalar {
 pub struct Secp256k1Point {
     purpose: &'static str,
     pub(crate) ge: PublicKey,
-}
-
-impl Secp256k1Scalar {
-    /// sign() is basically a textbook ECDSA sign function. In contrast to MPC, sign() makes use of RFC6979 (deterministic but still cryptographically secure nonce generation) and produces the same signature given the same secret key and message.
-    /// It is not needed for MPC but used as a faster replacement for the JS implementation
-    pub fn sign(self, msg_hash: &BigInt) -> (BigInt, BigInt) {
-        let msg_bytes = msg_hash.to_bytes();
-        // add leading zeroes if necessary
-        let mut msg_vec = vec![0; MESSAGE_SIZE - msg_bytes.len()];
-        msg_vec.extend_from_slice(&msg_bytes);
-        let msg = Message::from_slice(&msg_vec).unwrap();
-        let signature = get_context().sign(&msg, &self.fe).serialize_compact();
-        let r = BigInt::from_bytes(&signature[0..COMPACT_SIGNATURE_SIZE / 2]);
-        let s = BigInt::from_bytes(&signature[COMPACT_SIGNATURE_SIZE / 2..COMPACT_SIGNATURE_SIZE]);
-        (r, s)
-    }
 }
 
 impl Zeroize for Secp256k1Scalar {
@@ -650,80 +633,5 @@ mod tests {
             let rg_prime: Secp256k1Point = ECPoint::from_bytes(&key_slice).unwrap();
             assert_eq!(rg_prime.ge, rg.ge);
         }
-    }
-
-    #[test]
-    fn test_sign_ok() {
-        let sk: Secp256k1Scalar = ECScalar::from(
-            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
-                .unwrap(),
-        )
-        .unwrap();
-        let msg_hash =
-            BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
-                .unwrap();
-        let signature = sk.sign(&msg_hash);
-        let r = signature.0;
-        let s = signature.1;
-        assert_eq!(
-            r,
-            BigInt::from_hex("46018c11152491be5d220ed8ca80a1631b8d12b2abb7a0e8bdc854466e5e1bf0")
-                .unwrap()
-        );
-        assert_eq!(
-            s,
-            BigInt::from_hex("2c359e61f0a895ba6d922737e2e0d268e792e1cf756118d9377ddc96dd4fc5a9")
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn test_sign_wrong_sk() {
-        let sk: Secp256k1Scalar = ECScalar::from(
-            &BigInt::from_hex("5794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
-                .unwrap(),
-        )
-        .unwrap();
-        let msg_hash =
-            BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
-                .unwrap();
-        let signature = sk.sign(&msg_hash);
-        let r = signature.0;
-        let s = signature.1;
-        assert_ne!(
-            r,
-            BigInt::from_hex("46018c11152491be5d220ed8ca80a1631b8d12b2abb7a0e8bdc854466e5e1bf0")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("2c359e61f0a895ba6d922737e2e0d268e792e1cf756118d9377ddc96dd4fc5a9")
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn test_sign_wrong_hash() {
-        let sk: Secp256k1Scalar = ECScalar::from(
-            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
-                .unwrap(),
-        )
-        .unwrap();
-        let msg_hash =
-            BigInt::from_hex("110000000000000fffffffffffffffffff00000000000000ffffffffff000000")
-                .unwrap();
-        let signature = sk.sign(&msg_hash);
-        let r = signature.0;
-        let s = signature.1;
-        assert_ne!(
-            r,
-            BigInt::from_hex("46018c11152491be5d220ed8ca80a1631b8d12b2abb7a0e8bdc854466e5e1bf0")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("2c359e61f0a895ba6d922737e2e0d268e792e1cf756118d9377ddc96dd4fc5a9")
-                .unwrap()
-        );
     }
 }

@@ -2,14 +2,26 @@
  * Functions for MPC-based API keys used by both server and client
  */
 
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
+#[cfg(feature = "k256")]
+use k256::elliptic_curve::sec1::{
+    FromEncodedPoint as FromEncodedPoint_k256, ToEncodedPoint as ToEncodedPoint_k256,
+};
+#[cfg(feature = "k256")]
+use k256::AffinePoint as AffinePoint_k256;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
-use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
-use p256::{AffinePoint, EncodedPoint};
+#[cfg(feature = "secp256k1")]
+use p256::elliptic_curve::sec1::{
+    FromEncodedPoint as FromEncodedPoint_p256, ToEncodedPoint as ToEncodedPoint_p256,
+};
+use p256::{AffinePoint as AffinePoint_p256, EncodedPoint as EncodedPoint_p256};
 use rust_bigint::traits::{Converter, NumberTests};
 use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -187,6 +199,20 @@ pub fn verify(r: &BigInt, s: &BigInt, pubkey_str: &str, msg_hash: &BigInt, curve
     rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone())
 }
 
+#[cfg(feature = "secp256k1")]
+fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
+    Ok("0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_hex())
+}
+#[cfg(feature = "k256")]
+fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
+    // unwrap() is safe because pk has been validated in publickey_from_secretkey()
+    let tmp = AffinePoint_k256::from_encoded_point(&pk.ge.to_encoded_point(false)).unwrap();
+    Ok("0".to_string()
+        + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes())
+            .to_hex()
+            .to_string())
+}
+
 /// derive public key from secret key, in uncompressed format as expected by ME
 pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, ()> {
     if curve == Curve::Secp256k1 {
@@ -199,7 +225,7 @@ pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        Ok("0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_str_radix(16))
+        publickey_from_secretkey_r1(&pk)
     } else if curve == Curve::Secp256r1 {
         let secret_key = match ECScalar::from(secret_key_int) {
             Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
@@ -209,7 +235,7 @@ pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        let tmp = AffinePoint::from_encoded_point(&EncodedPoint::from(&pk.ge));
+        let tmp = AffinePoint_p256::from_encoded_point(&EncodedPoint_p256::from(&pk.ge));
         if bool::from(tmp.is_none()) {
             return Err(());
         }
@@ -303,7 +329,10 @@ mod tests {
         correct_key_proof_rho, create_hash, dh_init_secp256k1, dh_init_secp256r1, i2osp,
         publickey_from_secretkey, verify, Curve,
     };
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::Secp256k1Point;
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::Secp256k1Point;
     use crate::curves::secp256_r1::Secp256r1Point;
     use crate::curves::traits::ECPoint;
     #[cfg(feature = "num_bigint")]

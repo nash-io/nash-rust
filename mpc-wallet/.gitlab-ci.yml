@@ -28,9 +28,15 @@ test-mpc-wallet-wasm:
     - cd mpc-wallet-wasm
     - cargo build --release
     - cargo test --release
+    - cargo build --release --no-default-features --features k256
+    - cargo test --release --no-default-features --features k256
     - wasm-pack build --release --target bundler
     - wasm-opt --enable-mutable-globals -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
     - wasm-pack build --release --target nodejs
+    - wasm-opt --enable-mutable-globals -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
+    - wasm-pack build --release --target bundler -- --no-default-features --features k256
+    - wasm-opt --enable-mutable-globals -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
+    - wasm-pack build --release --target nodejs -- --no-default-features --features k256
     - wasm-opt --enable-mutable-globals -Os pkg/mpc_wallet_wasm_bg.wasm -o pkg/mpc_wallet_wasm_bg.wasm
 
 test-bigints:
@@ -50,10 +56,14 @@ test-mpc-wallet-lib:
   stage: test
   script:
     - cd mpc-wallet-lib
-    - cargo build --no-default-features --features rust_gmp --release
-    - cargo test --no-default-features --features rust_gmp --release
-    - cargo build --no-default-features --features num_bigint --release
-    - cargo test --no-default-features --features num_bigint --release
+    - cargo build --release
+    - cargo test --release
+    - cargo build --no-default-features --features rust_gmp --features k256 --release
+    - cargo test --no-default-features --features rust_gmp --features k256 --release
+    - cargo build --no-default-features --features num_bigint --features k256 --release
+    - cargo test --no-default-features --features num_bigint --features k256 --release
+    - cargo build --no-default-features --features num_bigint --features secp256k1 --release
+    - cargo test --no-default-features --features num_bigint --features secp256k1 --release
 
 test-mpc-wallet-elixir:
   <<: *rust-template
@@ -61,6 +71,7 @@ test-mpc-wallet-elixir:
   script:
     - cd mpc-wallet-elixir
     - cargo build --release
+    - cargo build --release --no-default-features --features k256
 
 test-rust-paillier:
   <<: *rust-template
@@ -82,3 +93,5 @@ test-mpc-wallet-nodejs:
     - cd native
     - cargo build --release
     - cargo test --release
+    - cargo build --release --no-default-features --features k256
+    - cargo test --release --no-default-features --features k256

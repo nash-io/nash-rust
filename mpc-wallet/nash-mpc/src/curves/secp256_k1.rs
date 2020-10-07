@@ -41,9 +41,7 @@ impl Secp256k1Scalar {
         let mut msg_vec = vec![0; MESSAGE_SIZE - msg_bytes.len()];
         msg_vec.extend_from_slice(&msg_bytes);
         let msg = Message::from_slice(&msg_vec).unwrap();
-        let signature = get_context()
-            .sign(&msg, &self.fe)
-            .serialize_compact();
+        let signature = get_context().sign(&msg, &self.fe).serialize_compact();
         let r = BigInt::from_bytes(&signature[0..COMPACT_SIGNATURE_SIZE / 2]);
         let s = BigInt::from_bytes(&signature[COMPACT_SIGNATURE_SIZE / 2..COMPACT_SIGNATURE_SIZE]);
         (r, s)
@@ -52,7 +50,9 @@ impl Secp256k1Scalar {
 
 impl Zeroize for Secp256k1Scalar {
     fn zeroize(&mut self) {
-        let zero = unsafe { std::mem::transmute::<[u8; SECRET_KEY_SIZE], SecretKey>([0u8; SECRET_KEY_SIZE]) };
+        let zero = unsafe {
+            std::mem::transmute::<[u8; SECRET_KEY_SIZE], SecretKey>([0u8; SECRET_KEY_SIZE])
+        };
         let zero_scalar = Secp256k1Scalar {
             purpose: "zero",
             fe: zero,
@@ -136,10 +136,11 @@ impl ECScalar<SecretKey> for Secp256k1Scalar {
 
     fn invert(&self) -> Result<Secp256k1Scalar, ()> {
         // rust-secp256k1 does not support inverse yet. see https://github.com/rust-bitcoin/rust-secp256k1/issues/181
-        let scalar: Secp256k1Scalar = match ECScalar::from(&BigInt::mod_inv(&self.to_bigint(), &Secp256k1Scalar::q())) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let scalar: Secp256k1Scalar =
+            match ECScalar::from(&BigInt::mod_inv(&self.to_bigint(), &Secp256k1Scalar::q())) {
+                Ok(v) => v,
+                Err(_) => return Err(()),
+            };
         Ok(scalar)
     }
 
@@ -516,9 +517,8 @@ mod tests {
     fn serialize_pk() {
         let pk = Secp256k1Point::generator();
         let s = serde_json::to_string(&pk).expect("Failed in serialization");
-        let expected =
-            serde_json::to_string(&("0".to_string() + &pk.to_bigint().to_hex()))
-                .expect("Failed in serialization");
+        let expected = serde_json::to_string(&("0".to_string() + &pk.to_bigint().to_hex()))
+            .expect("Failed in serialization");
         assert_eq!(s, expected);
         let des_pk: Secp256k1Point = serde_json::from_str(&s).expect("Failed in serialization");
         assert_eq!(des_pk.ge, pk.ge);
@@ -621,7 +621,10 @@ mod tests {
     fn test_scalar_mul() {
         let g = Secp256k1Point::generator();
         let a: Secp256k1Scalar = ECScalar::from(&BigInt::from(2)).unwrap();
-        let expected = Secp256k1Point::from_hex("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5").unwrap();
+        let expected = Secp256k1Point::from_hex(
+            "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+        )
+        .unwrap();
         assert_eq!((g * a).unwrap(), expected);
     }
 
@@ -654,7 +657,8 @@ mod tests {
         let sk: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -678,7 +682,8 @@ mod tests {
         let sk: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("5794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -702,7 +707,8 @@ mod tests {
         let sk: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("110000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();

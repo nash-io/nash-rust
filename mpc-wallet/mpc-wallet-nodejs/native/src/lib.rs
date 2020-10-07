@@ -2,12 +2,12 @@
  * Node.js client interface to MPC-based API keys
  */
 
-use nash_mpc::rust_bigint::traits::Converter;
-use nash_mpc::rust_bigint::BigInt;
 use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::paillier_common::EncryptionKey;
+use nash_mpc::rust_bigint::traits::Converter;
+use nash_mpc::rust_bigint::BigInt;
 use nash_mpc::{client, common};
 use neon::prelude::register_module;
 use neon_serde::export;

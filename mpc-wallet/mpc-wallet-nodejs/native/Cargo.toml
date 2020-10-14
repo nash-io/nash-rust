@@ -10,8 +10,8 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["secp256k1"]
-k256 = ["mpc-wallet-lib/k256"]
-secp256k1 = ["mpc-wallet-lib/secp256k1"]
+k256 = ["nash-mpc/k256"]
+secp256k1 = ["nash-mpc/secp256k1"]
 
 [build-dependencies]
 neon-build = "0.4"
@@ -20,7 +20,7 @@ neon-build = "0.4"
 # FIXME: need to pin neon to 0.4.0 until https://github.com/GabrielCastro/neon-serde/issues/61 is fixed
 neon = "=0.4.0"
 neon-serde = "0.4"
-mpc-wallet-lib = { version = "*", path = '../../mpc-wallet-lib', default-features = false, features = ["rust_gmp"] }
+nash-mpc = { version = "*", path = '../../nash-mpc', default-features = false, features = ["rust_gmp"] }
 serde_json = "1.0"
 
 [profile.release]

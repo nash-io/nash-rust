@@ -587,8 +587,8 @@ mod tests {
     use nash_protocol::protocol::orderbook::OrderbookRequest;
     use nash_protocol::protocol::place_order::LimitOrderRequest;
     use nash_protocol::protocol::sign_all_states::SignAllStates;
-    use nash_protocol::protocol::subscriptions::updated_orderbook::request::SubscribeOrderbook;
-    use nash_protocol::protocol::subscriptions::trades::request::SubscribeTrades;
+    use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
+    use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, Market, OrderCancellationPolicy, OrderStatus,
         OrderType,

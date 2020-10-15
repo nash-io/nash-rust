@@ -175,5 +175,5 @@ pub trait NashProtocolSubscription: Clone {
     fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
-    ) -> Result<SubscriptionResponse>;
+    ) -> Result<ResponseOrError<SubscriptionResponse>>;
 }

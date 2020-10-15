@@ -27,8 +27,11 @@ impl NashProtocolSubscription for SubscribeTrades {
     fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
-    ) -> Result<SubscriptionResponse> {
+    ) -> Result<ResponseOrError<SubscriptionResponse>> {
         let response = self.subscription_response_from_json(response)?;
-        Ok(SubscriptionResponse::NewTrade(response))
+        let wrapped_response = response.map(Box::new(|res| 
+            SubscriptionResponse::Trades(res)
+        ));
+        Ok(wrapped_response)
     }
 }

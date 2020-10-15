@@ -185,7 +185,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
     user_callback_sender: UnboundedSender<
         Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
     >,
-    global_subscription_sender: UnboundedSender<Result<SubscriptionResponse>>,
+    global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
     request: T,
     state: Arc<Mutex<State>>,
 ) {
@@ -282,8 +282,8 @@ pub struct Client {
     message_broker: MessageBroker,
     state: Arc<Mutex<State>>,
     timeout: u64,
-    global_subscription_sender: UnboundedSender<Result<SubscriptionResponse>>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<SubscriptionResponse>>,
+    global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
+    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }
 
 impl Client {

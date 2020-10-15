@@ -26,7 +26,6 @@ pub use exchange::{
     OrderType,
     OrderbookOrder,
     Rate,
-    SubscriptionTrade, //TODO: remove subscription trade
     Trade,
 };
 pub use keys::ApiKeys;

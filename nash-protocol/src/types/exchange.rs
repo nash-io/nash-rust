@@ -538,14 +538,6 @@ pub enum OrderStatus {
     Canceled,
 }
 
-/// Representation of executed trade
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SubscriptionTrade {
-    pub amount: AssetAmount,
-    pub order_type: BuyOrSell,
-    pub executed_at: String,
-}
-
 /// Relation of an account to a trade, whether maker, taker, or not related (none)
 #[derive(Clone, Debug, PartialEq)]
 pub enum AccountTradeSide {

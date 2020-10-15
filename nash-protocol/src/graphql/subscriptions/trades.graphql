@@ -1,12 +1,38 @@
 subscription SubscribeTrades($marketName: MarketName!){
   newTrades(marketName: $marketName){
-    amount{
-      amount, currency
+    id,
+    accountSide,
+    makerOrderId,
+    takerOrderId,
+    makerReceived {
+      amount,
+      currency
+    },
+    takerReceived {
+      amount,
+      currency
+    }
+    amount {
+      amount,
+      currency
+    },
+    executedAt,
+    makerFee {
+      amount,
+      currency
+    },
+    takerFee {
+      amount,
+      currency
+    },
+    market {
+      name
     },
     direction,
-    limitPrice{
-      amount, currencyA, currencyB
+    limitPrice {
+      amount
+      currencyA,
+      currencyB
     },
-    executedAt
   }
 }

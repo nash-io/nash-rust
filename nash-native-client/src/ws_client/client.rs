@@ -588,6 +588,7 @@ mod tests {
     use nash_protocol::protocol::place_order::types::LimitOrderRequest;
     use nash_protocol::protocol::sign_all_states::SignAllStates;
     use nash_protocol::protocol::subscriptions::updated_orderbook::request::SubscribeOrderbook;
+    use nash_protocol::protocol::subscriptions::trades::request::SubscribeTrades;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, Market, OrderCancellationPolicy, OrderStatus,
         OrderType,
@@ -917,6 +918,25 @@ mod tests {
             let client = init_client().await;
             let mut response = client
                 .subscribe_protocol(SubscribeOrderbook {
+                    market: Market::btc_usdc(),
+                })
+                .await
+                .unwrap();
+            let next_item = response.next().await.unwrap().unwrap();
+            println!("{:?}", next_item);
+            let next_item = response.next().await.unwrap().unwrap();
+            println!("{:?}", next_item);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn end_to_end_sub_trades() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let mut response = client
+                .subscribe_protocol(SubscribeTrades {
                     market: Market::btc_usdc(),
                 })
                 .await

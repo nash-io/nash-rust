@@ -9,13 +9,15 @@ use futures::lock::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+/// Request to list markets running on Nash.
+#[derive(Clone, Debug)]
+pub struct ListMarketsRequest;
+
+/// Contains a HashMap that connects market symbol to `Market`, which tracks precision data.
 #[derive(Clone, Debug)]
 pub struct ListMarketsResponse {
     pub markets: HashMap<String, Market>,
 }
-
-#[derive(Clone, Debug)]
-pub struct ListMarketsRequest;
 
 #[async_trait]
 impl NashProtocol for ListMarketsRequest {

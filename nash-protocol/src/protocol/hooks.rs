@@ -2,14 +2,14 @@
 //! requests and piplines via before and after hooks. These need to be explicity encoded
 //! in enum types to make the compiler happy.
 
-use super::asset_nonces::types::{AssetNoncesRequest, AssetNoncesResponse};
-use super::cancel_all_orders::types::{CancelAllOrders, CancelAllOrdersResponse};
-use super::dh_fill_pool::types::{DhFillPoolRequest, DhFillPoolResponse};
-use super::list_markets::types::{ListMarketsRequest, ListMarketsResponse};
-use super::orderbook::types::{OrderbookRequest, OrderbookResponse};
-use super::place_order::types::{LimitOrderRequest, LimitOrderResponse};
-use super::sign_all_states::{types::SignAllPipelineState, SignAllStates};
-use super::sign_states::types::{SignStatesRequest, SignStatesResponseData};
+use super::asset_nonces::{AssetNoncesRequest, AssetNoncesResponse};
+use super::cancel_all_orders::{CancelAllOrders, CancelAllOrdersResponse};
+use super::dh_fill_pool::{DhFillPoolRequest, DhFillPoolResponse};
+use super::list_markets::{ListMarketsRequest, ListMarketsResponse};
+use super::orderbook::{OrderbookRequest, OrderbookResponse};
+use super::place_order::{LimitOrderRequest, LimitOrderResponse};
+use super::sign_all_states::{SignAllPipelineState, SignAllStates};
+use super::sign_states::{SignStatesRequest, SignStatesResponse};
 use super::traits::{NashProtocol, NashProtocolPipeline};
 use super::{ResponseOrError, State};
 
@@ -39,7 +39,7 @@ pub enum NashProtocolResponse {
     LimitOrder(LimitOrderResponse),
     Orderbook(OrderbookResponse),
     CancelOrders(CancelAllOrdersResponse),
-    SignState(SignStatesResponseData),
+    SignState(SignStatesResponse),
     ListMarkets(ListMarketsResponse),
 }
 

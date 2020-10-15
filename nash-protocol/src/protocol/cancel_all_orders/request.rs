@@ -27,7 +27,8 @@ impl CancelAllOrders {
     }
 }
 
-pub fn cancel_all_canonical_string(variables: &cancel_all_orders::Variables) -> String {
+/// Generate payload string for signing a request to cancel all orders
+fn cancel_all_canonical_string(variables: &cancel_all_orders::Variables) -> String {
     let serialized_all = serde_json::to_string(variables).unwrap();
     general_canonical_string(
         "cancel_all_orders".to_string(),

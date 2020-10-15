@@ -14,6 +14,9 @@ pub mod neo;
 
 use eth::StateUpdatePayloadEth;
 
+/// Representation of state update payload. User signs this payload to
+/// confirm the current balance of their account and aggregate previous
+/// previous state changes that may have occurred via orders.
 pub enum StateUpdatePayload {
     Eth(StateUpdatePayloadEth),
 }

@@ -1,2 +1,3 @@
-pub mod types;
-pub use types::SignAllStates;
+mod types;
+
+pub use types::{SignAllStates, SignAllPipelineState};

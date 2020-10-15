@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use std::str::FromStr;
 
 
+/// List of new incoming trades for a market via subscription.
 #[derive(Clone, Debug)]
 pub struct TradesResponse {
     pub market: Market,

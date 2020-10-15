@@ -10,11 +10,14 @@ use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// List account balances. Optionally filter by asset symbol string
 #[derive(Clone, Debug)]
 pub struct ListAccountBalancesRequest {
     pub filter: Option<String>,
 }
 
+/// Account balances in personal wallet, pending transactions to state channel,
+/// and funds at rest in the state channel.
 #[derive(Clone, Debug)]
 pub struct ListAccountBalancesResponse {
     // Funds available in state channel

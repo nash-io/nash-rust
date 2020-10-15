@@ -4,6 +4,8 @@ use crate::errors::Result;
 use crate::graphql::updated_orderbook;
 use crate::types::OrderbookOrder;
 
+/// Order book updates pushed over a subscription consist of a list of bid orders and
+/// a list of ask orders.
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbookResponse {
     pub bids: Vec<OrderbookOrder>,

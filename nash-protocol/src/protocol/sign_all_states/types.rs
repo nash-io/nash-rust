@@ -1,8 +1,8 @@
 use super::super::{
-    asset_nonces::types::AssetNoncesRequest,
-    dh_fill_pool::types::DhFillPoolRequest,
-    list_markets::types::ListMarketsRequest,
-    sign_states::types::{SignStatesRequest, SignStatesResponseData},
+    asset_nonces::AssetNoncesRequest,
+    dh_fill_pool::DhFillPoolRequest,
+    list_markets::ListMarketsRequest,
+    sign_states::{SignStatesRequest, SignStatesResponse},
     NashProtocol, NashProtocolPipeline, ResponseOrError, State,
 };
 use super::super::{NashProtocolRequest, ProtocolHook};
@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+/// Request to initiate pipeline for signing all states
 #[derive(Clone, Debug)]
 pub struct SignAllStates;
 
@@ -21,11 +22,12 @@ impl SignAllStates {
         Self {}
     }
 }
-
+/// State associated with pipeline for signing all the states. The pipeline is
+/// finished when `previous_response` contains no more states to sign
 #[derive(Clone, Debug)]
 pub struct SignAllPipelineState {
     pub num_requests: u32,
-    pub previous_response: Option<SignStatesResponseData>,
+    pub previous_response: Option<SignStatesResponse>,
 }
 
 #[async_trait]

@@ -1,3 +1,8 @@
-pub mod request;
-pub mod response;
-pub mod types;
+//! Subscription to get new trades
+
+mod request;
+mod response;
+mod types;
+
+pub use request::SubscribeTrades;
+pub use response::TradesResponse;

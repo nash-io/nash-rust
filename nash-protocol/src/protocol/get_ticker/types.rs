@@ -9,11 +9,13 @@ use super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocol, ResponseOrError, State,
 };
 
+/// Get ticker associated with market
 #[derive(Clone, Debug)]
 pub struct TickerRequest {
     pub market: Market,
 }
 
+/// Ticker response information
 #[derive(Clone, Debug)]
 pub struct TickerResponse {
     pub id: String,

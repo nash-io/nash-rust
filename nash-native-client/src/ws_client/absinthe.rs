@@ -353,10 +353,10 @@ impl<'de> Deserialize<'de> for AbsintheInt {
 mod tests {
     use super::AbsintheWSResponse;
     use nash_protocol::graphql;
-    use nash_protocol::protocol::asset_nonces::types::AssetNoncesResponse;
+    use nash_protocol::protocol::asset_nonces::AssetNoncesResponse;
     use nash_protocol::protocol::ResponseOrError;
     use nash_protocol::protocol::{
-        dh_fill_pool::types::DhFillPoolResponse, try_response_from_json,
+        dh_fill_pool::DhFillPoolResponse, try_response_from_json,
     };
 
     #[test]

@@ -766,7 +766,7 @@ mod tests {
                 .run(ListAccountBalancesRequest { filter: None })
                 .await
                 .unwrap();
-            println!("{:?}", response);
+            println!("{:#?}", response);
         };
         runtime.block_on(async_block);
     }

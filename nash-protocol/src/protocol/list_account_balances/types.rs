@@ -26,6 +26,8 @@ pub struct ListAccountBalancesResponse {
     pub pending: HashMap<Asset, AssetAmount>,
     // Funds in personal wallet
     pub personal: HashMap<Asset, AssetAmount>,
+    // Funds in current orders
+    pub in_orders: HashMap<Asset, AssetAmount>
 }
 
 #[async_trait]

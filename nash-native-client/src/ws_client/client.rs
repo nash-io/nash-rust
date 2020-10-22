@@ -584,6 +584,7 @@ mod tests {
     use nash_protocol::protocol::list_account_trades::ListAccountTradesRequest;
     use nash_protocol::protocol::list_candles::ListCandlesRequest;
     use nash_protocol::protocol::list_markets::ListMarketsRequest;
+    use nash_protocol::protocol::list_trades::ListTradesRequest;
     use nash_protocol::protocol::orderbook::OrderbookRequest;
     use nash_protocol::protocol::place_order::LimitOrderRequest;
     use nash_protocol::protocol::sign_all_states::SignAllStates;
@@ -903,6 +904,24 @@ mod tests {
             let response = client
                 .run(TickerRequest {
                     market: Market::eth_usdc(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn end_to_end_list_trades() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client
+                .run(ListTradesRequest {
+                    market: Market::eth_usdc(),
+                    limit: None,
+                    before: None
                 })
                 .await
                 .unwrap();

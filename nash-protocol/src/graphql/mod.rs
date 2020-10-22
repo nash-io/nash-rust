@@ -25,7 +25,7 @@ type AffiliateDeveloperCode = String;
 )]
 pub struct GetOrderbook;
 
-/// Rust constructor for GetOrderbook query
+/// Rust constructor for GetTicker query
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "src/graphql/schema.json",
@@ -149,3 +149,11 @@ pub struct ListAccountTrades;
     response_derives = "Debug"
 )]
 pub struct ListCandles;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/graphql/schema.json",
+    query_path = "src/graphql/queries/list_trades.graphql",
+    response_derives = "Debug"
+)]
+pub struct ListTrades;

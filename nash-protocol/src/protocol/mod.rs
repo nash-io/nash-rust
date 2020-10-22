@@ -14,6 +14,7 @@ pub mod list_account_orders;
 pub mod list_account_trades;
 pub mod list_candles;
 pub mod list_markets;
+pub mod list_trades;
 pub mod orderbook;
 pub mod place_order;
 pub mod sign_all_states;

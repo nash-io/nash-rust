@@ -7,7 +7,7 @@ use graphql_client::GraphQLQuery;
 
 impl ListCandlesRequest {
     pub fn make_query(&self) -> graphql_client::QueryBody<list_candles::Variables> {
-        let get_order = list_candles::Variables {
+        let list_candles = list_candles::Variables {
             before: self.before.clone(),
             limit: self.limit,
             market_name: self.market.market_name(),
@@ -16,7 +16,7 @@ impl ListCandlesRequest {
             range_start: self.range.as_ref().map(|x| format!("{:?}", x.start)),
             range_stop: self.range.as_ref().map(|x| format!("{:?}", x.stop)),
         };
-        graphql::ListCandles::build_query(get_order)
+        graphql::ListCandles::build_query(list_candles)
     }
 }
 

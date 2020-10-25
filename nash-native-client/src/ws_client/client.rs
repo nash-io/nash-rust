@@ -903,11 +903,18 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(TickerRequest {
-                    market: Market::eth_usdc(),
+                    market: Market::btc_usdc(),
                 })
                 .await
                 .unwrap();
-            println!("{:?}", response);
+            println!("{:?}", response.response_or_error());
+            let response = client
+                .run(TickerRequest {
+                    market: Market::btc_usdc(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response.response_or_error());
         };
         runtime.block_on(async_block);
     }

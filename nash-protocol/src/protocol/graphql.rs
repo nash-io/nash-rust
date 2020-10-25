@@ -97,8 +97,10 @@ impl<T> ResponseOrError<T> {
     }
     /// Get response or else error
     pub fn response_or_error(self) -> Result<T> {
-        self.consume_response()
-            .ok_or(ProtocolError("Response failed with an error"))
+        match self {
+            Self::Response(DataResponse { data}) => Ok(data),
+            Self::Error(e) => Err(ProtocolError::coerce_static_from_str(&format!("{:?}", e)))
+        }
     }
     /// Get error from wrapper if it exists
     pub fn error(&self) -> Option<&ErrorResponse> {

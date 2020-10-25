@@ -938,6 +938,24 @@ mod tests {
     }
 
     #[test]
+    fn end_to_end_list_trades() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client
+                .run(ListTradesRequest {
+                    market: Market::eth_usdc(),
+                    limit: None,
+                    before: None
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
     fn end_to_end_sub_orderbook() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {

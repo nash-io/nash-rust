@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 /// Representation of blockchains to help navigate encoding issues
-
 #[derive(Clone, Debug, Copy, PartialEq, Hash, Eq)]
 pub enum Blockchain {
     NEO,
@@ -265,13 +264,103 @@ impl Market {
         Market::new(Asset::ETH.with_precision(6), Asset::BTC.with_precision(5))
     }
 
-    /// Create a market object from an string. Todo: add the rest of the markets
+    /// Return LINK/USDC `Market`
+    pub fn link_usdc() -> Self {
+        Market::new(Asset::LINK.with_precision(4), Asset::USDC.with_precision(4))
+    }
+
+    /// Return GAS/NEO `Market`
+    pub fn gas_neo() -> Self {
+        Market::new(Asset::GAS.with_precision(2), Asset::NEO.with_precision(3))
+    }
+
+    /// Return ZRX/USDC `Market`
+    pub fn zrx_usdc() -> Self {
+        Market::new(Asset::ZRX.with_precision(2), Asset::USDC.with_precision(3))
+    }
+
+    /// Return TRAC/BTC `Market`
+    pub fn trac_btc() -> Self {
+        Market::new(Asset::TRAC.with_precision(2), Asset::BTC.with_precision(8))
+    }
+
+    /// Return USDT/USDC `Market`
+    pub fn usdt_usdc() -> Self {
+        Market::new(Asset::USDT.with_precision(4), Asset::USDC.with_precision(4))
+    }
+
+    /// Return TRAC/USDC `Market`
+    pub fn trac_usdc() -> Self {
+        Market::new(Asset::TRAC.with_precision(2), Asset::USDC.with_precision(5))
+    }
+
+    /// Return NNN/USDC `Market`
+    pub fn nnn_usdc() -> Self {
+        Market::new(Asset::NNN.with_precision(1), Asset::USDC.with_precision(3))
+    }
+
+    /// Return GUNTHY/BTC `Market`
+    pub fn gunthy_btc() -> Self {
+        Market::new(Asset::GUNTHY.with_precision(2), Asset::BTC.with_precision(8))
+    }
+
+    /// Return RLC/ETH `Market`
+    pub fn rlc_eth() -> Self {
+        Market::new(Asset::RLC.with_precision(2), Asset::ETH.with_precision(6))
+    }
+
+    /// Return BAT/USDC `Market`
+    pub fn bat_usdc() -> Self {
+        Market::new(Asset::BAT.with_precision(3), Asset::USDC.with_precision(4))
+    }
+
+    /// Return QNT/ETH `Market`
+    pub fn qnt_eth() -> Self {
+        Market::new(Asset::QNT.with_precision(3), Asset::ETH.with_precision(5))
+    }
+
+    /// Return NEO/ETH `Market`
+    pub fn neo_eth() -> Self {
+        Market::new(Asset::NEO.with_precision(3), Asset::ETH.with_precision(5))
+    }
+
+    /// Return GAS/USDC `Market`
+    pub fn gas_usdc() -> Self {
+        Market::new(Asset::GAS.with_precision(2), Asset::USDC.with_precision(2))
+    }
+
+    /// Return GUNTHY/USDC `Market`
+    pub fn gunthy_usdc() -> Self {
+        Market::new(Asset::GUNTHY.with_precision(2), Asset::USDC.with_precision(4))
+    }
+
+    /// Return GAS/ETH `Market`
+    pub fn gas_eth() -> Self {
+        Market::new(Asset::GAS.with_precision(2), Asset::ETH.with_precision(5))
+    }
+
+    /// Create a market object from an string
     pub fn from_str(market_str: &str) -> Result<Self> {
         match market_str {
             "btc_usdc" => Ok(Self::btc_usdc()),
             "eth_usdc" => Ok(Self::eth_usdc()),
             "neo_usdc" => Ok(Self::neo_usdc()),
             "eth_btc" => Ok(Self::eth_btc()),
+            "nnn_usdc" => Ok(Self::nnn_usdc()),
+            "bat_usdc" => Ok(Self::bat_usdc()),
+            "rlc_eth" => Ok(Self::rlc_eth()),
+            "gas_eth" => Ok(Self::gas_eth()),
+            "gas_neo" => Ok(Self::gas_neo()),
+            "gas_usdc" => Ok(Self::gas_usdc()),
+            "gunthy_usdc" => Ok(Self::gunthy_usdc()),
+            "neo_eth" => Ok(Self::neo_eth()),
+            "usdt_usdc" => Ok(Self::usdt_usdc()),
+            "gunthy_btc" => Ok(Self::gunthy_btc()),
+            "trac_btc" => Ok(Self::trac_btc()),
+            "qnt_eth" => Ok(Self::qnt_eth()),
+            "zrx_usdc" => Ok(Self::zrx_usdc()),
+            "link_usdc" => Ok(Self::link_usdc()),
+            "trac_usdc" => Ok(Self::trac_usdc()),
             _ => Err(ProtocolError("Market not supported")),
         }
     }
@@ -301,7 +390,6 @@ impl std::fmt::Display for OrderType {
 }
 
 /// The Rate enum describes behavior common to rates/prices.
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Rate {
     OrderRate(OrderRate),
@@ -365,7 +453,6 @@ impl Rate {
 /// always wants order prices expressed in currency B. In either case, these rates
 /// are encoded as 64 bit integers which take the initial price ratio, multiply
 /// by 10^8, and then drop all precision after the decimal.
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct OrderRate {
     inner: BigDecimal,
@@ -416,7 +503,6 @@ type FeeRate = OrderRate;
 /// It is encoded with a precision that depends on the market and asset
 /// being traded. For example, in the ETH/USD market, ETH has a precision
 /// of 4. In an A/B market, amount is always in units of A.
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Amount {
     pub precision: u32,
@@ -444,7 +530,6 @@ impl Amount {
 /// Nonces are 32 bit integers. They increment over time such that data
 /// with lower nonces that has already been observed are rejected by the
 /// matching engine and smart contract.
-
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
 pub enum Nonce {
     Value(u32),
@@ -523,6 +608,7 @@ pub struct Candle {
     pub interval: CandleInterval,
     pub interval_start: DateTime<Utc>,
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct DateTimeRange {
     pub start: DateTime<Utc>,
@@ -612,6 +698,7 @@ pub struct OrderbookOrder {
 #[cfg(test)]
 mod tests {
     use super::{BigDecimal, FromStr, OrderRate};
+
     #[test]
     fn fee_rate_conversion_precision() {
         let rate = OrderRate::new("150").unwrap();

@@ -16,18 +16,20 @@ impl NashProtocolSubscription for SubscribeOrderbook {
         let query = self.make_query();
         serializable_to_json(&query)
     }
-    fn subscription_response_from_json(
+    async fn subscription_response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::SubscriptionResponse>> {
         let as_graphql = json_to_type_or_error(response)?;
-        self.response_from_graphql(as_graphql)
+        self.response_from_graphql(as_graphql, state).await
     }
-    fn wrap_response_as_any_subscription(
+    async fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<SubscriptionResponse>> {
-        let response = self.subscription_response_from_json(response)?;
+        let response = self.subscription_response_from_json(response, state).await?;
         let wrapped_response = response.map(Box::new(|res| 
             SubscriptionResponse::Orderbook(res)
         ));

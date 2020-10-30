@@ -46,9 +46,10 @@ impl NashProtocol for AssetNoncesRequest {
         serializable_to_json(&query)
     }
     /// Deserialize response to SignStates protocol request
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        _state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<AssetNoncesResponse, get_assets_nonces::ResponseData>(response)
     }

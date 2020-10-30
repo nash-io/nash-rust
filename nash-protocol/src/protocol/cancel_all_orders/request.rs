@@ -15,7 +15,7 @@ impl CancelAllOrders {
     ) -> graphql_client::QueryBody<cancel_all_orders::Variables> {
         let mut cancel_args = cancel_all_orders::Variables {
             payload: cancel_all_orders::CancelAllOrdersParams {
-                market_name: Some(self.market.market_name()),
+                market_name: Some(self.market.clone()),
                 timestamp: current_time_as_i64(),
             },
             signature: RequestPayloadSignature::empty().into(),

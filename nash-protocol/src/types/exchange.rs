@@ -245,37 +245,6 @@ impl Market {
             Err(ProtocolError("Asset not associated with market"))
         }
     }
-
-    /// Return BTC/USDC `Market`
-    pub fn btc_usdc() -> Self {
-        Market::new(Asset::BTC.with_precision(8), Asset::USDC.with_precision(1))
-    }
-
-    /// Return ETH/USDC `Market`
-    pub fn eth_usdc() -> Self {
-        Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2))
-    }
-
-    /// Return NEO/USDC `Market`
-    pub fn neo_usdc() -> Self {
-        Market::new(Asset::NEO.with_precision(3), Asset::USDC.with_precision(2))
-    }
-
-    /// Return ETH/BTC `Market`
-    pub fn eth_btc() -> Self {
-        Market::new(Asset::ETH.with_precision(6), Asset::BTC.with_precision(5))
-    }
-
-    /// Create a market object from an string. Todo: add the rest of the markets
-    pub fn from_str(market_str: &str) -> Result<Self> {
-        match market_str {
-            "btc_usdc" => Ok(Self::btc_usdc()),
-            "eth_usdc" => Ok(Self::eth_usdc()),
-            "neo_usdc" => Ok(Self::neo_usdc()),
-            "eth_btc" => Ok(Self::eth_btc()),
-            _ => Err(ProtocolError("Market not supported")),
-        }
-    }
 }
 
 /// Buy or sell type for Nash protocol. We don't use the one generated automatically

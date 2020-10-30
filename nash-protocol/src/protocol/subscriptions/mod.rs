@@ -34,24 +34,26 @@ impl NashProtocolSubscription for SubscriptionRequest {
             Self::Orderbook(orderbook_req) => orderbook_req.graphql(state).await
         }
     }
-    fn subscription_response_from_json(
+    async fn subscription_response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::SubscriptionResponse>> {
         match self {
             Self::Trades(trades_req) => Ok(trades_req
-                .subscription_response_from_json(response)?
+                .subscription_response_from_json(response, state).await?
                 .map(Box::new(|res| SubscriptionResponse::Trades(res)))),
             Self::Orderbook(orderbook_req) => Ok(orderbook_req
-                .subscription_response_from_json(response)?
+                .subscription_response_from_json(response, state).await?
                 .map(Box::new(|res| SubscriptionResponse::Orderbook(res))))
         }
     }
-    fn wrap_response_as_any_subscription(
+    async fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<SubscriptionResponse>> {
-        let response = self.subscription_response_from_json(response)?;
+        let response = self.subscription_response_from_json(response, state).await?;
         Ok(response)
     }
 }

@@ -65,4 +65,9 @@ impl State {
             .as_mut()
             .ok_or(ProtocolError("Signer not initiated"))
     }
+
+    pub fn get_market(&self, market_name: &str) -> Result<Market>{
+        let market_map = self.markets.as_ref().ok_or(ProtocolError("Market map does not exist"))?;
+        market_map.get(market_name).ok_or(ProtocolError("Market name does not exist")).map(|m| m.clone() )
+    }
 }

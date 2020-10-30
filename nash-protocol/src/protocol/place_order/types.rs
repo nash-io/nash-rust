@@ -106,9 +106,10 @@ impl NashProtocol for LimitOrderRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        _state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<LimitOrderResponse, place_limit_order::ResponseData>(response)
     }

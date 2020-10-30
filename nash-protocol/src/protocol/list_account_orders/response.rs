@@ -6,18 +6,23 @@ use crate::types::{
     OrderStatus, OrderType, Trade,
 };
 use chrono::{DateTime, Utc};
-use std::convert::TryFrom;
 use std::str::FromStr;
+use crate::protocol::traits::TryFromState;
+use crate::protocol::state::State;
+use std::sync::Arc;
+use futures::lock::Mutex;
+use async_trait::async_trait;
 
-impl TryFrom<list_account_orders::ResponseData> for ListAccountOrdersResponse {
-    type Error = ProtocolError;
-    fn try_from(response: list_account_orders::ResponseData) -> Result<ListAccountOrdersResponse> {
+#[async_trait]
+impl TryFromState<list_account_orders::ResponseData> for ListAccountOrdersResponse {
+    async fn from(response: list_account_orders::ResponseData, state: Arc<Mutex<State>>) -> Result<ListAccountOrdersResponse> {
         // FIXME (if possible): there is significant duplication of code between here and the response handles for list_account_trades
         // and get_account_order. unfortunately, given the way the graphql_client library works, it is not obvious how to make this
         // response processing generic
+        let state = state.lock().await;
         let mut orders = Vec::new();
         for order_data in response.list_account_orders.orders {
-            let market = Market::from_str(&order_data.market.name)?;
+            let market = state.get_market(&order_data.market.name)?;
             let amount_placed = market.asset_a.with_amount(&order_data.amount.amount)?;
             let amount_remaining = market
                 .asset_a
@@ -38,7 +43,7 @@ impl TryFrom<list_account_orders::ResponseData> for ListAccountOrdersResponse {
             let mut trades = Vec::new();
             for trade_data in order_data.trades.as_ref().unwrap() {
                 let trade_data = trade_data.as_ref().unwrap();
-                let market = Market::from_str(&trade_data.market.name)?;
+                let market = state.get_market(&trade_data.market.name)?;
                 let taker_fee = market.asset_b.with_amount(&trade_data.taker_fee.amount)?;
                 let maker_fee = market.asset_b.with_amount(&trade_data.maker_fee.amount)?;
                 let amount = market.asset_a.with_amount(&trade_data.amount.amount)?;

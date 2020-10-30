@@ -27,11 +27,7 @@ impl LimitOrderRequest {
     pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<LimitOrderConstructor> {
 
         let state = state.lock().await;
-        let market_map = state.markets.as_ref()
-            .ok_or(ProtocolError("No markets list avaialble"))?;
-        let market = market_map
-            .get(&self.market)
-            .ok_or(ProtocolError("Requested market does not exist"))?;
+        let market = state.get_market(&self.market)?;
 
         // Amount of order always in asset A in ME. This will handle precision conversion also...
         let amount_of_a = market.asset_a.with_amount(&self.amount)?;

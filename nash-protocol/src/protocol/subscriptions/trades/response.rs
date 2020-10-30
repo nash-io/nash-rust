@@ -4,10 +4,13 @@ use crate::errors::{ProtocolError, Result};
 use crate::graphql;
 use crate::types::{BuyOrSell, Market, Trade, AccountTradeSide};
 use graphql::subscribe_trades;
-use std::convert::{TryInto, TryFrom};
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
-
+use crate::protocol::traits::TryFromState;
+use crate::protocol::state::State;
+use std::sync::Arc;
+use futures::lock::Mutex;
+use async_trait::async_trait;
 
 /// List of new incoming trades for a market via subscription.
 #[derive(Clone, Debug)]
@@ -15,13 +18,13 @@ pub struct TradesResponse {
     pub market: Market,
     pub trades: Vec<Trade>,
 }
-
-impl TryFrom<subscribe_trades::ResponseData> for Vec<Trade> {
-    type Error = ProtocolError;
-    fn try_from(response: subscribe_trades::ResponseData) -> Result<Vec<Trade>> {
+#[async_trait]
+impl TryFromState<subscribe_trades::ResponseData> for Vec<Trade> {
+    async fn from(response: subscribe_trades::ResponseData, state: Arc<Mutex<State>>) -> Result<Vec<Trade>> {
+        let state = state.lock().await;
         let mut trades = Vec::new();
         for trade_data in response.new_trades {
-            let market = Market::from_str(&trade_data.market.name)?;
+            let market = state.get_market(&trade_data.market.name)?;
             let taker_fee = market.asset_b.with_amount(&trade_data.taker_fee.amount)?;
             let maker_fee = market.asset_b.with_amount(&trade_data.maker_fee.amount)?;
             let amount = market.asset_a.with_amount(&trade_data.amount.amount)?;
@@ -54,16 +57,20 @@ impl TryFrom<subscribe_trades::ResponseData> for Vec<Trade> {
 }
 
 impl SubscribeTrades {
-    pub fn response_from_graphql(
+    pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<subscribe_trades::ResponseData>,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<TradesResponse>> {
+        let state_lock = state.lock().await;
+        let market = state_lock.get_market(&self.market)?;
+        drop(state_lock);
         Ok(match response {
             ResponseOrError::Response(data) => {
                 let response = data.data;
                 ResponseOrError::from_data(TradesResponse {
-                    market: self.market,
-                    trades: response.try_into()?,
+                    market: market,
+                    trades: TryFromState::from(response, state).await?,
                 })
             }
             ResponseOrError::Error(error) => ResponseOrError::Error(error),

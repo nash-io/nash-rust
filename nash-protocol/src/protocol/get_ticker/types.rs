@@ -12,7 +12,7 @@ use super::super::{
 /// Get ticker associated with market
 #[derive(Clone, Debug)]
 pub struct TickerRequest {
-    pub market: Market,
+    pub market: String,
 }
 
 /// Ticker response information
@@ -42,11 +42,12 @@ impl NashProtocol for TickerRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
-        self.response_from_graphql(as_graphql)
+        self.response_from_graphql(as_graphql, state).await
     }
 }

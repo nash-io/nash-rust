@@ -3,15 +3,20 @@ use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_account_trades;
 use crate::types::{AccountTradeSide, BuyOrSell, Market, Trade};
 use chrono::{DateTime, Utc};
-use std::convert::TryFrom;
 use std::str::FromStr;
+use crate::protocol::traits::TryFromState;
+use crate::protocol::state::State;
+use std::sync::Arc;
+use futures::lock::Mutex;
+use async_trait::async_trait;
 
-impl TryFrom<list_account_trades::ResponseData> for ListAccountTradesResponse {
-    type Error = ProtocolError;
-    fn try_from(response: list_account_trades::ResponseData) -> Result<ListAccountTradesResponse> {
+#[async_trait]
+impl TryFromState<list_account_trades::ResponseData> for ListAccountTradesResponse {
+    async fn from(response: list_account_trades::ResponseData, state: Arc<Mutex<State>>) -> Result<ListAccountTradesResponse> {
+        let state = state.lock().await;
         let mut trades = Vec::new();
         for trade_data in response.list_account_trades.trades {
-            let market = Market::from_str(&trade_data.market.name)?;
+            let market = state.get_market(&trade_data.market.name)?;
             let taker_fee = market.asset_b.with_amount(&trade_data.taker_fee.amount)?;
             let maker_fee = market.asset_b.with_amount(&trade_data.maker_fee.amount)?;
             let amount = market.asset_a.with_amount(&trade_data.amount.amount)?;

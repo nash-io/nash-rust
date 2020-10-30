@@ -4,14 +4,16 @@ use futures::lock::Mutex;
 use crate::errors::Result;
 use crate::graphql::list_trades;
 use crate::types::{Market, Trade};
+use super::super::list_markets::ListMarketsRequest;
+use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use super::super::{
-    NashProtocol, ResponseOrError, serializable_to_json, State, try_response_from_json,
+    NashProtocol, ResponseOrError, serializable_to_json, State, try_response_with_state_from_json,
 };
 
 /// Get trades associated with market, filtering on several optional fields.
 #[derive(Clone, Debug)]
 pub struct ListTradesRequest {
-    pub market: Market,
+    pub market: String,
     /// max trades to return
     pub limit: Option<i64>,
     /// page before if using pagination
@@ -34,10 +36,22 @@ impl NashProtocol for ListTradesRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<ListTradesResponse, list_trades::ResponseData>(response)
+        try_response_with_state_from_json::<ListTradesResponse, list_trades::ResponseData>(response, state).await
+    }
+
+    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.lock().await;
+        let mut hooks = Vec::new();
+        if let None = state.markets {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                ListMarketsRequest,
+            )))
+        }
+        Ok(Some(hooks))
     }
 }

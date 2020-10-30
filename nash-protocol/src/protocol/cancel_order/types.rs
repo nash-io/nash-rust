@@ -14,7 +14,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct CancelOrderRequest {
     pub order_id: String, // TODO: ME bug, this should not be required field
-    pub market: Market,
+    pub market: String,
 }
 
 /// Response contains the order id of the canceled order if successful
@@ -35,9 +35,10 @@ impl NashProtocol for CancelOrderRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        _state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<CancelOrderResponse, cancel_order::ResponseData>(response)
     }

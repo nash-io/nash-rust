@@ -1,10 +1,11 @@
 use super::super::{
-    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
+    serializable_to_json, try_response_with_state_from_json, NashProtocol, ResponseOrError, State,
 };
 use crate::errors::Result;
 use crate::graphql::list_account_trades;
 use crate::types::{DateTimeRange, Market, Trade};
-
+use super::super::list_markets::ListMarketsRequest;
+use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -13,7 +14,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct ListAccountTradesRequest {
     /// FIXME: this is a required field because of a backend bug, it should be optional
-    pub market: Market,
+    pub market: String,
     /// page before if using pagination
     pub before: Option<String>,
     /// max trades to return
@@ -37,12 +38,24 @@ impl NashProtocol for ListAccountTradesRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<ListAccountTradesResponse, list_account_trades::ResponseData>(
-            response,
-        )
+        try_response_with_state_from_json::<ListAccountTradesResponse, list_account_trades::ResponseData>(
+            response, state
+        ).await
+    }
+
+    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.lock().await;
+        let mut hooks = Vec::new();
+        if let None = state.markets {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                ListMarketsRequest,
+            )))
+        }
+        Ok(Some(hooks))
     }
 }

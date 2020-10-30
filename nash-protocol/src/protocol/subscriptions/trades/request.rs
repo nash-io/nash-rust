@@ -6,13 +6,13 @@ use graphql_client::GraphQLQuery;
 /// Initiate subscription to get new trades
 #[derive(Clone, Debug)]
 pub struct SubscribeTrades {
-    pub market: Market,
+    pub market: String,
 }
 
 impl SubscribeTrades {
     pub fn make_query(&self) -> graphql_client::QueryBody<subscribe_trades::Variables> {
         graphql::SubscribeTrades::build_query(subscribe_trades::Variables {
-            market_name: self.market.market_name(),
+            market_name: self.market.clone(),
         })
     }
 }

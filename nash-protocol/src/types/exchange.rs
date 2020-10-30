@@ -7,6 +7,7 @@ use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use super::blockchain::bigdecimal_to_nash_prec;
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -244,37 +245,6 @@ impl Market {
             Err(ProtocolError("Asset not associated with market"))
         }
     }
-
-    /// Return BTC/USDC `Market`
-    pub fn btc_usdc() -> Self {
-        Market::new(Asset::BTC.with_precision(8), Asset::USDC.with_precision(1))
-    }
-
-    /// Return ETH/USDC `Market`
-    pub fn eth_usdc() -> Self {
-        Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2))
-    }
-
-    /// Return NEO/USDC `Market`
-    pub fn neo_usdc() -> Self {
-        Market::new(Asset::NEO.with_precision(3), Asset::USDC.with_precision(2))
-    }
-
-    /// Return ETH/BTC `Market`
-    pub fn eth_btc() -> Self {
-        Market::new(Asset::ETH.with_precision(6), Asset::BTC.with_precision(5))
-    }
-
-    /// Create a market object from an string. Todo: add the rest of the markets
-    pub fn from_str(market_str: &str) -> Result<Self> {
-        match market_str {
-            "btc_usdc" => Ok(Self::btc_usdc()),
-            "eth_usdc" => Ok(Self::eth_usdc()),
-            "neo_usdc" => Ok(Self::neo_usdc()),
-            "eth_btc" => Ok(Self::eth_btc()),
-            _ => Err(ProtocolError("Market not supported")),
-        }
-    }
 }
 
 /// Buy or sell type for Nash protocol. We don't use the one generated automatically
@@ -428,7 +398,8 @@ impl Amount {
     pub fn new(str_num: &str, precision: u32) -> Result<Self> {
         let value = BigDecimal::from_str(str_num)
             .map_err(|_| ProtocolError("String to BigDecimal failed in creating Amount"))?;
-        Ok(Self { value, precision })
+        let adjust_precision = bigdecimal_to_nash_prec(&value, precision);
+        Ok(Self { value: adjust_precision, precision })
     }
 
     pub fn from_bigdecimal(value: BigDecimal, precision: u32) -> Self {

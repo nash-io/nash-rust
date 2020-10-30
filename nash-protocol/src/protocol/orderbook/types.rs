@@ -1,6 +1,7 @@
 use crate::errors::Result;
-use crate::types::{Market, OrderbookOrder};
-
+use crate::types::OrderbookOrder;
+use super::super::list_markets::ListMarketsRequest;
+use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use super::super::{
 /// Get order book data for the provided market
 #[derive(Clone, Debug)]
 pub struct OrderbookRequest {
-    pub market: Market,
+    pub market: String,
 }
 
 /// An order book is a list of bid and ask orders
@@ -31,11 +32,23 @@ impl NashProtocol for OrderbookRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
-        self.response_from_graphql(as_graphql)
+        self.response_from_graphql(as_graphql, state).await
+    }
+
+    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.lock().await;
+        let mut hooks = Vec::new();
+        if let None = state.markets {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                ListMarketsRequest,
+            )))
+        }
+        Ok(Some(hooks))
     }
 }

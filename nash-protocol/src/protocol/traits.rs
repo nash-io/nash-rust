@@ -22,9 +22,10 @@ pub trait NashProtocol: Sync {
     // Note: state is declared as mutable
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value>;
     /// Convert JSON response to request to the protocol's associated type
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>>;
     /// Any state changes that result from execution of the protocol request
     /// The default implementation does nothing to state
@@ -160,9 +161,10 @@ pub trait NashProtocolSubscription: Clone {
     /// Convert the protocol request to GraphQL from communication with Nash server
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value>;
     /// Convert JSON response from incoming subscription data into protocol's associated type
-    fn subscription_response_from_json(
+    async fn subscription_response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::SubscriptionResponse>>;
     /// Update state based on data from incoming subscription response
     async fn process_subscription_response(
@@ -172,8 +174,16 @@ pub trait NashProtocolSubscription: Clone {
     ) -> Result<()> {
         Ok(())
     }
-    fn wrap_response_as_any_subscription(
+    async fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<SubscriptionResponse>>;
+}
+
+/// Similar to TryFrom, but threads additional State in as context
+/// that is necessary to perform the conversion
+#[async_trait]
+pub trait TryFromState<T>: Sized {
+    async fn from(source: T, state: Arc<Mutex<State>>) -> Result<Self>;
 }

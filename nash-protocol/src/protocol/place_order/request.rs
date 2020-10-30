@@ -4,7 +4,7 @@ use crate::graphql::place_limit_order;
 use crate::types::neo::PublicKey as NeoPublicKey;
 use crate::types::PublicKey;
 use crate::types::{
-    Asset, AssetAmount, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, OrderRate, Rate,
+    Asset, AssetAmount, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, OrderRate, Rate
 };
 use crate::utils::pad_zeros;
 use graphql_client::GraphQLQuery;
@@ -24,31 +24,38 @@ type BlockchainSignatures = Vec<Option<place_limit_order::BlockchainSignature>>;
 impl LimitOrderRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
     // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub fn make_constructor(&self) -> Result<LimitOrderConstructor> {
-        // Amount of order always in asset A in ME
-        let amount_of_a = self.market.asset_a.with_amount(&self.amount)?;
+    pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<LimitOrderConstructor> {
+
+        let state = state.lock().await;
+        let market = state.get_market(&self.market)?;
+
+        // Amount of order always in asset A in ME. This will handle precision conversion also...
+        let amount_of_a = market.asset_a.with_amount(&self.amount)?;
 
         // Price is always in terms of asset B in ME
-        let b_per_a: Rate = OrderRate::new(&self.price)?.into();
+        // TODO: add precision to rate and handle this better
+        let format_user_price = pad_zeros(&self.price, market.asset_b.precision)?;
+        let b_per_a: Rate = OrderRate::new(&format_user_price)?.into();
+        
         let a_per_b = b_per_a.invert_rate(None)?;
 
-        let amount_of_b = amount_of_a.exchange_at(&b_per_a, self.market.asset_b)?;
+        let amount_of_b = amount_of_a.exchange_at(&b_per_a, market.asset_b)?;
 
         let (source, rate, destination) = match self.buy_or_sell {
             BuyOrSell::Buy => {
                 // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount_of_b, a_per_b.clone(), self.market.asset_a)
+                (amount_of_b, a_per_b.clone(), market.asset_a)
             }
             BuyOrSell::Sell => {
                 // Selling: in SC, source is A, rate is A, and moving to asset B
-                (amount_of_a.clone(), b_per_a.clone(), self.market.asset_b)
+                (amount_of_a.clone(), b_per_a.clone(), market.asset_b)
             }
         };
 
         Ok(LimitOrderConstructor {
             me_amount: amount_of_a,
             me_rate: b_per_a,
-            market: self.market,
+            market: market.clone(),
             buy_or_sell: self.buy_or_sell,
             cancellation_policy: self.cancellation_policy,
             allow_taker: self.allow_taker,
@@ -213,7 +220,8 @@ impl LimitOrderConstructor {
         current_time: i64,
     ) -> Result<Vec<PayloadNonces>> {
         let state = state.lock().await;
-        let asset_nonces = &state.asset_nonces;
+        let asset_nonces = state.asset_nonces.as_ref()
+            .ok_or(ProtocolError("Asset nonce map does not exist"))?;
         let (from, to) = match self.buy_or_sell {
             BuyOrSell::Buy => (
                 self.market.asset_b.asset.name(),

@@ -6,7 +6,7 @@ use graphql_client::GraphQLQuery;
 impl OrderbookRequest {
     pub fn make_query(&self) -> graphql_client::QueryBody<get_orderbook::Variables> {
         graphql::GetOrderbook::build_query(get_orderbook::Variables {
-            market_name: self.market.market_name(),
+            market_name: self.market.to_string()
         })
     }
 }

@@ -10,7 +10,7 @@ impl ListCandlesRequest {
         let list_candles = list_candles::Variables {
             before: self.before.clone(),
             limit: self.limit,
-            market_name: self.market.market_name(),
+            market_name: self.market.clone(),
             chronological: self.chronological,
             interval: self.interval.as_ref().map(|x| x.into()),
             range_start: self.range.as_ref().map(|x| format!("{:?}", x.start)),

@@ -1,10 +1,11 @@
 use super::super::{
-    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
+    serializable_to_json, try_response_with_state_from_json, NashProtocol, ResponseOrError, State,
 };
 use crate::errors::Result;
 use crate::graphql::get_account_order;
 use crate::types::Order;
-
+use super::super::list_markets::ListMarketsRequest;
+use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -31,10 +32,22 @@ impl NashProtocol for GetAccountOrderRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<GetAccountOrderResponse, get_account_order::ResponseData>(response)
+        try_response_with_state_from_json::<GetAccountOrderResponse, get_account_order::ResponseData>(response, state).await
+    }
+
+    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.lock().await;
+        let mut hooks = Vec::new();
+        if let None = state.markets {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                ListMarketsRequest,
+            )))
+        }
+        Ok(Some(hooks))
     }
 }

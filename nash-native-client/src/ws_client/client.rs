@@ -199,7 +199,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                     if let Ok(json_payload) = response.subscription_json_payload() {
                         // First do normal subscription logic
                         let output =
-                            match request.subscription_response_from_json(json_payload.clone()) {
+                            match request.subscription_response_from_json(json_payload.clone(), state.clone()).await {
                                 Ok(response) => {
                                     match response {
                                         ResponseOrError::Error(err_resp) => {
@@ -231,7 +231,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
 
                         // Now do global subscription logic. If global channel fails, also kill process
                         if let Err(_e) = global_subscription_sender
-                            .send(request.wrap_response_as_any_subscription(json_payload))
+                            .send(request.wrap_response_as_any_subscription(json_payload, state.clone()).await)
                         {
                             break;
                         }
@@ -364,7 +364,7 @@ impl Client {
         // start a heartbeat loop
         spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
 
-        Ok(Self {
+        let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
             ws_incoming_reciever,
             last_message_id: Mutex::new(last_message_id),
@@ -374,7 +374,12 @@ impl Client {
             timeout,
             global_subscription_sender,
             global_subscription_receiver,
-        })
+        };
+
+        // grab market data upon initial setup
+        let _ = client.run(nash_protocol::protocol::list_markets::ListMarketsRequest).await?;
+
+        Ok(client)
     }
 
     /// Execute a NashProtocol request. Query will be created, executed over network, response will
@@ -393,7 +398,7 @@ impl Client {
         .map_err(|_| ProtocolError("Request timeout"))?
         .ok_or(ProtocolError("Failed to recieve message"))??;
         let json_payload = ws_response.json_payload()?;
-        let protocol_response = request.response_from_json(json_payload)?;
+        let protocol_response = request.response_from_json(json_payload, self.state.clone()).await?;
         if let Some(response) = protocol_response.response() {
             request
                 .process_response(response, self.state.clone())
@@ -677,7 +682,7 @@ mod tests {
             let response = client
                 .run(ListAccountOrdersRequest {
                     before: None,
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: None,
                     limit: Some(1),
                     status: Some(vec![
@@ -688,7 +693,7 @@ mod tests {
                     order_type: Some(vec![OrderType::Limit]),
                     range: Some(DateTimeRange {
                         start: Utc.ymd(2020, 9, 12).and_hms(0, 0, 0),
-                        stop: Utc.ymd(2020, 9, 16).and_hms(0, 10, 0),
+                        stop: Utc.ymd(2020, 10, 16).and_hms(0, 10, 0),
                     }),
                 })
                 .await
@@ -706,7 +711,7 @@ mod tests {
             let response = client
                 .run(ListAccountTradesRequest {
                     before: Some("1598934832187000008".to_string()),
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     limit: Some(1),
                     range: None,
                 })
@@ -725,7 +730,7 @@ mod tests {
             let response = client
                 .run(ListCandlesRequest {
                     before: None,
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     limit: Some(1),
                     chronological: None,
                     interval: None,
@@ -748,7 +753,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(CancelAllOrders {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -791,7 +796,7 @@ mod tests {
             let client = init_client().await;
             let mut requests = Vec::new();
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "5".to_string(),
@@ -799,7 +804,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1".to_string(),
                 price: "200".to_string(),
@@ -807,7 +812,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "5".to_string(),
@@ -815,7 +820,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1".to_string(),
                 price: "200".to_string(),
@@ -823,7 +828,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "1".to_string(),
@@ -831,7 +836,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "0.451".to_string(),
                 price: "75.1".to_string(),
@@ -839,7 +844,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1.24".to_string(),
                 price: "821".to_string(),
@@ -847,7 +852,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1.24".to_string(),
                 price: "821.12".to_string(),
@@ -869,7 +874,7 @@ mod tests {
                 println!("{:?}", response);
                 let response = client
                     .run(CancelOrderRequest {
-                        market: Market::eth_usdc(),
+                        market: "eth_usdc".to_string(),
                         order_id,
                     })
                     .await
@@ -887,7 +892,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(OrderbookRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -903,14 +908,14 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(TickerRequest {
-                    market: Market::btc_usdc(),
+                    market: "btc_usdc".to_string(),
                 })
                 .await
                 .unwrap();
             println!("{:?}", response.response_or_error());
             let response = client
                 .run(TickerRequest {
-                    market: Market::btc_usdc(),
+                    market: "btc_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -926,25 +931,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(ListTradesRequest {
-                    market: Market::eth_usdc(),
-                    limit: None,
-                    before: None
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
-        };
-        runtime.block_on(async_block);
-    }
-
-    #[test]
-    fn end_to_end_list_trades() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
-        let async_block = async {
-            let client = init_client().await;
-            let response = client
-                .run(ListTradesRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     limit: None,
                     before: None
                 })
@@ -962,7 +949,7 @@ mod tests {
             let client = init_client().await;
             let mut response = client
                 .subscribe_protocol(SubscribeOrderbook {
-                    market: Market::btc_usdc(),
+                    market: "btc_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -981,7 +968,7 @@ mod tests {
             let client = init_client().await;
             let mut response = client
                 .subscribe_protocol(SubscribeTrades {
-                    market: Market::btc_usdc(),
+                    market: "btc_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -994,6 +981,35 @@ mod tests {
     }
 
     #[test]
+    fn end_to_end_buy_eth_btc() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client
+                .run(LimitOrderRequest {
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.1".to_string(),
+                    price: "0.0213070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            let response = client
+                .run(CancelAllOrders {
+                    market: "eth_btc".to_string(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            assert_eq!(response.response().unwrap().accepted, true);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
     fn sub_orderbook_via_client_stream() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
@@ -1001,7 +1017,7 @@ mod tests {
             {
                 let _response = client
                     .subscribe_protocol(SubscribeOrderbook {
-                        market: Market::btc_usdc(),
+                        market: "btc_usdc".to_string(),
                     })
                     .await
                     .unwrap();
@@ -1021,7 +1037,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Sell,
                     amount: "0.02".to_string(),
                     price: "800".to_string(),
@@ -1041,7 +1057,7 @@ mod tests {
             println!("{:?}", response);
             let response = client
                 .run(CancelAllOrders {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -1058,7 +1074,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Buy,
                     amount: "0.2".to_string(),
                     price: "50".to_string(),
@@ -1070,7 +1086,7 @@ mod tests {
             println!("{:?}", response);
             let response = client
                 .run(CancelAllOrders {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();

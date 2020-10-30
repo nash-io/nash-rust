@@ -12,7 +12,7 @@ use crate::types::{
     AssetAmount, AssetofPrecision, Blockchain, BuyOrSell, Market, Nonce, OrderCancellationPolicy,
     OrderStatus, OrderType, Rate,
 };
-use crate::utils::{current_time_as_i64, pad_zeros};
+use crate::utils::current_time_as_i64;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::lock::Mutex;

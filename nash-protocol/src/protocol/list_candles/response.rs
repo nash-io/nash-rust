@@ -1,7 +1,7 @@
 use super::types::ListCandlesResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_candles;
-use crate::types::{Candle, CandleInterval, Market};
+use crate::types::{Candle, CandleInterval};
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
 use crate::protocol::traits::TryFromState;

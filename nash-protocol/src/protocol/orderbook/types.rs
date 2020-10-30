@@ -27,7 +27,7 @@ pub struct OrderbookResponse {
 impl NashProtocol for OrderbookRequest {
     type Response = OrderbookResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }

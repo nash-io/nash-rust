@@ -3,7 +3,7 @@ use futures::lock::Mutex;
 use std::sync::Arc;
 
 use crate::errors::Result;
-use crate::types::{AssetAmount, Market};
+use crate::types::AssetAmount;
 
 use super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocol, ResponseOrError, State,

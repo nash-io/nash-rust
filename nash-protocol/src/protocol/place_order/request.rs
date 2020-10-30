@@ -4,7 +4,7 @@ use crate::graphql::place_limit_order;
 use crate::types::neo::PublicKey as NeoPublicKey;
 use crate::types::PublicKey;
 use crate::types::{
-    Asset, AssetAmount, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, OrderRate, Rate, Market
+    Asset, AssetAmount, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, OrderRate, Rate
 };
 use crate::utils::pad_zeros;
 use graphql_client::GraphQLQuery;

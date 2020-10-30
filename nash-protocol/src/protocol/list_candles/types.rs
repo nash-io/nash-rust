@@ -3,7 +3,7 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::list_candles;
-use crate::types::{Candle, CandleInterval, DateTimeRange, Market};
+use crate::types::{Candle, CandleInterval, DateTimeRange};
 use super::super::list_markets::ListMarketsRequest;
 use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;

@@ -1,5 +1,4 @@
 use crate::graphql;
-use crate::types::Market;
 use graphql::subscribe_trades;
 use graphql_client::GraphQLQuery;
 

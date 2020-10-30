@@ -2,7 +2,7 @@ use super::types::ListAccountOrdersResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_account_orders;
 use crate::types::{
-    AccountTradeSide, BuyOrSell, Market, Order, OrderCancellationPolicy, OrderCancellationReason,
+    AccountTradeSide, BuyOrSell, Order, OrderCancellationPolicy, OrderCancellationReason,
     OrderStatus, OrderType, Trade,
 };
 use chrono::{DateTime, Utc};

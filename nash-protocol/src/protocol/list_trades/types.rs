@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use crate::errors::Result;
 use crate::graphql::list_trades;
-use crate::types::{Market, Trade};
+use crate::types::Trade;
 use super::super::list_markets::ListMarketsRequest;
 use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use super::super::{

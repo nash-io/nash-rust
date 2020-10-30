@@ -2,7 +2,7 @@ use super::types::GetAccountOrderResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::get_account_order;
 use crate::types::{
-    AccountTradeSide, BuyOrSell, Market, Order, OrderCancellationPolicy, OrderCancellationReason,
+    AccountTradeSide, BuyOrSell, Order, OrderCancellationPolicy, OrderCancellationReason,
     OrderStatus, OrderType, Trade,
 };
 use crate::protocol::{State, traits::TryFromState};

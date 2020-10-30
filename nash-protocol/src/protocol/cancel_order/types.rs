@@ -3,7 +3,6 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::cancel_order;
-use crate::types::Market;
 
 use async_trait::async_trait;
 use futures::lock::Mutex;

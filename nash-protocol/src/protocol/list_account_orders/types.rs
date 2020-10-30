@@ -3,7 +3,7 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::list_account_orders;
-use crate::types::{BuyOrSell, DateTimeRange, Market, Order, OrderStatus, OrderType};
+use crate::types::{BuyOrSell, DateTimeRange, Order, OrderStatus, OrderType};
 use super::super::list_markets::ListMarketsRequest;
 use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;

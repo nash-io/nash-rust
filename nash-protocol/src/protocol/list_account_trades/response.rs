@@ -1,7 +1,7 @@
 use super::types::ListAccountTradesResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_account_trades;
-use crate::types::{AccountTradeSide, BuyOrSell, Market, Trade};
+use crate::types::{AccountTradeSide, BuyOrSell, Trade};
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
 use crate::protocol::traits::TryFromState;

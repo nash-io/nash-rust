@@ -2,7 +2,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_trades;
-use crate::types::{AccountTradeSide, BuyOrSell, Market, Trade};
+use crate::types::{AccountTradeSide, BuyOrSell, Trade};
 use super::types::ListTradesResponse;
 
 use crate::protocol::traits::TryFromState;

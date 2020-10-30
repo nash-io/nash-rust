@@ -791,7 +791,7 @@ mod tests {
             let client = init_client().await;
             let mut requests = Vec::new();
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "5".to_string(),
@@ -799,7 +799,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1".to_string(),
                 price: "200".to_string(),
@@ -807,7 +807,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "5".to_string(),
@@ -815,7 +815,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1".to_string(),
                 price: "200".to_string(),
@@ -823,7 +823,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "1".to_string(),
@@ -831,7 +831,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "0.451".to_string(),
                 price: "75.1".to_string(),
@@ -839,7 +839,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1.24".to_string(),
                 price: "821".to_string(),
@@ -847,7 +847,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1.24".to_string(),
                 price: "821.12".to_string(),
@@ -938,24 +938,6 @@ mod tests {
     }
 
     #[test]
-    fn end_to_end_list_trades() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
-        let async_block = async {
-            let client = init_client().await;
-            let response = client
-                .run(ListTradesRequest {
-                    market: Market::eth_usdc(),
-                    limit: None,
-                    before: None
-                })
-                .await
-                .unwrap();
-            println!("{:?}", response);
-        };
-        runtime.block_on(async_block);
-    }
-
-    #[test]
     fn end_to_end_sub_orderbook() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
@@ -994,6 +976,35 @@ mod tests {
     }
 
     #[test]
+    fn end_to_end_buy_eth_btc() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client
+                .run(LimitOrderRequest {
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.1".to_string(),
+                    price: "0.0213070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            let response = client
+                .run(CancelAllOrders {
+                    market: Market::eth_btc(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            assert_eq!(response.response().unwrap().accepted, true);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
     fn sub_orderbook_via_client_stream() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
@@ -1021,7 +1032,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Sell,
                     amount: "0.02".to_string(),
                     price: "800".to_string(),
@@ -1058,7 +1069,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Buy,
                     amount: "0.2".to_string(),
                     price: "50".to_string(),

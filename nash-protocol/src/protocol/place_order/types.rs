@@ -22,7 +22,7 @@ use std::sync::Arc;
 /// price amount will always be in terms of A and price in terms of B.
 #[derive(Clone, Debug)]
 pub struct LimitOrderRequest {
-    pub market: Market,
+    pub market: String,
     pub buy_or_sell: BuyOrSell,
     pub amount: String,
     pub price: String,
@@ -32,21 +32,18 @@ pub struct LimitOrderRequest {
 
 impl LimitOrderRequest {
     pub fn new(
-        market: Market,
+        market: String,
         buy_or_sell: BuyOrSell,
         amount_a: &str,
         price_b: &str,
         cancellation_policy: OrderCancellationPolicy,
         allow_taker: bool,
     ) -> Result<Self> {
-        // Convert input strings into the necessary precision for the market
-        let amount_precision = pad_zeros(amount_a, market.asset_a.precision)?;
-        let price_precision = pad_zeros(price_b, market.asset_b.precision)?;
         Ok(Self {
             market,
             buy_or_sell,
-            amount: amount_precision,
-            price: price_precision,
+            amount: amount_a.to_string(),
+            price: price_b.to_string(),
             cancellation_policy,
             allow_taker,
         })
@@ -94,7 +91,7 @@ impl NashProtocol for LimitOrderRequest {
     type Response = LimitOrderResponse;
 
     async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
-        let builder = self.make_constructor()?;
+        let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
         let mut state = state.lock().await;
@@ -130,12 +127,14 @@ impl NashProtocol for LimitOrderRequest {
         let mut state = state.lock().await;
         let mut hooks = Vec::new();
 
-        // If the client doesn't currently have a list of assets, run a list markets query to
-        // get that. The assets will then be stored in client state
-        if let None = state.assets {
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
-                ListMarketsRequest,
-            )));
+        // If we need assets or markets list, pull them
+        match (&state.assets, &state.markets) {
+            (None, _) | (_, None) => {
+                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                    ListMarketsRequest,
+                )));
+            }
+            _ => {}
         }
 
         // If have run out of r values, get more before running this pipeline
@@ -148,14 +147,8 @@ impl NashProtocol for LimitOrderRequest {
             }
         }
 
-        // If asset nonces don't exist, get them
-        let mut assets_reqs = false;
-        for asset in vec![self.market.asset_a.asset, self.market.asset_b.asset] {
-            if state.asset_nonces.get(asset.name()) == None {
-                assets_reqs = true;
-            }
-        }
-        if assets_reqs {
+        // Retrieve asset nonces if we don't have them
+        if let None = state.asset_nonces {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
                 AssetNoncesRequest::new(),
             )));

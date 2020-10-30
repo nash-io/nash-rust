@@ -39,12 +39,14 @@ impl NashProtocol for ListMarketsRequest {
         let mut state = state.lock().await;
         let markets: Vec<Market> = response.markets.iter().map(|(_k, v)| v.clone()).collect();
         let mut assets = HashSet::new();
+        let mut market_map = HashMap::new();
         for market in &markets {
             assets.insert(market.asset_a.asset);
             assets.insert(market.asset_b.asset);
+            market_map.insert(market.market_name(), market.clone());
         }
         // store market and asset list in the client
-        state.markets = Some(markets);
+        state.markets = Some(market_map);
         state.assets = Some(assets.into_iter().collect());
         Ok(())
     }

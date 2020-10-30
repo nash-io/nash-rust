@@ -7,6 +7,7 @@ use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use super::blockchain::bigdecimal_to_nash_prec;
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -428,7 +429,8 @@ impl Amount {
     pub fn new(str_num: &str, precision: u32) -> Result<Self> {
         let value = BigDecimal::from_str(str_num)
             .map_err(|_| ProtocolError("String to BigDecimal failed in creating Amount"))?;
-        Ok(Self { value, precision })
+        let adjust_precision = bigdecimal_to_nash_prec(&value, precision);
+        Ok(Self { value: adjust_precision, precision })
     }
 
     pub fn from_bigdecimal(value: BigDecimal, precision: u32) -> Self {

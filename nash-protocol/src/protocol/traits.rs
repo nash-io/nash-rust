@@ -181,6 +181,8 @@ pub trait NashProtocolSubscription: Clone {
     ) -> Result<ResponseOrError<SubscriptionResponse>>;
 }
 
+/// Similar to TryFrom, but threads additional State in as context
+/// that is necessary to perform the conversion
 #[async_trait]
 pub trait TryFromState<T>: Sized {
     async fn from(source: T, state: Arc<Mutex<State>>) -> Result<Self>;

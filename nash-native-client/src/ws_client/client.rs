@@ -364,7 +364,7 @@ impl Client {
         // start a heartbeat loop
         spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
 
-        Ok(Self {
+        let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
             ws_incoming_reciever,
             last_message_id: Mutex::new(last_message_id),
@@ -374,7 +374,12 @@ impl Client {
             timeout,
             global_subscription_sender,
             global_subscription_receiver,
-        })
+        };
+
+        // grab market data upon initial setup
+        let _ = client.run(nash_protocol::protocol::list_markets::ListMarketsRequest).await?;
+
+        Ok(client)
     }
 
     /// Execute a NashProtocol request. Query will be created, executed over network, response will

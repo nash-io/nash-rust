@@ -4,6 +4,7 @@ use crate::graphql::list_markets;
 use crate::types::{Asset, Market};
 
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 fn decimal_str_to_precision(decimal_str: &str) -> Result<u32> {
     let parts: Vec<&str> = decimal_str.split(".").collect();
@@ -13,8 +14,10 @@ fn decimal_str_to_precision(decimal_str: &str) -> Result<u32> {
     Ok(parts[1].len() as u32)
 }
 
-impl From<list_markets::ResponseData> for ListMarketsResponse {
-    fn from(response: list_markets::ResponseData) -> Self {
+impl TryFrom<list_markets::ResponseData> for ListMarketsResponse {
+    type Error = ProtocolError;
+
+    fn try_from(response: list_markets::ResponseData) -> Result<Self> {
         let mut markets = HashMap::new();
         for market_data in response.list_markets {
             let market_name = market_data.name;
@@ -35,9 +38,19 @@ impl From<list_markets::ResponseData> for ListMarketsResponse {
                     decimal_str_to_precision(&market_data.min_trade_increment_b).expect("Impossible given 'decimal_str_to_precision' unless ME returns garbage for b precision");
                 let prec_asset_a = asset_a.with_precision(precision_a);
                 let prec_asset_b = asset_b.with_precision(precision_b);
-                markets.insert(market_name, Market::new(prec_asset_a, prec_asset_b));
+                let min_trade_size_a = prec_asset_a.with_amount(&market_data.min_trade_size)?;
+                let min_trade_size_b = prec_asset_b.with_amount(&market_data.min_trade_size_b)?;
+                markets.insert(
+                    market_name,
+                    Market::new(
+                        prec_asset_a,
+                        prec_asset_b,
+                        min_trade_size_a,
+                        min_trade_size_b,
+                    ),
+                );
             }
         }
-        Self { markets }
+        Ok(Self { markets })
     }
 }

@@ -178,7 +178,7 @@ impl Asset {
 }
 
 /// A specific amount of an asset being traded
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetAmount {
     pub asset: AssetofPrecision,
     pub amount: Amount,
@@ -197,11 +197,13 @@ impl AssetAmount {
 
 /// This type encodes all the information necessary for a client operating
 /// over the protocol to understand a market.
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Market {
     // FIXME: probably more things here?
     pub asset_a: AssetofPrecision,
     pub asset_b: AssetofPrecision,
+    pub min_trade_size_a: AssetAmount,
+    pub min_trade_size_b: AssetAmount,
 }
 
 impl Market {
@@ -210,8 +212,18 @@ impl Market {
     /// use nash_protocol::types::{Market, Asset};
     /// Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2));
     /// ```
-    pub fn new(asset_a: AssetofPrecision, asset_b: AssetofPrecision) -> Self {
-        Self { asset_a, asset_b }
+    pub fn new(
+        asset_a: AssetofPrecision,
+        asset_b: AssetofPrecision,
+        min_trade_size_a: AssetAmount,
+        min_trade_size_b: AssetAmount
+    ) -> Self {
+        Self {
+            asset_a,
+            asset_b,
+            min_trade_size_a,
+            min_trade_size_b
+        }
     }
 
     /// Return name of A/B market as "A_B"
@@ -387,7 +399,7 @@ type FeeRate = OrderRate;
 /// being traded. For example, in the ETH/USD market, ETH has a precision
 /// of 4. In an A/B market, amount is always in units of A.
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Amount {
     pub precision: u32,
     pub value: BigDecimal,

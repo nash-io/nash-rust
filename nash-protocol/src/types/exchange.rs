@@ -45,6 +45,7 @@ pub enum Asset {
     TRAC,
     GUNTHY,
     NNN,
+    NOIA
 }
 
 impl Asset {
@@ -67,6 +68,7 @@ impl Asset {
             Self::NEO => Blockchain::NEO,
             Self::GAS => Blockchain::NEO,
             Self::NNN => Blockchain::NEO,
+            Self::NOIA => Blockchain::Ethereum
         }
     }
 
@@ -91,6 +93,7 @@ impl Asset {
             Self::TRAC => "trac",
             Self::GUNTHY => "gunthy",
             Self::NNN => "nnn",
+            Self::NOIA => "noia"
         }
     }
 
@@ -112,6 +115,7 @@ impl Asset {
             "trac" => Ok(Self::TRAC),
             "gunthy" => Ok(Self::GUNTHY),
             "nnn" => Ok(Self::NNN),
+            "noia" => Ok(Self::NOIA),
             _ => Err(ProtocolError("Asset not known")),
         }
     }

@@ -100,6 +100,7 @@ impl Asset {
             Self::ANT => [0x00, 0x0e],
             Self::TRAC => [0x00, 0x14],
             Self::GUNTHY => [0x00, 0x15],
+            Self::NOIA => [0x00, 0x19],
             Self::BTC => [0xff, 0xff],
             Self::NEO => [0xff, 0xff],
             Self::GAS => [0xff, 0xff],
@@ -122,6 +123,7 @@ impl Asset {
             [0x00, 0x0e] => Ok(Self::ANT),
             [0x00, 0x14] => Ok(Self::TRAC),
             [0x00, 0x15] => Ok(Self::GUNTHY),
+            [0x00, 0x19] => Ok(Self::NOIA),
             _ => Err(ProtocolError("Invalid Asset ID in bytes")),
         }
     }

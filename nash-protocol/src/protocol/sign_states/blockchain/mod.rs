@@ -30,6 +30,7 @@ impl ContractBalanceState {
                     // TODO: verify other properties here
                     true
                 } else {
+                    println!("{:?}", state_data);
                     false
                 }
             }

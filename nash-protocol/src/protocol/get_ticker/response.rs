@@ -3,14 +3,14 @@ use super::types::{TickerRequest, TickerResponse};
 use crate::errors::Result;
 use crate::graphql::get_ticker;
 use crate::protocol::state::State;
-use std::sync::Arc;
 use futures::lock::Mutex;
+use std::sync::Arc;
 
 impl TickerRequest {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<get_ticker::ResponseData>,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<TickerResponse>> {
         // These unwraps are safe. ME_FIXME
         let state = state.lock().await;
@@ -19,40 +19,55 @@ impl TickerRequest {
             ResponseOrError::Response(data) => {
                 let response = data.data;
                 let ticker = response.get_ticker;
+
+                let high_price_24h = match &ticker.high_price24h {
+                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let low_price_24h = match &ticker.low_price24h {
+                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let last_price = match &ticker.last_price {
+                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let price_change_24h = match &ticker.price_change24h {
+                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let best_ask_amount = match &ticker.best_ask_size {
+                    Some(price) => Some(market.asset_a.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let best_ask_price = match &ticker.best_ask_price {
+                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let best_bid_amount = match &ticker.best_bid_size {
+                    Some(price) => Some(market.asset_a.with_amount(&price.amount)?),
+                    None => None,
+                };
+                let best_bid_price = match &ticker.best_bid_price {
+                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    None => None,
+                };
+
                 let converted_ticker = TickerResponse {
                     id: ticker.id.clone(),
                     market_name: ticker.market_name.clone(),
-                    a_volume_24h: market
-                        .asset_a
-                        .with_amount(&ticker.a_volume24h.amount)?,
-                    b_volume_24h: market
-                        .asset_b
-                        .with_amount(&ticker.b_volume24h.amount)?,
-                    high_price_24h: market
-                        .asset_b
-                        .with_amount(&ticker.high_price24h.unwrap().amount)?,
-                    low_price_24h: market
-                        .asset_b
-                        .with_amount(&ticker.low_price24h.unwrap().amount)?,
-                    last_price: market
-                        .asset_b
-                        .with_amount(&ticker.last_price.unwrap().amount)?,
-                    price_change_24h: market
-                        .asset_b
-                        .with_amount(&ticker.price_change24h.unwrap().amount)?,
-                    best_ask_amount: market
-                        .asset_a
-                        .with_amount(&ticker.best_ask_size.unwrap().amount)?,
-                    best_ask_price: market
-                        .asset_b
-                        .with_amount(&ticker.best_ask_price.unwrap().amount)?,
-                    best_bid_amount: market
-                        .asset_a
-                        .with_amount(&ticker.best_bid_size.unwrap().amount)?,
-                    best_bid_price: market
-                        .asset_b
-                        .with_amount(&ticker.best_bid_price.unwrap().amount)?,
+                    a_volume_24h: market.asset_a.with_amount(&ticker.a_volume24h.amount)?,
+                    b_volume_24h: market.asset_b.with_amount(&ticker.b_volume24h.amount)?,
+                    high_price_24h,
+                    low_price_24h,
+                    last_price,
+                    price_change_24h,
+                    best_ask_amount,
+                    best_ask_price,
+                    best_bid_amount,
+                    best_bid_price,
                 };
+
                 Ok(ResponseOrError::Response(DataResponse {
                     data: converted_ticker,
                 }))

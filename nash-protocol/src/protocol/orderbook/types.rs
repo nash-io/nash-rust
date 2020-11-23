@@ -21,6 +21,7 @@ pub struct OrderbookRequest {
 pub struct OrderbookResponse {
     pub asks: Vec<OrderbookOrder>,
     pub bids: Vec<OrderbookOrder>,
+    pub update_id: i64,
 }
 
 #[async_trait]

@@ -48,12 +48,12 @@ pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<Abs
 // back up to client on anoter channel.
 pub fn spawn_sender_loop(
     mut websocket: WebSocket,
-    mut ws_outgoing_reciever: UnboundedReceiver<AbsintheWSRequest>,
+    mut ws_outgoing_receiver: UnboundedReceiver<AbsintheWSRequest>,
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
         loop {
-            let next_outgoing = ws_outgoing_reciever.recv().boxed();
+            let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = websocket.next();
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
@@ -332,7 +332,7 @@ impl Client {
             .map_err(|_| ProtocolError("Could not connect to WS"))?;
 
         // channels to pass messages between threads. bounded at 100 unprocessed
-        let (ws_outgoing_sender, ws_outgoing_reciever) = unbounded_channel();
+        let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();
 
         let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
 
@@ -341,7 +341,7 @@ impl Client {
         // This will loop over WS connection, send things out, and route things in
         spawn_sender_loop(
             socket,
-            ws_outgoing_reciever,
+            ws_outgoing_receiver,
             message_broker.link.clone(),
         );
 

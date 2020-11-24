@@ -49,7 +49,6 @@ pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<Abs
 pub fn spawn_sender_loop(
     mut websocket: WebSocket,
     mut ws_outgoing_reciever: UnboundedReceiver<AbsintheWSRequest>,
-    ws_incoming_sender: UnboundedSender<Result<AbsintheWSResponse>>,
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
@@ -66,7 +65,6 @@ pub fn spawn_sender_loop(
                                 let error = ProtocolError(
                                     "failed to send message on WS connection, likely disconnected",
                                 );
-                                let _ = ws_incoming_sender.send(Err(error.clone()));
                                 let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                                 break;
                             }
@@ -74,7 +72,6 @@ pub fn spawn_sender_loop(
                     } else {
                         let error =
                             ProtocolError("outgoing channel died or errored, likely disconnected");
-                        let _ = ws_incoming_sender.send(Err(error.clone()));
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
@@ -83,21 +80,17 @@ pub fn spawn_sender_loop(
                     if let Some(Ok(Ok(resp))) = in_msg.map(|x| x.map(|x| x.into_text())) {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
                             // Similarly, let the client timeout on incoming response if this fails and handle that
-                            let _ignore = ws_incoming_sender.send(Ok(resp_copy1));
                             // todo: this is a hack since the graphql library has not implemented clone() for responses
                             // but we need another copy of the response to send to the broker
                             // this could actually be more efficient and have broker handle all messages?
-                            let resp_copy2: AbsintheWSResponse =
-                                serde_json::from_str(&resp).unwrap(); // this unwrap is safe
                             let _ignore =
-                                message_broker_link.send(BrokerAction::Message(Ok(resp_copy2)));
+                                message_broker_link.send(BrokerAction::Message(Ok(resp_copy1)));
                         } else {
                             // if response fails to destructure, ignore and continue broker loop
                         }
                     } else {
                         let error =
                             ProtocolError("incoming WS channel failed, likely disconnected");
-                        let _ = ws_incoming_sender.send(Err(error.clone()));
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
@@ -276,7 +269,6 @@ impl Environment {
 /// Interface for interacting with a websocket connection
 pub struct Client {
     ws_outgoing_sender: UnboundedSender<AbsintheWSRequest>,
-    ws_incoming_reciever: UnboundedReceiver<Result<AbsintheWSResponse>>,
     last_message_id: Mutex<u64>,
     client_id: u64,
     message_broker: MessageBroker,
@@ -341,7 +333,6 @@ impl Client {
 
         // channels to pass messages between threads. bounded at 100 unprocessed
         let (ws_outgoing_sender, ws_outgoing_reciever) = unbounded_channel();
-        let (ws_incoming_sender, ws_incoming_reciever) = unbounded_channel();
 
         let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
 
@@ -351,7 +342,6 @@ impl Client {
         spawn_sender_loop(
             socket,
             ws_outgoing_reciever,
-            ws_incoming_sender.clone(),
             message_broker.link.clone(),
         );
 
@@ -366,7 +356,6 @@ impl Client {
 
         let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
-            ws_incoming_reciever,
             last_message_id: Mutex::new(last_message_id),
             client_id,
             message_broker,
@@ -555,17 +544,6 @@ impl Client {
             .map_err(|_| ProtocolError("Request failed to send over channel"))?;
         // return response from the message broker when it comes
         Ok(callback_channel)
-    }
-
-    pub async fn on_every_ws_response(&mut self, callback: fn(Result<AbsintheWSResponse>) -> ()) {
-        // pull some incoming messages off of the reciever. we could loop over these
-        // in main application logic, expose to foreign callback, etc.
-        self.ws_incoming_reciever
-            .borrow_mut()
-            .for_each(|msg| async move {
-                callback(msg);
-            })
-            .await;
     }
 
     pub async fn incr_id(&self) -> u64 {

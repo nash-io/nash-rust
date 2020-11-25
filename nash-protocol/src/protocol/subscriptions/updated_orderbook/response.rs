@@ -11,6 +11,8 @@ use futures::lock::Mutex;
 /// a list of ask orders.
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbookResponse {
+    pub last_update_id: i64,
+    pub update_id: i64,
     pub bids: Vec<OrderbookOrder>,
     pub asks: Vec<OrderbookOrder>,
 }
@@ -44,8 +46,10 @@ impl SubscribeOrderbook {
                 }
                 Ok(ResponseOrError::Response(DataResponse {
                     data: SubscribeOrderbookResponse {
-                        asks: asks,
-                        bids: bids,
+                        update_id: book.update_id,
+                        last_update_id: book.last_update_id,
+                        asks,
+                        bids,
                     },
                 }))
             }

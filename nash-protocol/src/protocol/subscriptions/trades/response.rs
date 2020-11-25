@@ -2,9 +2,10 @@ use super::super::super::ResponseOrError;
 use super::request::SubscribeTrades;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql;
-use crate::types::{BuyOrSell, Market, Trade, AccountTradeSide};
+use crate::types::{BuyOrSell, Trade, AccountTradeSide};
 use graphql::subscribe_trades;
 use chrono::{DateTime, Utc};
+use bigdecimal::BigDecimal;
 use std::str::FromStr;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
@@ -15,26 +16,21 @@ use async_trait::async_trait;
 /// List of new incoming trades for a market via subscription.
 #[derive(Clone, Debug)]
 pub struct TradesResponse {
-    pub market: Market,
+    pub market: String,
     pub trades: Vec<Trade>,
 }
 #[async_trait]
 impl TryFromState<subscribe_trades::ResponseData> for Vec<Trade> {
-    async fn from(response: subscribe_trades::ResponseData, state: Arc<Mutex<State>>) -> Result<Vec<Trade>> {
-        let state = state.lock().await;
+    async fn from(response: subscribe_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<Vec<Trade>> {
         let mut trades = Vec::new();
         for trade_data in response.new_trades {
-            let market = state.get_market(&trade_data.market.name)?;
-            let taker_fee = market.asset_b.with_amount(&trade_data.taker_fee.amount)?;
-            let maker_fee = market.asset_b.with_amount(&trade_data.maker_fee.amount)?;
-            let amount = market.asset_a.with_amount(&trade_data.amount.amount)?;
-            let maker_recieved = market
-                .get_asset(&trade_data.maker_received.currency)?
-                .with_amount(&trade_data.maker_received.amount)?;
-            let taker_recieved = market
-                .get_asset(&trade_data.taker_received.currency)?
-                .with_amount(&trade_data.taker_received.amount)?;
-            let limit_price = market.asset_b.with_amount(&trade_data.limit_price.amount)?;
+            let market = trade_data.market.name.clone();
+            let taker_fee = BigDecimal::from_str(&trade_data.taker_fee.amount)?;
+            let maker_fee = BigDecimal::from_str(&trade_data.maker_fee.amount)?;
+            let amount = BigDecimal::from_str(&trade_data.amount.amount)?;
+            let maker_recieved = BigDecimal::from_str(&trade_data.maker_received.amount)?;
+            let taker_recieved = BigDecimal::from_str(&trade_data.taker_received.amount)?;
+            let limit_price = BigDecimal::from_str(&trade_data.limit_price.amount)?;
             trades.push(Trade {
                 market,
                 amount,
@@ -62,14 +58,11 @@ impl SubscribeTrades {
         response: ResponseOrError<subscribe_trades::ResponseData>,
         state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<TradesResponse>> {
-        let state_lock = state.lock().await;
-        let market = state_lock.get_market(&self.market)?;
-        drop(state_lock);
         Ok(match response {
             ResponseOrError::Response(data) => {
                 let response = data.data;
                 ResponseOrError::from_data(TradesResponse {
-                    market: market,
+                    market: self.market.clone(),
                     trades: TryFromState::from(response, state).await?,
                 })
             }

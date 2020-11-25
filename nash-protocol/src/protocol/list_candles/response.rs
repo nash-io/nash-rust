@@ -3,6 +3,7 @@ use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_candles;
 use crate::types::{Candle, CandleInterval};
 use chrono::{DateTime, Utc};
+use bigdecimal::BigDecimal;
 use std::str::FromStr;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
@@ -13,20 +14,15 @@ use async_trait::async_trait;
 
 #[async_trait]
 impl TryFromState<list_candles::ResponseData> for ListCandlesResponse {
-    async fn from(response: list_candles::ResponseData, state: Arc<Mutex<State>>) -> Result<ListCandlesResponse> {
-        let state = state.lock().await;
+    async fn from(response: list_candles::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListCandlesResponse> {
         let mut candles = Vec::new();
-        // This unwrap is safe. ME_FIXME
-        let market = state.get_market(&response.list_candles.market.unwrap().name)?;
         for candle_data in response.list_candles.candles {
-            let a_volume = market.asset_a.with_amount(&candle_data.a_volume.amount)?;
-            let b_volume = market.asset_b.with_amount(&candle_data.b_volume.amount)?;
-            let low_price = market.asset_b.with_amount(&candle_data.low_price.amount)?;
-            let open_price = market.asset_b.with_amount(&candle_data.open_price.amount)?;
-            let close_price = market
-                .asset_b
-                .with_amount(&candle_data.close_price.amount)?;
-            let high_price = market.asset_b.with_amount(&candle_data.high_price.amount)?;
+            let a_volume = BigDecimal::from_str(&candle_data.a_volume.amount)?;
+            let b_volume = BigDecimal::from_str(&candle_data.b_volume.amount)?;
+            let low_price = BigDecimal::from_str(&candle_data.low_price.amount)?;
+            let open_price = BigDecimal::from_str(&candle_data.open_price.amount)?;
+            let close_price = BigDecimal::from_str(&candle_data.close_price.amount)?;
+            let high_price = BigDecimal::from_str(&candle_data.high_price.amount)?;
             candles.push(Candle {
                 a_volume,
                 b_volume,

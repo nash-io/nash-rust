@@ -3,7 +3,10 @@ use super::{DhFillPoolRequest, DhFillPoolResponse, ServerPublics};
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::dh_fill_pool;
 use crate::types::Blockchain;
+#[cfg(feature = "secp256k1")]
 use nash_mpc::curves::secp256_k1::Secp256k1Point;
+#[cfg(feature = "k256")]
+use nash_mpc::curves::secp256_k1_rust::Secp256k1Point;
 use nash_mpc::curves::secp256_r1::Secp256r1Point;
 use nash_mpc::curves::traits::ECPoint;
 

@@ -7,9 +7,9 @@ use crate::utils::{der_encode_sig, hash_message};
 use nash_mpc::client::APIchildkey;
 use nash_mpc::common::Curve;
 #[cfg(feature = "secp256k1")]
-use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_k1::Secp256k1Scalar;
 #[cfg(feature = "k256")]
-use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_k1_rust::Secp256k1Scalar;
 use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::paillier_common;
 use nash_mpc::rust_bigint::BigInt;
@@ -50,7 +50,7 @@ impl Signer {
     /// The output is a hex string where signature has been DER encoded
     pub fn sign_canonical_string(&self, request: &str) -> RequestPayloadSignature {
         let message_hash = hash_message(request);
-        let signing_key: Secp256k1Scalar = ECScalar::from(&self.api_keys.keys.payload_signing_key);
+        let signing_key: Secp256k1Scalar = ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
         let (r, s) = signing_key.sign(&message_hash);
         let sig = der_encode_sig(&r, &s);
         RequestPayloadSignature {

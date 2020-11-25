@@ -5,9 +5,9 @@ use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
 use crate::errors::{ProtocolError, Result};
 use byteorder::{BigEndian, ReadBytesExt};
 #[cfg(feature = "secp256k1")]
-use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_k1::Secp256k1Point;
 #[cfg(feature = "k256")]
-use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_k1_rust::Secp256k1Point;
 use nash_mpc::curves::traits::ECPoint;
 use sha3::{Digest, Keccak256};
 
@@ -220,7 +220,7 @@ impl PublicKey {
     /// generate Ethereum address from public key
     pub fn to_address(&self) -> Address {
         // remove leading byte (0x04) that indicates an uncompressed public key
-        let pk_bytes = &self.inner.pk_to_key_slice()[1..];
+        let pk_bytes = &self.inner.to_vec()[1..];
         // hash public key
         let hash: [u8; 32] = Keccak256::digest(&pk_bytes).into();
         // last 20 hex-encoded bytes of hash are the address

@@ -79,6 +79,9 @@ impl Asset {
             Self::BTC => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
                 .unwrap()
                 .to_bytes(),
+            Self::NOIA => BigInt::from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                .unwrap()
+                .to_bytes(),
             Self::NEO => {
                 BigInt::from_hex("9B7CFFDAA674BEAE0F930EBE6085AF9093E5FE56B34A5C220CCDCF6EFC336FC5")
                     .unwrap()

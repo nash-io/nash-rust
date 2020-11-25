@@ -7,6 +7,9 @@ query ListAccountBalances($payload: ListAccountBalancesParams!){
     available {
       amount
     },
+    inOrders{
+      amount
+    }
     pending {
       amount
     },

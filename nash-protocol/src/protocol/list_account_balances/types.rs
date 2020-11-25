@@ -26,6 +26,8 @@ pub struct ListAccountBalancesResponse {
     pub pending: HashMap<Asset, AssetAmount>,
     // Funds in personal wallet
     pub personal: HashMap<Asset, AssetAmount>,
+    // Funds in current orders
+    pub in_orders: HashMap<Asset, AssetAmount>
 }
 
 #[async_trait]
@@ -37,9 +39,10 @@ impl NashProtocol for ListAccountBalancesRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        _state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<ListAccountBalancesResponse, list_account_balances::ResponseData>(
             response,

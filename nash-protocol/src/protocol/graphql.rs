@@ -5,6 +5,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use super::traits::TryFromState;
+use super::state::State;
+use std::sync::Arc;
+use futures::lock::Mutex;
 
 //****************************************//
 //  GraphQL response parsing              //
@@ -43,6 +47,30 @@ where
         ResponseOrError::Response(DataResponse { data }) => match data {
             Ok(data) => Ok(ResponseOrError::from_data(data)),
             Err(err) => Err(ProtocolError::coerce_static_from_str(&format!("{}", err))),
+        },
+        ResponseOrError::Error(e) => Ok(ResponseOrError::Error(e)),
+    }
+}
+
+/// Helper to convert data corresponding to raw GraphQL types (B) into
+/// nicer library managed types A when failure is possible
+pub async fn try_response_with_state_from_json<A, B>(
+    response: serde_json::Value,
+    state: Arc<Mutex<State>>
+) -> Result<ResponseOrError<A>>
+where
+    A: TryFromState<B>,
+    B: DeserializeOwned,
+{
+    let parse_graphql = json_to_type_or_error::<B>(response)?;
+    // Maybe we get back a parsed result from server response
+    match parse_graphql {
+        ResponseOrError::Response(DataResponse { data }) => {
+            let conversion = TryFromState::from(data, state.clone()).await;
+            match conversion {
+                Ok(data) => Ok(ResponseOrError::from_data(data)),
+                Err(err) => Err(ProtocolError::coerce_static_from_str(&format!("{}", err))),
+            }
         },
         ResponseOrError::Error(e) => Ok(ResponseOrError::Error(e)),
     }
@@ -97,8 +125,10 @@ impl<T> ResponseOrError<T> {
     }
     /// Get response or else error
     pub fn response_or_error(self) -> Result<T> {
-        self.consume_response()
-            .ok_or(ProtocolError("Response failed with an error"))
+        match self {
+            Self::Response(DataResponse { data}) => Ok(data),
+            Self::Error(e) => Err(ProtocolError::coerce_static_from_str(&format!("{:?}", e)))
+        }
     }
     /// Get error from wrapper if it exists
     pub fn error(&self) -> Option<&ErrorResponse> {

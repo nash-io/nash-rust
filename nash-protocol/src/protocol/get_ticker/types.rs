@@ -3,7 +3,7 @@ use futures::lock::Mutex;
 use std::sync::Arc;
 
 use crate::errors::Result;
-use crate::types::{AssetAmount, Market};
+use crate::types::AssetAmount;
 
 use super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocol, ResponseOrError, State,
@@ -12,7 +12,7 @@ use super::super::{
 /// Get ticker associated with market
 #[derive(Clone, Debug)]
 pub struct TickerRequest {
-    pub market: Market,
+    pub market: String,
 }
 
 /// Ticker response information
@@ -21,14 +21,14 @@ pub struct TickerResponse {
     pub id: String,
     pub a_volume_24h: AssetAmount,
     pub b_volume_24h: AssetAmount,
-    pub best_ask_price: AssetAmount,
-    pub best_bid_price: AssetAmount,
-    pub best_ask_amount: AssetAmount,
-    pub best_bid_amount: AssetAmount,
-    pub high_price_24h: AssetAmount,
-    pub last_price: AssetAmount,
-    pub low_price_24h: AssetAmount,
-    pub price_change_24h: AssetAmount,
+    pub best_ask_price: Option<AssetAmount>,
+    pub best_bid_price: Option<AssetAmount>,
+    pub best_ask_amount: Option<AssetAmount>,
+    pub best_bid_amount: Option<AssetAmount>,
+    pub high_price_24h: Option<AssetAmount>,
+    pub last_price: Option<AssetAmount>,
+    pub low_price_24h: Option<AssetAmount>,
+    pub price_change_24h: Option<AssetAmount>,
     pub market_name: String,
 }
 
@@ -42,11 +42,12 @@ impl NashProtocol for TickerRequest {
         serializable_to_json(&query)
     }
 
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
-        self.response_from_graphql(as_graphql)
+        self.response_from_graphql(as_graphql, state).await
     }
 }

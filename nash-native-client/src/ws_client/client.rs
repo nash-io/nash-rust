@@ -48,13 +48,12 @@ pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<Abs
 // back up to client on anoter channel.
 pub fn spawn_sender_loop(
     mut websocket: WebSocket,
-    mut ws_outgoing_reciever: UnboundedReceiver<AbsintheWSRequest>,
-    ws_incoming_sender: UnboundedSender<Result<AbsintheWSResponse>>,
+    mut ws_outgoing_receiver: UnboundedReceiver<AbsintheWSRequest>,
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
         loop {
-            let next_outgoing = ws_outgoing_reciever.recv().boxed();
+            let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = websocket.next();
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
@@ -66,7 +65,6 @@ pub fn spawn_sender_loop(
                                 let error = ProtocolError(
                                     "failed to send message on WS connection, likely disconnected",
                                 );
-                                let _ = ws_incoming_sender.send(Err(error.clone()));
                                 let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                                 break;
                             }
@@ -74,7 +72,6 @@ pub fn spawn_sender_loop(
                     } else {
                         let error =
                             ProtocolError("outgoing channel died or errored, likely disconnected");
-                        let _ = ws_incoming_sender.send(Err(error.clone()));
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
@@ -83,21 +80,17 @@ pub fn spawn_sender_loop(
                     if let Some(Ok(Ok(resp))) = in_msg.map(|x| x.map(|x| x.into_text())) {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
                             // Similarly, let the client timeout on incoming response if this fails and handle that
-                            let _ignore = ws_incoming_sender.send(Ok(resp_copy1));
                             // todo: this is a hack since the graphql library has not implemented clone() for responses
                             // but we need another copy of the response to send to the broker
                             // this could actually be more efficient and have broker handle all messages?
-                            let resp_copy2: AbsintheWSResponse =
-                                serde_json::from_str(&resp).unwrap(); // this unwrap is safe
                             let _ignore =
-                                message_broker_link.send(BrokerAction::Message(Ok(resp_copy2)));
+                                message_broker_link.send(BrokerAction::Message(Ok(resp_copy1)));
                         } else {
                             // if response fails to destructure, ignore and continue broker loop
                         }
                     } else {
                         let error =
                             ProtocolError("incoming WS channel failed, likely disconnected");
-                        let _ = ws_incoming_sender.send(Err(error.clone()));
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
@@ -185,7 +178,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
     user_callback_sender: UnboundedSender<
         Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
     >,
-    global_subscription_sender: UnboundedSender<Result<SubscriptionResponse>>,
+    global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
     request: T,
     state: Arc<Mutex<State>>,
 ) {
@@ -199,7 +192,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                     if let Ok(json_payload) = response.subscription_json_payload() {
                         // First do normal subscription logic
                         let output =
-                            match request.subscription_response_from_json(json_payload.clone()) {
+                            match request.subscription_response_from_json(json_payload.clone(), state.clone()).await {
                                 Ok(response) => {
                                     match response {
                                         ResponseOrError::Error(err_resp) => {
@@ -231,7 +224,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
 
                         // Now do global subscription logic. If global channel fails, also kill process
                         if let Err(_e) = global_subscription_sender
-                            .send(request.wrap_response_as_any_subscription(json_payload))
+                            .send(request.wrap_response_as_any_subscription(json_payload, state.clone()).await)
                         {
                             break;
                         }
@@ -276,14 +269,13 @@ impl Environment {
 /// Interface for interacting with a websocket connection
 pub struct Client {
     ws_outgoing_sender: UnboundedSender<AbsintheWSRequest>,
-    ws_incoming_reciever: UnboundedReceiver<Result<AbsintheWSResponse>>,
     last_message_id: Mutex<u64>,
     client_id: u64,
     message_broker: MessageBroker,
     state: Arc<Mutex<State>>,
     timeout: u64,
-    global_subscription_sender: UnboundedSender<Result<SubscriptionResponse>>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<SubscriptionResponse>>,
+    global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
+    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }
 
 impl Client {
@@ -340,8 +332,7 @@ impl Client {
             .map_err(|_| ProtocolError("Could not connect to WS"))?;
 
         // channels to pass messages between threads. bounded at 100 unprocessed
-        let (ws_outgoing_sender, ws_outgoing_reciever) = unbounded_channel();
-        let (ws_incoming_sender, ws_incoming_reciever) = unbounded_channel();
+        let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();
 
         let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
 
@@ -350,8 +341,7 @@ impl Client {
         // This will loop over WS connection, send things out, and route things in
         spawn_sender_loop(
             socket,
-            ws_outgoing_reciever,
-            ws_incoming_sender.clone(),
+            ws_outgoing_receiver,
             message_broker.link.clone(),
         );
 
@@ -364,9 +354,8 @@ impl Client {
         // start a heartbeat loop
         spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
 
-        Ok(Self {
+        let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
-            ws_incoming_reciever,
             last_message_id: Mutex::new(last_message_id),
             client_id,
             message_broker,
@@ -374,7 +363,12 @@ impl Client {
             timeout,
             global_subscription_sender,
             global_subscription_receiver,
-        })
+        };
+
+        // grab market data upon initial setup
+        let _ = client.run(nash_protocol::protocol::list_markets::ListMarketsRequest).await?;
+
+        Ok(client)
     }
 
     /// Execute a NashProtocol request. Query will be created, executed over network, response will
@@ -393,7 +387,7 @@ impl Client {
         .map_err(|_| ProtocolError("Request timeout"))?
         .ok_or(ProtocolError("Failed to recieve message"))??;
         let json_payload = ws_response.json_payload()?;
-        let protocol_response = request.response_from_json(json_payload)?;
+        let protocol_response = request.response_from_json(json_payload, self.state.clone()).await?;
         if let Some(response) = protocol_response.response() {
             request
                 .process_response(response, self.state.clone())
@@ -552,17 +546,6 @@ impl Client {
         Ok(callback_channel)
     }
 
-    pub async fn on_every_ws_response(&mut self, callback: fn(Result<AbsintheWSResponse>) -> ()) {
-        // pull some incoming messages off of the reciever. we could loop over these
-        // in main application logic, expose to foreign callback, etc.
-        self.ws_incoming_reciever
-            .borrow_mut()
-            .for_each(|msg| async move {
-                callback(msg);
-            })
-            .await;
-    }
-
     pub async fn incr_id(&self) -> u64 {
         let mut val = self.last_message_id.lock().await;
         *val += 1;
@@ -584,10 +567,12 @@ mod tests {
     use nash_protocol::protocol::list_account_trades::ListAccountTradesRequest;
     use nash_protocol::protocol::list_candles::ListCandlesRequest;
     use nash_protocol::protocol::list_markets::ListMarketsRequest;
+    use nash_protocol::protocol::list_trades::ListTradesRequest;
     use nash_protocol::protocol::orderbook::OrderbookRequest;
     use nash_protocol::protocol::place_order::LimitOrderRequest;
     use nash_protocol::protocol::sign_all_states::SignAllStates;
     use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
+    use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, Market, OrderCancellationPolicy, OrderStatus,
         OrderType,
@@ -675,7 +660,7 @@ mod tests {
             let response = client
                 .run(ListAccountOrdersRequest {
                     before: None,
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: None,
                     limit: Some(1),
                     status: Some(vec![
@@ -686,7 +671,7 @@ mod tests {
                     order_type: Some(vec![OrderType::Limit]),
                     range: Some(DateTimeRange {
                         start: Utc.ymd(2020, 9, 12).and_hms(0, 0, 0),
-                        stop: Utc.ymd(2020, 9, 16).and_hms(0, 10, 0),
+                        stop: Utc.ymd(2020, 10, 16).and_hms(0, 10, 0),
                     }),
                 })
                 .await
@@ -704,7 +689,7 @@ mod tests {
             let response = client
                 .run(ListAccountTradesRequest {
                     before: Some("1598934832187000008".to_string()),
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     limit: Some(1),
                     range: None,
                 })
@@ -723,7 +708,7 @@ mod tests {
             let response = client
                 .run(ListCandlesRequest {
                     before: None,
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     limit: Some(1),
                     chronological: None,
                     interval: None,
@@ -746,7 +731,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(CancelAllOrders {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -765,7 +750,7 @@ mod tests {
                 .run(ListAccountBalancesRequest { filter: None })
                 .await
                 .unwrap();
-            println!("{:?}", response);
+            println!("{:#?}", response);
         };
         runtime.block_on(async_block);
     }
@@ -789,7 +774,7 @@ mod tests {
             let client = init_client().await;
             let mut requests = Vec::new();
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "5".to_string(),
@@ -797,7 +782,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1".to_string(),
                 price: "200".to_string(),
@@ -805,7 +790,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "5".to_string(),
@@ -813,7 +798,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::neo_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1".to_string(),
                 price: "200".to_string(),
@@ -821,7 +806,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "10".to_string(),
                 price: "1".to_string(),
@@ -829,7 +814,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "0.451".to_string(),
                 price: "75.1".to_string(),
@@ -837,7 +822,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1.24".to_string(),
                 price: "821".to_string(),
@@ -845,7 +830,7 @@ mod tests {
                 allow_taker: true,
             });
             requests.push(LimitOrderRequest {
-                market: Market::eth_usdc(),
+                market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "1.24".to_string(),
                 price: "821.12".to_string(),
@@ -867,7 +852,7 @@ mod tests {
                 println!("{:?}", response);
                 let response = client
                     .run(CancelOrderRequest {
-                        market: Market::eth_usdc(),
+                        market: "eth_usdc".to_string(),
                         order_id,
                     })
                     .await
@@ -885,7 +870,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(OrderbookRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -901,7 +886,32 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(TickerRequest {
-                    market: Market::eth_usdc(),
+                    market: "btc_usdc".to_string(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response.response_or_error());
+            let response = client
+                .run(TickerRequest {
+                    market: "btc_usdc".to_string(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response.response_or_error());
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn end_to_end_list_trades() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client
+                .run(ListTradesRequest {
+                    market: "eth_usdc".to_string(),
+                    limit: None,
+                    before: None
                 })
                 .await
                 .unwrap();
@@ -917,7 +927,7 @@ mod tests {
             let client = init_client().await;
             let mut response = client
                 .subscribe_protocol(SubscribeOrderbook {
-                    market: Market::btc_usdc(),
+                    market: "btc_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -930,6 +940,54 @@ mod tests {
     }
 
     #[test]
+    fn end_to_end_sub_trades() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let mut response = client
+                .subscribe_protocol(SubscribeTrades {
+                    market: "btc_usdc".to_string(),
+                })
+                .await
+                .unwrap();
+            let next_item = response.next().await.unwrap().unwrap();
+            println!("{:?}", next_item);
+            let next_item = response.next().await.unwrap().unwrap();
+            println!("{:?}", next_item);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn end_to_end_buy_eth_btc() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client
+                .run(LimitOrderRequest {
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.1".to_string(),
+                    price: "0.0213070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            let response = client
+                .run(CancelAllOrders {
+                    market: "eth_btc".to_string(),
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            assert_eq!(response.response().unwrap().accepted, true);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
     fn sub_orderbook_via_client_stream() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
@@ -937,7 +995,7 @@ mod tests {
             {
                 let _response = client
                     .subscribe_protocol(SubscribeOrderbook {
-                        market: Market::btc_usdc(),
+                        market: "btc_usdc".to_string(),
                     })
                     .await
                     .unwrap();
@@ -957,7 +1015,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Sell,
                     amount: "0.02".to_string(),
                     price: "800".to_string(),
@@ -977,7 +1035,7 @@ mod tests {
             println!("{:?}", response);
             let response = client
                 .run(CancelAllOrders {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();
@@ -994,7 +1052,7 @@ mod tests {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Buy,
                     amount: "0.2".to_string(),
                     price: "50".to_string(),
@@ -1006,7 +1064,7 @@ mod tests {
             println!("{:?}", response);
             let response = client
                 .run(CancelAllOrders {
-                    market: Market::eth_usdc(),
+                    market: "eth_usdc".to_string(),
                 })
                 .await
                 .unwrap();

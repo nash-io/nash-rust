@@ -7,6 +7,7 @@ use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use super::blockchain::bigdecimal_to_nash_prec;
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -44,6 +45,7 @@ pub enum Asset {
     TRAC,
     GUNTHY,
     NNN,
+    NOIA
 }
 
 impl Asset {
@@ -66,6 +68,7 @@ impl Asset {
             Self::NEO => Blockchain::NEO,
             Self::GAS => Blockchain::NEO,
             Self::NNN => Blockchain::NEO,
+            Self::NOIA => Blockchain::Ethereum
         }
     }
 
@@ -90,6 +93,7 @@ impl Asset {
             Self::TRAC => "trac",
             Self::GUNTHY => "gunthy",
             Self::NNN => "nnn",
+            Self::NOIA => "noia"
         }
     }
 
@@ -111,6 +115,7 @@ impl Asset {
             "trac" => Ok(Self::TRAC),
             "gunthy" => Ok(Self::GUNTHY),
             "nnn" => Ok(Self::NNN),
+            "noia" => Ok(Self::NOIA),
             _ => Err(ProtocolError("Asset not known")),
         }
     }
@@ -177,7 +182,7 @@ impl Asset {
 }
 
 /// A specific amount of an asset being traded
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetAmount {
     pub asset: AssetofPrecision,
     pub amount: Amount,
@@ -196,11 +201,13 @@ impl AssetAmount {
 
 /// This type encodes all the information necessary for a client operating
 /// over the protocol to understand a market.
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Market {
     // FIXME: probably more things here?
     pub asset_a: AssetofPrecision,
     pub asset_b: AssetofPrecision,
+    pub min_trade_size_a: AssetAmount,
+    pub min_trade_size_b: AssetAmount,
 }
 
 impl Market {
@@ -209,8 +216,18 @@ impl Market {
     /// use nash_protocol::types::{Market, Asset};
     /// Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2));
     /// ```
-    pub fn new(asset_a: AssetofPrecision, asset_b: AssetofPrecision) -> Self {
-        Self { asset_a, asset_b }
+    pub fn new(
+        asset_a: AssetofPrecision,
+        asset_b: AssetofPrecision,
+        min_trade_size_a: AssetAmount,
+        min_trade_size_b: AssetAmount
+    ) -> Self {
+        Self {
+            asset_a,
+            asset_b,
+            min_trade_size_a,
+            min_trade_size_b
+        }
     }
 
     /// Return name of A/B market as "A_B"
@@ -242,37 +259,6 @@ impl Market {
             Ok(self.asset_b.clone())
         } else {
             Err(ProtocolError("Asset not associated with market"))
-        }
-    }
-
-    /// Return BTC/USDC `Market`
-    pub fn btc_usdc() -> Self {
-        Market::new(Asset::BTC.with_precision(8), Asset::USDC.with_precision(1))
-    }
-
-    /// Return ETH/USDC `Market`
-    pub fn eth_usdc() -> Self {
-        Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2))
-    }
-
-    /// Return NEO/USDC `Market`
-    pub fn neo_usdc() -> Self {
-        Market::new(Asset::NEO.with_precision(3), Asset::USDC.with_precision(2))
-    }
-
-    /// Return ETH/BTC `Market`
-    pub fn eth_btc() -> Self {
-        Market::new(Asset::ETH.with_precision(6), Asset::BTC.with_precision(5))
-    }
-
-    /// Create a market object from an string. Todo: add the rest of the markets
-    pub fn from_str(market_str: &str) -> Result<Self> {
-        match market_str {
-            "btc_usdc" => Ok(Self::btc_usdc()),
-            "eth_usdc" => Ok(Self::eth_usdc()),
-            "neo_usdc" => Ok(Self::neo_usdc()),
-            "eth_btc" => Ok(Self::eth_btc()),
-            _ => Err(ProtocolError("Market not supported")),
         }
     }
 }
@@ -417,7 +403,7 @@ type FeeRate = OrderRate;
 /// being traded. For example, in the ETH/USD market, ETH has a precision
 /// of 4. In an A/B market, amount is always in units of A.
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Amount {
     pub precision: u32,
     pub value: BigDecimal,
@@ -428,7 +414,8 @@ impl Amount {
     pub fn new(str_num: &str, precision: u32) -> Result<Self> {
         let value = BigDecimal::from_str(str_num)
             .map_err(|_| ProtocolError("String to BigDecimal failed in creating Amount"))?;
-        Ok(Self { value, precision })
+        let adjust_precision = bigdecimal_to_nash_prec(&value, precision);
+        Ok(Self { value: adjust_precision, precision })
     }
 
     pub fn from_bigdecimal(value: BigDecimal, precision: u32) -> Self {
@@ -536,14 +523,6 @@ pub enum OrderStatus {
     Open,
     Filled,
     Canceled,
-}
-
-/// Representation of executed trade
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SubscriptionTrade {
-    pub amount: AssetAmount,
-    pub order_type: BuyOrSell,
-    pub executed_at: String,
 }
 
 /// Relation of an account to a trade, whether maker, taker, or not related (none)

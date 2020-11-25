@@ -10,6 +10,7 @@ impl From<list_account_balances::ResponseData> for ListAccountBalancesResponse {
         let mut state_channel = HashMap::new();
         let mut pending = HashMap::new();
         let mut personal = HashMap::new();
+        let mut in_orders = HashMap::new();
         // These unwraps are safe. ME_FIXME
         for balance in balance_list {
             let symbol = balance.asset.unwrap().symbol;
@@ -29,12 +30,18 @@ impl From<list_account_balances::ResponseData> for ListAccountBalancesResponse {
                     .with_amount(&balance.personal.unwrap().amount)
                     .unwrap();
                 personal.insert(asset, personal_amount);
+                let in_order_amount = asset
+                    .with_precision(8)
+                    .with_amount(&balance.in_orders.unwrap().amount)
+                    .unwrap();
+                in_orders.insert(asset, in_order_amount);
             }
         }
         Self {
             state_channel,
             personal,
             pending,
+            in_orders
         }
     }
 }

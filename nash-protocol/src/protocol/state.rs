@@ -21,9 +21,9 @@ pub struct State {
     pub signer: Option<Signer>,
     // incrementing `asset_nonces` are used to invalidate old state in the channel
     // here we keep track of the latest nonce for each asset
-    pub asset_nonces: HashMap<String, Vec<u32>>,
+    pub asset_nonces: Option<HashMap<String, Vec<u32>>>,
     // list of markets pulled from nash
-    pub markets: Option<Vec<Market>>,
+    pub markets: Option<HashMap<String, Market>>,
     // list of assets supported for trading in nash
     pub assets: Option<Vec<Asset>>,
     // remaining orders before state signing is required
@@ -44,7 +44,7 @@ impl State {
             affiliate_code: None,
             markets: None,
             assets: None,
-            asset_nonces: HashMap::new(),
+            asset_nonces: None,
         })
     }
 
@@ -56,7 +56,7 @@ impl State {
             affiliate_code: None,
             markets: None,
             assets: None,
-            asset_nonces: HashMap::new(),
+            asset_nonces: None,
         })
     }
 
@@ -64,5 +64,10 @@ impl State {
         self.signer
             .as_mut()
             .ok_or(ProtocolError("Signer not initiated"))
+    }
+
+    pub fn get_market(&self, market_name: &str) -> Result<Market>{
+        let market_map = self.markets.as_ref().ok_or(ProtocolError("Market map does not exist"))?;
+        market_map.get(market_name).ok_or(ProtocolError("Market name does not exist")).map(|m| m.clone() )
     }
 }

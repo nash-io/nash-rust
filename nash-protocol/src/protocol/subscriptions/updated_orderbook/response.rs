@@ -3,6 +3,9 @@ use super::request::SubscribeOrderbook;
 use crate::errors::Result;
 use crate::graphql::updated_orderbook;
 use crate::types::OrderbookOrder;
+use crate::protocol::state::State;
+use std::sync::Arc;
+use futures::lock::Mutex;
 
 /// Order book updates pushed over a subscription consist of a list of bid orders and
 /// a list of ask orders.
@@ -14,10 +17,13 @@ pub struct SubscribeOrderbookResponse {
 
 // FIXME: if possible, remove duplication with orderbook query
 impl SubscribeOrderbook {
-    pub fn response_from_graphql(
+    pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<updated_orderbook::ResponseData>,
+        state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<SubscribeOrderbookResponse>> {
+        let state = state.lock().await;
+        let market = state.get_market(&self.market)?;
         match response {
             ResponseOrError::Response(data) => {
                 let response = data.data;
@@ -27,13 +33,13 @@ impl SubscribeOrderbook {
                 for ask in book.asks {
                     asks.push(OrderbookOrder {
                         price: ask.price.amount.to_string(),
-                        amount: self.market.asset_a.with_amount(&ask.amount.amount)?,
+                        amount: market.asset_a.with_amount(&ask.amount.amount)?,
                     });
                 }
                 for bid in book.bids {
                     bids.push(OrderbookOrder {
                         price: bid.price.amount.to_string(),
-                        amount: self.market.asset_a.with_amount(&bid.amount.amount)?,
+                        amount: market.asset_a.with_amount(&bid.amount.amount)?,
                     });
                 }
                 Ok(ResponseOrError::Response(DataResponse {

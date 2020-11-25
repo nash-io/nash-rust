@@ -2,18 +2,23 @@ use super::types::GetAccountOrderResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::get_account_order;
 use crate::types::{
-    AccountTradeSide, BuyOrSell, Market, Order, OrderCancellationPolicy, OrderCancellationReason,
+    AccountTradeSide, BuyOrSell, Order, OrderCancellationPolicy, OrderCancellationReason,
     OrderStatus, OrderType, Trade,
 };
+use crate::protocol::{State, traits::TryFromState};
 use chrono::{DateTime, Utc};
-use std::convert::TryFrom;
 use std::str::FromStr;
 
-impl TryFrom<get_account_order::ResponseData> for GetAccountOrderResponse {
-    type Error = ProtocolError;
-    fn try_from(response: get_account_order::ResponseData) -> Result<GetAccountOrderResponse> {
+use std::sync::Arc;
+use futures::lock::Mutex;
+use async_trait::async_trait;
+
+#[async_trait]
+impl TryFromState<get_account_order::ResponseData> for GetAccountOrderResponse {
+    async fn from(response: get_account_order::ResponseData, state: Arc<Mutex<State>>) -> Result<GetAccountOrderResponse> {
         let order_data = response.get_account_order;
-        let market = Market::from_str(&order_data.market.name)?;
+        let state = state.lock().await;
+        let market = state.get_market(&order_data.market.name)?;
         let amount_placed = market.asset_a.with_amount(&order_data.amount.amount)?;
         let amount_remaining = market
             .asset_a
@@ -35,7 +40,7 @@ impl TryFrom<get_account_order::ResponseData> for GetAccountOrderResponse {
         // These wraps are safe. ME_FIXME
         for trade_data in order_data.trades.as_ref().unwrap() {
             let trade_data = trade_data.as_ref().unwrap();
-            let market = Market::from_str(&trade_data.market.name)?;
+            let market = state.get_market(&trade_data.market.name)?;
             let taker_fee = market.asset_b.with_amount(&trade_data.taker_fee.amount)?;
             let maker_fee = market.asset_b.with_amount(&trade_data.maker_fee.amount)?;
             let amount = market.asset_a.with_amount(&trade_data.amount.amount)?;

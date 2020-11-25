@@ -102,9 +102,10 @@ impl NashProtocol for DhFillPoolRequest {
         serializable_to_json(&query)
     }
     /// Deserialize response to DhFillPool protocol response
-    fn response_from_json(
+    async fn response_from_json(
         &self,
         response: serde_json::Value,
+        _state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<DhFillPoolResponse, dh_fill_pool::ResponseData>(response)
     }

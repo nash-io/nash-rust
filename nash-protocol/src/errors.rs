@@ -2,8 +2,10 @@
 
 use thiserror::Error;
 
+/// Expose custom Result type that wraps ProtocolError
 pub type Result<T> = std::result::Result<T, ProtocolError>;
 
+/// Wrapper over string that describes error condition
 #[derive(Debug, Error, Clone)]
 pub struct ProtocolError(pub &'static str);
 

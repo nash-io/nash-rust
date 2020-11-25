@@ -5,8 +5,10 @@ use super::response;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::dh_fill_pool;
 use crate::types::Blockchain;
+#[cfg(feature = "secp256k1")]
 use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+#[cfg(feature = "k256")]
+use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 
 use async_trait::async_trait;
 use futures::lock::Mutex;

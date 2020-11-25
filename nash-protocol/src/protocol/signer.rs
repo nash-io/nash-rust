@@ -6,7 +6,10 @@ use crate::types::PublicKey;
 use crate::utils::{der_encode_sig, hash_message};
 use nash_mpc::client::APIchildkey;
 use nash_mpc::common::Curve;
-use nash_mpc::curves::secp256_k1::Secp256k1Scalar;
+#[cfg(feature = "secp256k1")]
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::paillier_common;
 use nash_mpc::rust_bigint::BigInt;

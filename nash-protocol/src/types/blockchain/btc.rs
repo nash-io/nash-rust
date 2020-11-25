@@ -1,7 +1,12 @@
 //! Bitcoin specific types shared across protocol requests
 
 use crate::errors::{ProtocolError, Result};
-use nash_mpc::curves::secp256_k1::Secp256k1Point;
+
+#[cfg(feature = "secp256k1")]
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
+
 use nash_mpc::curves::traits::ECPoint;
 
 /// Placeholder for BTC address

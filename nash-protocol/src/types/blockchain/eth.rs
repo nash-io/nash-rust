@@ -4,7 +4,10 @@ use super::super::{Amount, Asset, AssetOrCrosschain, AssetofPrecision, Nonce, Or
 use super::{bigdecimal_to_nash_u64, nash_u64_to_bigdecimal};
 use crate::errors::{ProtocolError, Result};
 use byteorder::{BigEndian, ReadBytesExt};
-use nash_mpc::curves::secp256_k1::Secp256k1Point;
+#[cfg(feature = "secp256k1")]
+use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::traits::ECPoint;
 use sha3::{Digest, Keccak256};
 

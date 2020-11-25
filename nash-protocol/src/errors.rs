@@ -24,3 +24,10 @@ impl std::fmt::Display for ProtocolError {
         write!(f, "{}", self.0)
     }
 }
+
+use bigdecimal::ParseBigDecimalError;
+impl From<ParseBigDecimalError> for ProtocolError {
+    fn from(_err: ParseBigDecimalError) -> Self {
+        ProtocolError("Error converting to BigDecimal")
+    }
+}

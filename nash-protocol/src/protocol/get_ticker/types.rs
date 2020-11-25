@@ -3,8 +3,7 @@ use futures::lock::Mutex;
 use std::sync::Arc;
 
 use crate::errors::Result;
-use crate::types::AssetAmount;
-
+use bigdecimal::BigDecimal;
 use super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocol, ResponseOrError, State,
 };
@@ -19,16 +18,16 @@ pub struct TickerRequest {
 #[derive(Clone, Debug)]
 pub struct TickerResponse {
     pub id: String,
-    pub a_volume_24h: AssetAmount,
-    pub b_volume_24h: AssetAmount,
-    pub best_ask_price: Option<AssetAmount>,
-    pub best_bid_price: Option<AssetAmount>,
-    pub best_ask_amount: Option<AssetAmount>,
-    pub best_bid_amount: Option<AssetAmount>,
-    pub high_price_24h: Option<AssetAmount>,
-    pub last_price: Option<AssetAmount>,
-    pub low_price_24h: Option<AssetAmount>,
-    pub price_change_24h: Option<AssetAmount>,
+    pub a_volume_24h: BigDecimal,
+    pub b_volume_24h: BigDecimal,
+    pub best_ask_price: Option<BigDecimal>,
+    pub best_bid_price: Option<BigDecimal>,
+    pub best_ask_amount: Option<BigDecimal>,
+    pub best_bid_amount: Option<BigDecimal>,
+    pub high_price_24h: Option<BigDecimal>,
+    pub last_price: Option<BigDecimal>,
+    pub low_price_24h: Option<BigDecimal>,
+    pub price_change_24h: Option<BigDecimal>,
     pub market_name: String,
 }
 

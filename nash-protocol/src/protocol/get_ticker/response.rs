@@ -5,59 +5,59 @@ use crate::graphql::get_ticker;
 use crate::protocol::state::State;
 use futures::lock::Mutex;
 use std::sync::Arc;
+use bigdecimal::BigDecimal;
+use std::str::FromStr;
 
 impl TickerRequest {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<get_ticker::ResponseData>,
-        state: Arc<Mutex<State>>,
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<TickerResponse>> {
         // These unwraps are safe. ME_FIXME
-        let state = state.lock().await;
-        let market = state.get_market(&self.market)?;
         match response {
             ResponseOrError::Response(data) => {
                 let response = data.data;
                 let ticker = response.get_ticker;
 
                 let high_price_24h = match &ticker.high_price24h {
-                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let low_price_24h = match &ticker.low_price24h {
-                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let last_price = match &ticker.last_price {
-                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let price_change_24h = match &ticker.price_change24h {
-                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let best_ask_amount = match &ticker.best_ask_size {
-                    Some(price) => Some(market.asset_a.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let best_ask_price = match &ticker.best_ask_price {
-                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let best_bid_amount = match &ticker.best_bid_size {
-                    Some(price) => Some(market.asset_a.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
                 let best_bid_price = match &ticker.best_bid_price {
-                    Some(price) => Some(market.asset_b.with_amount(&price.amount)?),
+                    Some(price) => Some(BigDecimal::from_str(&price.amount)?),
                     None => None,
                 };
 
                 let converted_ticker = TickerResponse {
                     id: ticker.id.clone(),
                     market_name: ticker.market_name.clone(),
-                    a_volume_24h: market.asset_a.with_amount(&ticker.a_volume24h.amount)?,
-                    b_volume_24h: market.asset_b.with_amount(&ticker.b_volume24h.amount)?,
+                    a_volume_24h: BigDecimal::from_str(&ticker.a_volume24h.amount)?,
+                    b_volume_24h: BigDecimal::from_str(&ticker.b_volume24h.amount)?,
                     high_price_24h,
                     low_price_24h,
                     last_price,

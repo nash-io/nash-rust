@@ -3,16 +3,30 @@ use crate::protocol::RequestPayloadSignature;
 use crate::types::ApiKeys;
 use crate::types::Blockchain;
 use crate::types::PublicKey;
+#[cfg(feature = "secp256k1")]
 use crate::utils::{der_encode_sig, hash_message};
 use nash_mpc::client::APIchildkey;
 use nash_mpc::common::Curve;
-#[cfg(feature = "secp256k1")]
-use nash_mpc::curves::secp256_k1::Secp256k1Scalar;
 #[cfg(feature = "k256")]
 use nash_mpc::curves::secp256_k1_rust::Secp256k1Scalar;
+#[cfg(feature = "k256")]
 use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::paillier_common;
 use nash_mpc::rust_bigint::BigInt;
+
+#[cfg(feature = "k256")]
+use k256::ecdsa::signature::Signer as k256_Signer;
+#[cfg(feature = "k256")]
+use k256::ecdsa::{Signature, SigningKey};
+#[cfg(feature = "secp256k1")]
+use secp256k1::constants::{COMPACT_SIGNATURE_SIZE, MESSAGE_SIZE, SECRET_KEY_SIZE};
+#[cfg(feature = "secp256k1")]
+use secp256k1::{Message, SecretKey};
+#[cfg(feature = "secp256k1")]
+use rust_bigint::traits::Converter;
+#[cfg(feature = "secp256k1")]
+use nash_mpc::curves::secp256_k1::get_context;
+
 
 pub fn chain_path(chain: Blockchain) -> &'static str {
     match chain {
@@ -46,13 +60,41 @@ impl Signer {
         })
     }
 
-    /// Sign GraphQL payload request with secp256k1 via payload signing key
+    /// Sign GraphQL payload request via payload signing key
     /// The output is a hex string where signature has been DER encoded
+    /// Either implemented with k256 from rustcrypto (pure rust) or secp256k1 (better performance)
+    #[cfg(feature = "rustcrypto")]
     pub fn sign_canonical_string(&self, request: &str) -> RequestPayloadSignature {
-        let message_hash = hash_message(request);
         let signing_key: Secp256k1Scalar = ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
-        let (r, s) = signing_key.sign(&message_hash);
+        let key = SigningKey::new(&signing_key.to_vec()).expect("invalid secret key");
+        let sig_pre: Signature = key.try_sign(request.as_bytes()).expect("signing failed");
+        let sig = sig_pre.to_asn1();
+        RequestPayloadSignature {
+            signed_digest: hex::encode(sig),
+            public_key: self.request_payload_public_key(),
+        }
+    }
+    #[cfg(feature = "secp256k1")]
+    pub fn sign_canonical_string(&self, request: &str) -> RequestPayloadSignature {
+        // create message hash
+        let message_hash = hash_message(request).to_bytes();
+        // add leading zeroes if necessary
+        let mut msg_vec = vec![0; MESSAGE_SIZE - message_hash.len()];
+        msg_vec.extend_from_slice(&message_hash);
+        let msg = Message::from_slice(&msg_vec).unwrap();
+
+        // SecretKey from BigInt
+        let vec = BigInt::to_vec(&self.api_keys.keys.payload_signing_key);
+        let mut v = vec![0; SECRET_KEY_SIZE - vec.len()];
+        v.extend(&vec);
+        let key = SecretKey::from_slice(&v).expect("invalid secret key");
+
+        // actual signature generation (and encoding)
+        let signature = get_context().sign(&msg, &key).serialize_compact();
+        let r = BigInt::from_bytes(&signature[0..COMPACT_SIGNATURE_SIZE / 2]);
+        let s = BigInt::from_bytes(&signature[COMPACT_SIGNATURE_SIZE / 2..COMPACT_SIGNATURE_SIZE]);
         let sig = der_encode_sig(&r, &s);
+
         RequestPayloadSignature {
             signed_digest: hex::encode(sig),
             public_key: self.request_payload_public_key(),
@@ -137,5 +179,18 @@ impl Signer {
             Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining,
             Blockchain::NEO => self.r1_remaining,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Signer;
+
+    #[test]
+    fn test_signing() {
+        let base64_key = "eyJjaGlsZF9rZXlzIjp7fSwKICAgICAgICAicGFpbGxpZXJfcGsiOnsibiI6IjU5ODdlNjIyMjYxY2FmOTZlMjU4MjZjNzBjZjMyM2IyNjE5NGZmOWNmZTY5ZTNmNDBmMzBkMzA2NTcxNjQyY2FlYThhMzE0M2QxMWZmOTRjMTM4ODM2MDQ4NjczNTdhZThjMGU2NjNiZjAzZDAwOTMwMTZkN2Y0ZDc5MGFlMjRlMjkxNzgwM2Q4MTJiNjQxYWYyZDZjMDk1NzNkMTEyZWI3Njg2NDY1MjkxY2QxNDZmZDY2MmY3N2Y1OTVlZjgzMjc3YmUxNjgwZDA0MGIxZjNjNDk5YzgxOTE3NTcyMDZlNTEwYWU1NDcyNGQ2NjdmYzA0MWEyYzdjMmZmM2QzYjY2YzM3MjlkYzI1ZTAyYzQwMTllZDNhMDEyZmQ3NWVjMGUwMzk0OGNmNzgzYWQzOTAyY2U1ZTVlNzIyMjljM2RkM2ExNGI5MzRkNjAyNjlhY2I3YmEwYmQ0MTVkMmRlMTI4ZWYxODcyMjQwMGJhZWEyZTg1MGU2ZDFmZDg3ODdhMDEzMGQ1MTYyMDZkNzE4YTQ5ZDdhMjFkNDI4YjBmYTM3NzMwNzliNjQ4NjE4MTExOTFiNTUwMDFkNGMyYzI5ZjYzMDMxNGJlMTkxY2YzY2EzZjBmOGUwOWVlMDk1NDNmZmRkYTNmOTdjZjE2OWQ1MmUwNjdjZmQ0MGNiMzAzOTQxIn0sCiAgICAgICAgInBheWxvYWRfcHVibGljX2tleSI6IjA0NjE2NDZmZGM0NTQ0ZjEwMjk0ZTIwZTk5NGNlNTZkOGMwZmY4NTI1OTZlYjZiM2FhMGJhOWQ0YjIwNzlkODZkNDJiM2I1ZTg0OTFhNDhmZjZlMTYyMDczMjU3OTgwNzkxNmVlYjA3YmViNmY5OTcwZGM1OTUyYmQ0NDQ0MDRmNzQiLAogICAgICAgICJwYXlsb2FkX3NpZ25pbmdfa2V5IjoiYmI4YmNmNTJhNWY5NDRmMzUxYzViYzg1NmI3YTRjNDFhNWYzNzBmNWNlOTlkY2UwYzhkNmYxZDQ5MWNkMzRiZiIsCiAgICAgICAgInZlcnNpb24iOjB9";
+        let signer = Signer::from_data(&base64_key, "").unwrap();
+        let signature = signer.sign_canonical_string("hello, world!");
+        assert_eq!(signature.signed_digest, "30440220135a79b11caa321f1548d4b86e17c9b53525ffcdeab5e559d6cca310623cc45d02205a0bb368cf79e41d4760f48c9d16ccd8351ac5e97e0a6825eac6acbe662007c4");
     }
 }

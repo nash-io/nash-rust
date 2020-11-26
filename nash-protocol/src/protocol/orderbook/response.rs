@@ -22,6 +22,7 @@ impl OrderbookRequest {
                 let mut asks = Vec::new();
                 let mut bids = Vec::new();
                 let update_id = book.update_id;
+                let last_update_id = book.last_update_id;
                 for ask in book.asks {
                     asks.push(OrderbookOrder {
                         price: ask.price.amount.to_string(),
@@ -36,9 +37,10 @@ impl OrderbookRequest {
                 }
                 Ok(ResponseOrError::Response(DataResponse {
                     data: OrderbookResponse {
-                        asks: asks,
-                        bids: bids,
-                        update_id
+                        asks,
+                        bids,
+                        update_id,
+                        last_update_id
                     },
                 }))
             }

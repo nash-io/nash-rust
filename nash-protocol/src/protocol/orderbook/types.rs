@@ -19,9 +19,10 @@ pub struct OrderbookRequest {
 /// An order book is a list of bid and ask orders
 #[derive(Debug)]
 pub struct OrderbookResponse {
+    pub last_update_id: i64,
+    pub update_id: i64,
     pub asks: Vec<OrderbookOrder>,
     pub bids: Vec<OrderbookOrder>,
-    pub update_id: i64,
 }
 
 #[async_trait]

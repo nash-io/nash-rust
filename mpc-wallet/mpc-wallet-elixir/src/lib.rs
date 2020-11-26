@@ -5,11 +5,14 @@
 #[macro_use]
 extern crate rustler;
 
-use nash_mpc::rust_bigint::traits::Converter;
-use nash_mpc::rust_bigint::BigInt;
+#[cfg(feature = "secp256k1")]
 use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use nash_mpc::paillier_common::{DecryptionKey, EncryptionKey};
+use nash_mpc::rust_bigint::traits::Converter;
+use nash_mpc::rust_bigint::BigInt;
 use nash_mpc::{client, common, server};
 use rustler::{Encoder, Env, Error, Term};
 
@@ -18,7 +21,7 @@ rustler_export_nifs! {
     [
     ("generate_paillier_keypair_and_proof", 0, generate_paillier_keypair_and_proof),
     ("dh_rpool", 2, dh_rpool),
-    ("complete_sig", 5, complete_sig),
+    ("complete_sig", 7, complete_sig),
     ("verify", 5, verify),
     ("compute_presig", 3, compute_presig),
     ("fill_rpool", 4, fill_rpool),
@@ -144,7 +147,7 @@ fn dh_rpool<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
 }
 
 /// finalize presignature to normal ECDSA signature
-/// input: paillier_sk, presig, r, k, curve
+/// input: paillier_sk, presig, r, k, curve, pubkey, msg_hash
 /// output: r, s, recid
 fn complete_sig<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
     let paillier_sk_str: String = match args[0].decode() {
@@ -187,10 +190,26 @@ fn complete_sig<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> 
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
-    let (r, s, recid) = match server::complete_sig(&paillier_sk, &presig, &r, &k, curve) {
+    let pubkey: String = match args[5].decode() {
         Ok(v) => v,
-        Err(_) => return Ok((atoms::error(), &"error: invalid r").encode(env)),
+        Err(_) => return Ok((atoms::error(), &"error parsing pubkey").encode(env)),
     };
+    let msg_hash_str: String = match args[6].decode() {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error parsing msg_hash").encode(env)),
+    };
+    let msg_hash = match BigInt::from_hex(&msg_hash_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing msg_hash").encode(env)),
+    };
+
+    let (r, s, recid) =
+        match server::complete_sig(&paillier_sk, &presig, &r, &k, curve, &pubkey, &msg_hash) {
+            Ok(v) => v,
+            Err(_) => {
+                return Ok((atoms::error(), &"error: completing signature failed").encode(env))
+            }
+        };
     // add leading zeros if necessary
     Ok((
         atoms::ok(),
@@ -242,16 +261,10 @@ fn verify<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
 
-    let result = match common::verify(&r, &s, &pubkey, &msg_hash, curve) {
-        Ok(v) => v,
-        Err(_) => {
-            return Ok((atoms::error(), &"error: invalid pubkey or invalid curve").encode(env))
-        }
-    };
-    if result {
-        Ok((atoms::ok(), atoms::__true__()).encode(env))
+    if common::verify(&r, &s, &pubkey, &msg_hash, curve) {
+        Ok(atoms::ok().encode(env))
     } else {
-        Ok((atoms::error(), atoms::__false__()).encode(env))
+        Ok(atoms::error().encode(env))
     }
 }
 

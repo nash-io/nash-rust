@@ -2,8 +2,11 @@
  * Server functions for MPC-based API keys
  */
 
-use crate::common::{correct_key_proof_rho, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+use crate::common::{correct_key_proof_rho, verify, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 #[cfg(feature = "num_bigint")]
@@ -45,15 +48,20 @@ pub fn compute_rpool_secp256r1(
     }
     // execute scalar multiplication in parallel
     tmp.par_iter_mut().for_each(|i| {
-        *i = format!(
-            // use strings with leading zeros for ME
-            "{:0>66}",
-            client_dh_publics[i.parse::<usize>().unwrap()]
-                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].get_element())
-                .bytes_compressed_to_big_int()
-                .to_hex()
-        )
+        *i = match client_dh_publics[i.parse::<usize>().unwrap()]
+            .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
+        {
+            // use string with leading zeros for ME
+            Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
+            Err(_) => "".to_string(),
+        };
     });
+    // check if any scalar multiplication failed during parallel execution
+    for item in tmp.iter().take(server_dh_secrets.len()) {
+        if item.is_empty() {
+            return Err(());
+        }
+    }
     for i in 0..server_dh_secrets.len() {
         rpool_new.insert(tmp[i].clone(), server_dh_secrets[i].clone());
     }
@@ -75,18 +83,22 @@ pub fn compute_rpool_secp256k1(
     }
     // execute scalar multiplication in parallel
     tmp.par_iter_mut().for_each(|i| {
-        *i = format!(
-            // use strings with leading zeros for ME
-            "{:0>66}",
-            client_dh_publics[i.parse::<usize>().unwrap()]
-                .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].get_element())
-                .bytes_compressed_to_big_int()
-                .to_hex()
-        )
+        *i = match client_dh_publics[i.parse::<usize>().unwrap()]
+            .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
+        {
+            // use string with leading zeros for ME
+            Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
+            Err(_) => "".to_string(),
+        };
     });
+    // check if any scalar multiplication failed during parallel execution
+    for item in tmp.iter().take(server_dh_secrets.len()) {
+        if item.is_empty() {
+            return Err(());
+        }
+    }
     for i in 0..server_dh_secrets.len() {
-        let to_insert = server_dh_secrets[i].clone();
-        rpool_new.insert(tmp[i].clone(), to_insert);
+        rpool_new.insert(tmp[i].clone(), server_dh_secrets[i].clone());
     }
     Ok(rpool_new)
 }
@@ -98,6 +110,8 @@ pub fn complete_sig(
     r: &BigInt,
     k: &BigInt,
     curve: Curve,
+    pubkey_str: &str,
+    msg_hash: &BigInt,
 ) -> Result<(BigInt, BigInt, u8), ()> {
     let q: BigInt;
     let rx: BigInt;
@@ -108,21 +122,26 @@ pub fn complete_sig(
             Err(_) => return Err(()),
         };
         q = Secp256k1Scalar::q();
-        rx = r_point.x_coor().unwrap().mod_floor(&q);
-        ry = r_point.y_coor().unwrap().mod_floor(&q);
+        rx = r_point.x_coor().mod_floor(&q);
+        ry = r_point.y_coor().mod_floor(&q);
     } else if curve == Curve::Secp256r1 {
         let r_point = match Secp256r1Point::from_bigint(&r) {
             Ok(v) => v,
             Err(_) => return Err(()),
         };
         q = Secp256r1Scalar::q();
-        rx = r_point.x_coor().unwrap().mod_floor(&q);
-        ry = r_point.y_coor().unwrap().mod_floor(&q);
+        rx = r_point.x_coor().mod_floor(&q);
+        ry = r_point.y_coor().mod_floor(&q);
     } else {
         return Err(());
     }
     let (s, recid) = complete_sig_curveindependent(&paillier_sk, &presig, &k, &rx, &ry, &q);
-    Ok((rx, s, recid))
+    // verify that the resulting signature is indeed valid
+    if verify(&rx, &s, pubkey_str, msg_hash, curve) {
+        Ok((rx, s, recid))
+    } else {
+        Err(())
+    }
 }
 
 fn complete_sig_curveindependent(
@@ -163,8 +182,11 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
 
 #[cfg(test)]
 mod tests {
-    use crate::common::{CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+    use crate::common::{publickey_from_secretkey, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::ECScalar;
     use crate::server::{
@@ -217,7 +239,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("ffa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -239,7 +262,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("efa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("2ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -261,7 +285,8 @@ mod tests {
         let dh_secret: Secp256r1Scalar = ECScalar::from(
             &BigInt::from_hex("ffa8b1420c958881923ba9f7fcaf1c5bd994499d31da5d677ca9fa79c5762a28")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let dh_public = Secp256r1Point::from_bigint(
             &BigInt::from_hex("3ba1b94b7ab036e2597081e3127d762e02f9967cc7badedfe1cc7ee142a75aba0")
                 .unwrap(),
@@ -283,7 +308,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("953fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("2dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -305,7 +331,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("a53fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("2dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -327,7 +354,8 @@ mod tests {
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("953fe5d3d0f74c98dc78fec8482f4d5245727e21109177851a338e92a0b717c2")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let dh_public = Secp256k1Point::from_bigint(
             &BigInt::from_hex("3dc0573e3f91dc0915f50f053c1f361772a916b927dc782068dedb44c02d54eee")
                 .unwrap(),
@@ -355,7 +383,17 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        let (r_, s, recid) =
+            complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
         assert_eq!(
             r_,
             BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
@@ -370,6 +408,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_k1_wrong_paillier() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("f3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("4eef881b16b678841b4688be1609cf3eb4b9d31b00e74d9f2c0a7c6e827a43eb099099802893d7568655db7ceb590092a09f2d3154e4c25527091c50e8b956104e03f6ec04bd13158341d1728f7f0e9aa9e9664e0fbfcca06a2fbb97a48ddbf6e86d39b58cd8581b494b084f6b2d1d70f66994da6b7c73a034f0580b77658aed33517b7cf6b6cfb6e23a67001ab4caa49ed8445890a74d60ecac4140cc0ae9817a7d974deb1111784c0ad400ae30c74e421d0f5f31b42364c44b577be00ef13deb2a2d9c90b913abfad7056fb2e9d86f1ad521441f7a58b264c56b5da86e1d07a84d50ef28c711d023ca5f7c8759d4aa9d6fc83db5be69c05d8a6804a344c169e3dc7ab542283f1f03151bade022ce18685f0142523fb27154e29104efb10757e5be11c669c4a16d1de7d294d019c0a742cf64f0b91953ff36da960ac55aa023ff10fd9410bfb0fe5f68210d93a7c67d4e743aaae7aef6659b90a0b23e7ad267514ec359624581b8d6a1fd839db0ab05c1ab82192214c3e3d26b337d4937fd9a4d1c78d843c511e6de4f4f44fe7784a7edc33fdabd222be0c6600d38c55f48967847f17f6f049fe4b0ac485010226c16eece202a34b357d5acee6109d5bccfa3a61a79c80ddebb8c2cef192afa0440452739bbe55fc94b6a0af2d98328196b6041e584215a399ce615cfd697c6cca8ea30bac926de61b636d4029a226955854d").unwrap();
@@ -380,21 +419,20 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_eq!(
-            r_,
-            BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("4b4b24ef84023a5a37bc9b3524060a6339bd71ca7520b4c0972a80e79995843e")
-                .unwrap()
-        );
-        assert_ne!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_k1_wrong_presig() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("5eef881b16b678841b4688be1609cf3eb4b9d31b00e74d9f2c0a7c6e827a43eb099099802893d7568655db7ceb590092a09f2d3154e4c25527091c50e8b956104e03f6ec04bd13158341d1728f7f0e9aa9e9664e0fbfcca06a2fbb97a48ddbf6e86d39b58cd8581b494b084f6b2d1d70f66994da6b7c73a034f0580b77658aed33517b7cf6b6cfb6e23a67001ab4caa49ed8445890a74d60ecac4140cc0ae9817a7d974deb1111784c0ad400ae30c74e421d0f5f31b42364c44b577be00ef13deb2a2d9c90b913abfad7056fb2e9d86f1ad521441f7a58b264c56b5da86e1d07a84d50ef28c711d023ca5f7c8759d4aa9d6fc83db5be69c05d8a6804a344c169e3dc7ab542283f1f03151bade022ce18685f0142523fb27154e29104efb10757e5be11c669c4a16d1de7d294d019c0a742cf64f0b91953ff36da960ac55aa023ff10fd9410bfb0fe5f68210d93a7c67d4e743aaae7aef6659b90a0b23e7ad267514ec359624581b8d6a1fd839db0ab05c1ab82192214c3e3d26b337d4937fd9a4d1c78d843c511e6de4f4f44fe7784a7edc33fdabd222be0c6600d38c55f48967847f17f6f049fe4b0ac485010226c16eece202a34b357d5acee6109d5bccfa3a61a79c80ddebb8c2cef192afa0440452739bbe55fc94b6a0af2d98328196b6041e584215a399ce615cfd697c6cca8ea30bac926de61b636d4029a226955854d").unwrap();
@@ -405,21 +443,20 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_eq!(
-            r_,
-            BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("4b4b24ef84023a5a37bc9b3524060a6339bd71ca7520b4c0972a80e79995843e")
-                .unwrap()
-        );
-        assert_ne!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_k1_wrong_r() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("4eef881b16b678841b4688be1609cf3eb4b9d31b00e74d9f2c0a7c6e827a43eb099099802893d7568655db7ceb590092a09f2d3154e4c25527091c50e8b956104e03f6ec04bd13158341d1728f7f0e9aa9e9664e0fbfcca06a2fbb97a48ddbf6e86d39b58cd8581b494b084f6b2d1d70f66994da6b7c73a034f0580b77658aed33517b7cf6b6cfb6e23a67001ab4caa49ed8445890a74d60ecac4140cc0ae9817a7d974deb1111784c0ad400ae30c74e421d0f5f31b42364c44b577be00ef13deb2a2d9c90b913abfad7056fb2e9d86f1ad521441f7a58b264c56b5da86e1d07a84d50ef28c711d023ca5f7c8759d4aa9d6fc83db5be69c05d8a6804a344c169e3dc7ab542283f1f03151bade022ce18685f0142523fb27154e29104efb10757e5be11c669c4a16d1de7d294d019c0a742cf64f0b91953ff36da960ac55aa023ff10fd9410bfb0fe5f68210d93a7c67d4e743aaae7aef6659b90a0b23e7ad267514ec359624581b8d6a1fd839db0ab05c1ab82192214c3e3d26b337d4937fd9a4d1c78d843c511e6de4f4f44fe7784a7edc33fdabd222be0c6600d38c55f48967847f17f6f049fe4b0ac485010226c16eece202a34b357d5acee6109d5bccfa3a61a79c80ddebb8c2cef192afa0440452739bbe55fc94b6a0af2d98328196b6041e584215a399ce615cfd697c6cca8ea30bac926de61b636d4029a226955854d").unwrap();
@@ -430,21 +467,20 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_ne!(
-            r_,
-            BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
-                .unwrap()
-        );
-        assert_eq!(
-            s,
-            BigInt::from_hex("4b4b24ef84023a5a37bc9b3524060a6339bd71ca7520b4c0972a80e79995843e")
-                .unwrap()
-        );
-        assert_ne!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_k1_wrong_k() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("4eef881b16b678841b4688be1609cf3eb4b9d31b00e74d9f2c0a7c6e827a43eb099099802893d7568655db7ceb590092a09f2d3154e4c25527091c50e8b956104e03f6ec04bd13158341d1728f7f0e9aa9e9664e0fbfcca06a2fbb97a48ddbf6e86d39b58cd8581b494b084f6b2d1d70f66994da6b7c73a034f0580b77658aed33517b7cf6b6cfb6e23a67001ab4caa49ed8445890a74d60ecac4140cc0ae9817a7d974deb1111784c0ad400ae30c74e421d0f5f31b42364c44b577be00ef13deb2a2d9c90b913abfad7056fb2e9d86f1ad521441f7a58b264c56b5da86e1d07a84d50ef28c711d023ca5f7c8759d4aa9d6fc83db5be69c05d8a6804a344c169e3dc7ab542283f1f03151bade022ce18685f0142523fb27154e29104efb10757e5be11c669c4a16d1de7d294d019c0a742cf64f0b91953ff36da960ac55aa023ff10fd9410bfb0fe5f68210d93a7c67d4e743aaae7aef6659b90a0b23e7ad267514ec359624581b8d6a1fd839db0ab05c1ab82192214c3e3d26b337d4937fd9a4d1c78d843c511e6de4f4f44fe7784a7edc33fdabd222be0c6600d38c55f48967847f17f6f049fe4b0ac485010226c16eece202a34b357d5acee6109d5bccfa3a61a79c80ddebb8c2cef192afa0440452739bbe55fc94b6a0af2d98328196b6041e584215a399ce615cfd697c6cca8ea30bac926de61b636d4029a226955854d").unwrap();
@@ -455,18 +491,16 @@ mod tests {
             BigInt::from_hex("a8779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_eq!(
-            r_,
-            BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("4b4b24ef84023a5a37bc9b3524060a6339bd71ca7520b4c0972a80e79995843e")
-                .unwrap()
-        );
-        assert_ne!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -481,7 +515,16 @@ mod tests {
             BigInt::from_hex("88779a4565cc853f6a46475963515a6e50330d4e83c4235dbb160e1164d9a730")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -495,7 +538,17 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        let (r_, s, recid) =
+            complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
         assert_eq!(
             r_,
             BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
@@ -510,6 +563,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_r1_wrong_paillier() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("4a4f82ec76b17ddfc10b15878713cc31fe914674a36b834da70215670d19997a56db6fa8b38fbdb2672a73aafcb4ba7162f35b1ccc0474622f2d2a50406fcd8cfbbca0ad6adaf3bd6c8d574393a8cca548e88f93383d426bb634a390f21014562ca45c2b739b270e65760ef43fc28fa207bfe6e7e159f8f943e66606037814586d512057c0036e98e6b9e2432723c9b86eb6ecc43def1fd8d608ba8334872be86659690bb10e7da72dcc18df5f316b2e6fc0ff37b351cca3510f48b50053c7de638ebbded1a2bc34ff130ad8df98e7353fb6c9be6893bd6d6fa1b07eb79a0bf815fe6e611ec7c99564b7acca2d7266d7de64b3e7fb4911638c0cda8b5c7896f261971e7a6bb04bca5ff6bb80153aed189d62d899d88727778b12e6d9b6d49b0af2dd5bbcc57a8950cd02a5f993bebcf85eeb3ca36179166b52a188870777dcb6d67d707c07f013c035e33c49e76b91389dabc681d04928bfc27be1acea29c61087caf6f8675c1ef572275d5e724e8ed7dea616d2058ba07a7f261622a7479c2bb63bea79956f7b84202e740a1ff0ddaff3500dfa6ab2dfafd2aa0a3a20629f71ebdeb1328d71ecb4301a95f98ee3b82c87eb286138f30f947ccaa9a1bf042ed829b89550455e2fae3fbc8d7803dc53e6565dc3999d2c739c568e80175e15e4d7e5679cce42fd86f44c7b5c87cccceb7a4f8cbda1ce87f3e3f38beb516f2cf737").unwrap();
@@ -520,21 +574,20 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_eq!(
-            r_,
-            BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("271f3513c9ac42e82ba602b76a40a1510902a6671221f77ba881e8d847c82b22")
-                .unwrap()
-        );
-        assert_eq!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_r1_wrong_presig() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("3a5f82ec76b17ddfc10b15878713cc31fe914674a36b834da70215670d19997a56db6fa8b38fbdb2672a73aafcb4ba7162f35b1ccc0474622f2d2a50406fcd8cfbbca0ad6adaf3bd6c8d574393a8cca548e88f93383d426bb634a390f21014562ca45c2b739b270e65760ef43fc28fa207bfe6e7e159f8f943e66606037814586d512057c0036e98e6b9e2432723c9b86eb6ecc43def1fd8d608ba8334872be86659690bb10e7da72dcc18df5f316b2e6fc0ff37b351cca3510f48b50053c7de638ebbded1a2bc34ff130ad8df98e7353fb6c9be6893bd6d6fa1b07eb79a0bf815fe6e611ec7c99564b7acca2d7266d7de64b3e7fb4911638c0cda8b5c7896f261971e7a6bb04bca5ff6bb80153aed189d62d899d88727778b12e6d9b6d49b0af2dd5bbcc57a8950cd02a5f993bebcf85eeb3ca36179166b52a188870777dcb6d67d707c07f013c035e33c49e76b91389dabc681d04928bfc27be1acea29c61087caf6f8675c1ef572275d5e724e8ed7dea616d2058ba07a7f261622a7479c2bb63bea79956f7b84202e740a1ff0ddaff3500dfa6ab2dfafd2aa0a3a20629f71ebdeb1328d71ecb4301a95f98ee3b82c87eb286138f30f947ccaa9a1bf042ed829b89550455e2fae3fbc8d7803dc53e6565dc3999d2c739c568e80175e15e4d7e5679cce42fd86f44c7b5c87cccceb7a4f8cbda1ce87f3e3f38beb516f2cf737").unwrap();
@@ -545,21 +598,20 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_eq!(
-            r_,
-            BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("271f3513c9ac42e82ba602b76a40a1510902a6671221f77ba881e8d847c82b22")
-                .unwrap()
-        );
-        assert_eq!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_r1_wrong_r() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("3a4f82ec76b17ddfc10b15878713cc31fe914674a36b834da70215670d19997a56db6fa8b38fbdb2672a73aafcb4ba7162f35b1ccc0474622f2d2a50406fcd8cfbbca0ad6adaf3bd6c8d574393a8cca548e88f93383d426bb634a390f21014562ca45c2b739b270e65760ef43fc28fa207bfe6e7e159f8f943e66606037814586d512057c0036e98e6b9e2432723c9b86eb6ecc43def1fd8d608ba8334872be86659690bb10e7da72dcc18df5f316b2e6fc0ff37b351cca3510f48b50053c7de638ebbded1a2bc34ff130ad8df98e7353fb6c9be6893bd6d6fa1b07eb79a0bf815fe6e611ec7c99564b7acca2d7266d7de64b3e7fb4911638c0cda8b5c7896f261971e7a6bb04bca5ff6bb80153aed189d62d899d88727778b12e6d9b6d49b0af2dd5bbcc57a8950cd02a5f993bebcf85eeb3ca36179166b52a188870777dcb6d67d707c07f013c035e33c49e76b91389dabc681d04928bfc27be1acea29c61087caf6f8675c1ef572275d5e724e8ed7dea616d2058ba07a7f261622a7479c2bb63bea79956f7b84202e740a1ff0ddaff3500dfa6ab2dfafd2aa0a3a20629f71ebdeb1328d71ecb4301a95f98ee3b82c87eb286138f30f947ccaa9a1bf042ed829b89550455e2fae3fbc8d7803dc53e6565dc3999d2c739c568e80175e15e4d7e5679cce42fd86f44c7b5c87cccceb7a4f8cbda1ce87f3e3f38beb516f2cf737").unwrap();
@@ -570,21 +622,20 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_ne!(
-            r_,
-            BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
-                .unwrap()
-        );
-        assert_eq!(
-            s,
-            BigInt::from_hex("271f3513c9ac42e82ba602b76a40a1510902a6671221f77ba881e8d847c82b22")
-                .unwrap()
-        );
-        assert_eq!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
+    #[should_panic]
     fn test_complete_sig_r1_wrong_k() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("3a4f82ec76b17ddfc10b15878713cc31fe914674a36b834da70215670d19997a56db6fa8b38fbdb2672a73aafcb4ba7162f35b1ccc0474622f2d2a50406fcd8cfbbca0ad6adaf3bd6c8d574393a8cca548e88f93383d426bb634a390f21014562ca45c2b739b270e65760ef43fc28fa207bfe6e7e159f8f943e66606037814586d512057c0036e98e6b9e2432723c9b86eb6ecc43def1fd8d608ba8334872be86659690bb10e7da72dcc18df5f316b2e6fc0ff37b351cca3510f48b50053c7de638ebbded1a2bc34ff130ad8df98e7353fb6c9be6893bd6d6fa1b07eb79a0bf815fe6e611ec7c99564b7acca2d7266d7de64b3e7fb4911638c0cda8b5c7896f261971e7a6bb04bca5ff6bb80153aed189d62d899d88727778b12e6d9b6d49b0af2dd5bbcc57a8950cd02a5f993bebcf85eeb3ca36179166b52a188870777dcb6d67d707c07f013c035e33c49e76b91389dabc681d04928bfc27be1acea29c61087caf6f8675c1ef572275d5e724e8ed7dea616d2058ba07a7f261622a7479c2bb63bea79956f7b84202e740a1ff0ddaff3500dfa6ab2dfafd2aa0a3a20629f71ebdeb1328d71ecb4301a95f98ee3b82c87eb286138f30f947ccaa9a1bf042ed829b89550455e2fae3fbc8d7803dc53e6565dc3999d2c739c568e80175e15e4d7e5679cce42fd86f44c7b5c87cccceb7a4f8cbda1ce87f3e3f38beb516f2cf737").unwrap();
@@ -595,18 +646,16 @@ mod tests {
             BigInt::from_hex("f1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256r1;
-        let (r_, s, recid) = complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
-        assert_eq!(
-            r_,
-            BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
-                .unwrap()
-        );
-        assert_ne!(
-            s,
-            BigInt::from_hex("271f3513c9ac42e82ba602b76a40a1510902a6671221f77ba881e8d847c82b22")
-                .unwrap()
-        );
-        assert_ne!(recid, 28);
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -621,6 +670,15 @@ mod tests {
             BigInt::from_hex("e1d1318d8b96ed598ce80f8fb9197327bca23f7db51021a6c5cfb8b01851b2ff")
                 .unwrap();
         let curve = Curve::Secp256k1;
-        complete_sig(&paillier_sk, &presig, &r, &k, curve).unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            curve,
+        )
+        .unwrap();
+        let msg_hash =
+            BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
+                .unwrap();
+        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 }

@@ -38,6 +38,8 @@ defmodule ServerWeb.MPCController do
       r (message-independent part of the signature),
       presig (presignature from client)
       curve (Secp256k1 or Secp256r1)
+      public key under which the completed signature is (supposed to be) valid. In a real-world scenario, the server may know the corresponding public key already.
+      hash of the message under which the completed signature is (supposed to be) valid. This is only for demo-purposes. In a real-world scenario, the server is supposed to compute the hash itself.
 
     Output:
       r: r part of a conventional ECDSA signature
@@ -47,12 +49,14 @@ defmodule ServerWeb.MPCController do
     Needs to fetch paillier_sk from session cache (should actually be some persistent storage).
     Needs to fetch and delete k_inv atomically(!) from session cache.
 
-    Depending on the signing policy, the server may complete the signature. This is not implemented in this demo. The server should also verify that the resulting signature is valid.
+    Depending on the signing policy, the server may complete the signature. This is not implemented in this demo.
   """
   def complete_sig(conn, _params) do
     r = conn.body_params["r"]
     presig = conn.body_params["presig"]
     curve = conn.body_params["curve"]
+    pubkey = conn.body_params["pubkey"]
+    msg_hash = conn.body_params["msg_hash"]
     paillier_sk = ConCache.get(:demo_cache, :paillier_sk)
 
     # make sure that the r value is used exclusively for a particular message (even when this function is called concurrently)
@@ -67,7 +71,7 @@ defmodule ServerWeb.MPCController do
       k_inv
     end)
 
-    {:ok, r, s, recid} = Server.MPCwallet.complete_sig(paillier_sk, presig, r, k_inv, curve)
+    {:ok, r, s, recid} = Server.MPCwallet.complete_sig(paillier_sk, presig, r, k_inv, curve, pubkey, msg_hash)
 
     out = %{
       r: r,

@@ -220,7 +220,7 @@ impl PublicKey {
         // 0x21 (PUSHBYTES21 opcode = size of compressed public key) | compressed public key | 0xac (CHECKSIG opcode)
         let addr_script = [
             vec![0x21],
-            self.inner.bytes_compressed_to_big_int().to_bytes(),
+            self.inner.to_vec(),
             vec![0xac],
         ]
         .concat();

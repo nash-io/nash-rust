@@ -51,8 +51,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 black_box(&pk_k1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256k1),
-            )
-            .unwrap();
+            );
         })
     });
 
@@ -69,8 +68,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 black_box(&pk_r1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256r1),
-            )
-            .unwrap();
+            );
         })
     });
 }

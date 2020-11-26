@@ -2,13 +2,26 @@
  * Functions for MPC-based API keys used by both server and client
  */
 
+#[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
+#[cfg(feature = "k256")]
+use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use amcl::nist256::big::MODBYTES;
+#[cfg(feature = "k256")]
+use k256::elliptic_curve::sec1::{
+    FromEncodedPoint as FromEncodedPoint_k256, ToEncodedPoint as ToEncodedPoint_k256,
+};
+#[cfg(feature = "k256")]
+use k256::AffinePoint as AffinePoint_k256;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
+#[cfg(feature = "secp256k1")]
+use p256::elliptic_curve::sec1::{
+    FromEncodedPoint as FromEncodedPoint_p256, ToEncodedPoint as ToEncodedPoint_p256,
+};
+use p256::{AffinePoint as AffinePoint_p256, EncodedPoint as EncodedPoint_p256};
 use rust_bigint::traits::{Converter, NumberTests};
 use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -45,8 +58,14 @@ pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r
     let mut dh_secrets: Vec<Secp256r1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256r1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = Secp256r1Scalar::new_random();
-        let dh_public = base * &dh_secret;
+        let dh_secret = match Secp256r1Scalar::new_random() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let dh_public = match base * &dh_secret {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -63,8 +82,14 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
     let mut dh_secrets: Vec<Secp256k1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256k1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = Secp256k1Scalar::new_random();
-        let dh_public = base * &dh_secret;
+        let dh_secret = match Secp256k1Scalar::new_random() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let dh_public = match base * &dh_secret {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -72,17 +97,11 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
 }
 
 /// verify an ECDSA signature
-pub fn verify(
-    r: &BigInt,
-    s: &BigInt,
-    pubkey_str: &str,
-    msg_hash: &BigInt,
-    curve: Curve,
-) -> Result<bool, ()> {
-    // convert pubkey string format as used by ME to Secp256k1Point
+pub fn verify(r: &BigInt, s: &BigInt, pubkey_str: &str, msg_hash: &BigInt, curve: Curve) -> bool {
+    // convert pubkey string format as used by ME to bigint
     let pk_int = match BigInt::from_hex(pubkey_str) {
         Ok(v) => v,
-        Err(_) => return Err(()),
+        Err(_) => return false,
     };
     let pk_vec = BigInt::to_vec(&pk_int);
     let q: BigInt;
@@ -90,57 +109,140 @@ pub fn verify(
     if curve == Curve::Secp256k1 {
         let pk = match Secp256k1Point::from_bytes(&pk_vec) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return false,
         };
-        let s_fe: Secp256k1Scalar = ECScalar::from(&s);
-        let rx_fe: Secp256k1Scalar = ECScalar::from(&r);
+        let s_fe: Secp256k1Scalar = match ECScalar::from(&s) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let rx_fe: Secp256k1Scalar = match ECScalar::from(&r) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
         q = Secp256k1Scalar::q();
-        let s_inv_fe = s_fe.invert();
-        let e_fe: Secp256k1Scalar = ECScalar::from(&msg_hash.mod_floor(&q));
-        let u1 = Secp256k1Point::generator() * &e_fe * &s_inv_fe;
-        let u2 = pk * &rx_fe * &s_inv_fe;
-        u1_plus_u2 = (u1 + u2).x_coor().unwrap();
+        let s_inv_fe = match s_fe.invert() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let e_fe: Secp256k1Scalar = match ECScalar::from(&msg_hash.mod_floor(&q)) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1_ = match Secp256k1Point::generator() * &e_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1 = match u1_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2_ = match pk * &rx_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2 = match u2_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        u1_plus_u2 = match u1 + u2 {
+            Ok(v) => v.x_coor(),
+            Err(_) => return false,
+        };
     } else if curve == Curve::Secp256r1 {
         let pk = match Secp256r1Point::from_bytes(&pk_vec) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return false,
         };
-        let s_fe: Secp256r1Scalar = ECScalar::from(&s);
-        let rx_fe: Secp256r1Scalar = ECScalar::from(&r);
+        let s_fe: Secp256r1Scalar = match ECScalar::from(&s) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let rx_fe: Secp256r1Scalar = match ECScalar::from(&r) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
         q = Secp256r1Scalar::q();
-        let s_inv_fe = s_fe.invert();
-        let e_fe: Secp256r1Scalar = ECScalar::from(&msg_hash.mod_floor(&q));
-        let u1 = Secp256r1Point::generator() * &e_fe * &s_inv_fe;
-        let u2 = pk * &rx_fe * &s_inv_fe;
-        u1_plus_u2 = (u1 + u2).x_coor().unwrap();
+        let s_inv_fe = match s_fe.invert() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let e_fe: Secp256r1Scalar = match ECScalar::from(&msg_hash.mod_floor(&q)) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1_ = match Secp256r1Point::generator() * &e_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u1 = match u1_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2_ = match pk * &rx_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let u2 = match u2_ * &s_inv_fe {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        u1_plus_u2 = match u1 + u2 {
+            Ok(v) => v.x_coor(),
+            Err(_) => return false,
+        };
     } else {
-        return Err(());
+        return false;
     }
     let rx_bytes = &BigInt::to_vec(&r)[..];
     let u1_plus_u2_bytes = &BigInt::to_vec(&u1_plus_u2)[..];
     // second condition is against malleability
-    Ok(rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone()))
+    rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone())
+}
+
+#[cfg(feature = "secp256k1")]
+fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
+    Ok("0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_hex())
+}
+#[cfg(feature = "k256")]
+fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
+    // unwrap() is safe because pk has been validated in publickey_from_secretkey()
+    let tmp = AffinePoint_k256::from_encoded_point(&pk.ge.to_encoded_point(false)).unwrap();
+    Ok("0".to_string()
+        + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes())
+            .to_hex())
 }
 
 /// derive public key from secret key, in uncompressed format as expected by ME
 pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, ()> {
     if curve == Curve::Secp256k1 {
-        let secret_key = Zeroizing::<Secp256k1Scalar>::new(ECScalar::from(secret_key_int));
+        let secret_key = match ECScalar::from(secret_key_int) {
+            Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
+            Err(_) => return Err(()),
+        };
         let base: Secp256k1Point = ECPoint::generator();
-        let pk = base * secret_key.deref();
-        Ok("0".to_string()
-            + &BigInt::from_bytes(&pk.get_element().serialize_uncompressed()).to_str_radix(16))
+        let pk = match base * secret_key.deref() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        publickey_from_secretkey_r1(&pk)
     } else if curve == Curve::Secp256r1 {
-        let secret_key = Zeroizing::<Secp256r1Scalar>::new(ECScalar::from(secret_key_int));
-        let pk = Secp256r1Point::generator() * secret_key.deref();
-        let mut b: [u8; 2 * MODBYTES as usize + 1] = [0; 2 * MODBYTES as usize + 1];
-        pk.get_element().tobytes(&mut b, false);
-        let mut s = String::new();
-        for byte in b.iter() {
-            s += &format!("{:02x}", byte);
+        let secret_key = match ECScalar::from(secret_key_int) {
+            Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
+            Err(_) => return Err(()),
+        };
+        let pk = match Secp256r1Point::generator() * secret_key.deref() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let tmp = AffinePoint_p256::from_encoded_point(&EncodedPoint_p256::from(&pk.ge));
+        if bool::from(tmp.is_none()) {
+            return Err(());
         }
         // add leading zeros if necessary
-        Ok(format!("{:0>66}", s))
+        Ok(format!(
+            "{:0>130}",
+            BigInt::from_bytes(&tmp.unwrap().to_encoded_point(false).as_bytes()).to_hex()
+        ))
     } else {
         Err(())
     }
@@ -226,7 +328,10 @@ mod tests {
         correct_key_proof_rho, create_hash, dh_init_secp256k1, dh_init_secp256r1, i2osp,
         publickey_from_secretkey, verify, Curve,
     };
+    #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::Secp256k1Point;
+    #[cfg(feature = "k256")]
+    use crate::curves::secp256_k1_rust::Secp256k1Point;
     use crate::curves::secp256_r1::Secp256r1Point;
     use crate::curves::traits::ECPoint;
     #[cfg(feature = "num_bigint")]
@@ -315,18 +420,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -342,18 +447,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -369,18 +474,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -396,18 +501,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("2b3b5e8491a48ff6e1620732579807916eeb07beb6f9970dc5952bd444404f74")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("0000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -428,8 +533,7 @@ mod tests {
             &"1234567890".to_string(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -445,18 +549,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("721c7dde8df4a6d06c2bea91dc6e9c075c3c35926d73f891788b9ae681b7eed5")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("1000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -472,18 +576,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -499,18 +603,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -526,18 +630,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -553,18 +657,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("a8b5559fa5b697360dc7633f7782fd9f1ec4ba090dc362fd79ee7e6313d755a4")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -585,8 +689,7 @@ mod tests {
             &"1234567890".to_string(),
             &msg_hash,
             Curve::Secp256k1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]
@@ -602,18 +705,18 @@ mod tests {
                 .unwrap(),
             &BigInt::from_hex("dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04")
                 .unwrap(),
-        );
+        )
+        .unwrap();
         let msg_hash =
             BigInt::from_hex("100000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         assert!(!verify(
             &r,
             &s,
-            &pubkey.bytes_compressed_to_big_int().to_hex(),
+            &pubkey.to_bigint().to_hex(),
             &msg_hash,
             Curve::Secp256r1
-        )
-        .unwrap());
+        ));
     }
 
     #[test]

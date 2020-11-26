@@ -60,6 +60,8 @@ defmodule Server.MPCwallet do
       - r: random value shared between server and client
       - k: server part of the nonce used in the signature
       - curve: Secp256k1 or Secp256r1 curve
+      - public_key: public key under which the completed signature is (supposed to be) valid
+      - msg_hash: hash of the message under which the completed signature is (supposed to be) valid
 
   ## Returns
 
@@ -68,7 +70,7 @@ defmodule Server.MPCwallet do
       - recovery_id: 2 bits that help recovering the public key from a signature
 
   """
-  def complete_sig(_paillier_sk, _presig, _r, _k, _curve), do: :erlang.nif_error(:nif_not_loaded)
+  def complete_sig(_paillier_sk, _presig, _r, _k, _curve, _pubkey, _msg_hash), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc ~S"""

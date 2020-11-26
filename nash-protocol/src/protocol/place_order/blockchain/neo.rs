@@ -6,7 +6,6 @@ use crate::types::{AssetOrCrosschain, Prefix};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig, hash_neo_message};
 use nash_mpc::curves::secp256_r1::Secp256r1Point;
 use nash_mpc::curves::traits::ECPoint;
-use nash_mpc::rust_bigint::traits::Converter;
 use nash_mpc::rust_bigint::BigInt;
 
 use super::super::super::signer::Signer;
@@ -76,7 +75,7 @@ impl FillOrder {
             &self.max_order.to_le_bytes()?[..],
             &self.fee_rate.to_le_bytes()?[..],
             &self.order_nonce.to_le_bytes()[..],
-            &self.public_key.bytes_compressed_to_big_int().to_bytes()[..],
+            &self.public_key.to_vec(),
         ]
         .concat())
     }

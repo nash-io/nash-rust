@@ -155,8 +155,8 @@ impl NashProtocol for LimitOrderRequest {
             )));
         }
 
-        // If have run out of orders...
-        if state.remaining_orders == 0 {
+        // If we are about to out of orders...
+        if state.remaining_orders < 20 {
             // Need to sign states
             hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
             // After signing states, need to update nonces again

@@ -4,7 +4,7 @@ use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_trades;
 use crate::types::{AccountTradeSide, BuyOrSell, Trade};
 use super::types::ListTradesResponse;
-
+use bigdecimal::BigDecimal;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
 use std::sync::Arc;
@@ -14,22 +14,17 @@ use async_trait::async_trait;
 #[async_trait]
 impl TryFromState<list_trades::ResponseData> for ListTradesResponse {
 
-    async fn from(response: list_trades::ResponseData, state: Arc<Mutex<State>>) -> Result<ListTradesResponse> {
-        let state = state.lock().await;
+    async fn from(response: list_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListTradesResponse> {
         let mut trades = Vec::new();
 
         for trade_data in response.list_trades.trades {
-            let market = state.get_market(&trade_data.market.name)?;
-            let taker_fee = market.asset_b.with_amount(&trade_data.taker_fee.amount)?;
-            let maker_fee = market.asset_b.with_amount(&trade_data.maker_fee.amount)?;
-            let amount = market.asset_a.with_amount(&trade_data.amount.amount)?;
-            let maker_received = market
-                .get_asset(&trade_data.maker_received.currency)?
-                .with_amount(&trade_data.maker_received.amount)?;
-            let taker_received = market
-                .get_asset(&trade_data.taker_received.currency)?
-                .with_amount(&trade_data.taker_received.amount)?;
-            let limit_price = market.asset_b.with_amount(&trade_data.limit_price.amount)?;
+            let market = trade_data.market.name.clone();
+            let taker_fee = BigDecimal::from_str(&trade_data.taker_fee.amount)?;
+            let maker_fee = BigDecimal::from_str(&trade_data.maker_fee.amount)?;
+            let amount = BigDecimal::from_str(&trade_data.amount.amount)?;
+            let maker_recieved = BigDecimal::from_str(&trade_data.maker_received.amount)?;
+            let taker_recieved = BigDecimal::from_str(&trade_data.taker_received.amount)?;
+            let limit_price = BigDecimal::from_str(&trade_data.limit_price.amount)?;
 
             trades.push(Trade {
                 id: trade_data.id,
@@ -41,8 +36,8 @@ impl TryFromState<list_trades::ResponseData> for ListTradesResponse {
                 account_side: trade_data.account_side.into(),
                 taker_fee,
                 maker_fee,
-                maker_recieved: maker_received,
-                taker_recieved: taker_received,
+                maker_recieved,
+                taker_recieved,
                 market,
                 direction: trade_data.direction.into(),
                 limit_price,

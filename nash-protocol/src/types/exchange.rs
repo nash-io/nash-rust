@@ -4,9 +4,9 @@
 
 use crate::errors::{ProtocolError, Result};
 use bigdecimal::BigDecimal;
+use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use super::blockchain::bigdecimal_to_nash_prec;
 
 /// Representation of blockchains to help navigate encoding issues
@@ -501,12 +501,12 @@ pub enum CandleInterval {
 
 #[derive(Debug)]
 pub struct Candle {
-    pub a_volume: AssetAmount,
-    pub b_volume: AssetAmount,
-    pub close_price: AssetAmount,
-    pub high_price: AssetAmount,
-    pub low_price: AssetAmount,
-    pub open_price: AssetAmount,
+    pub a_volume: BigDecimal,
+    pub b_volume: BigDecimal,
+    pub close_price: BigDecimal,
+    pub high_price: BigDecimal,
+    pub low_price: BigDecimal,
+    pub open_price: BigDecimal,
     pub interval: CandleInterval,
     pub interval_start: DateTime<Utc>,
 }
@@ -539,16 +539,16 @@ pub struct Trade {
     pub id: String,
     pub taker_order_id: String,
     pub maker_order_id: String,
-    pub amount: AssetAmount,
+    pub amount: BigDecimal,
     pub executed_at: DateTime<Utc>,
     pub account_side: AccountTradeSide,
-    pub maker_fee: AssetAmount,
-    pub taker_fee: AssetAmount,
-    pub maker_recieved: AssetAmount,
-    pub taker_recieved: AssetAmount,
-    pub market: Market,
+    pub maker_fee: BigDecimal,
+    pub taker_fee: BigDecimal,
+    pub maker_recieved: BigDecimal,
+    pub taker_recieved: BigDecimal,
+    pub market: String,
     pub direction: BuyOrSell,
-    pub limit_price: AssetAmount,
+    pub limit_price: BigDecimal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -572,18 +572,18 @@ pub enum OrderCancellationReason {
 pub struct Order {
     pub id: String,
     // Amount the order was placed for
-    pub amount_placed: AssetAmount,
+    pub amount_placed: BigDecimal,
     // Amount remaining in order
-    pub amount_remaining: AssetAmount,
+    pub amount_remaining: BigDecimal,
     // Amount executed in order
-    pub amount_executed: AssetAmount,
-    pub limit_price: Option<AssetAmount>,
-    pub stop_price: Option<AssetAmount>,
+    pub amount_executed: BigDecimal,
+    pub limit_price: Option<BigDecimal>,
+    pub stop_price: Option<BigDecimal>,
     pub placed_at: DateTime<Utc>,
     pub buy_or_sell: BuyOrSell,
     pub cancellation_policy: Option<OrderCancellationPolicy>,
     pub cancellation_reason: Option<OrderCancellationReason>,
-    pub market: Market,
+    pub market: String,
     pub order_type: OrderType,
     pub status: OrderStatus,
     pub trades: Vec<Trade>,
@@ -593,7 +593,7 @@ pub struct Order {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrderbookOrder {
     pub price: String,
-    pub amount: AssetAmount,
+    pub amount: BigDecimal,
 }
 
 #[cfg(test)]

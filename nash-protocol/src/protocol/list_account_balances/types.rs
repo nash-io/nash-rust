@@ -3,8 +3,8 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::list_account_balances;
-use crate::types::{Asset, AssetAmount};
-
+use crate::types::{Asset};
+use bigdecimal::BigDecimal;
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::collections::HashMap;
@@ -21,13 +21,13 @@ pub struct ListAccountBalancesRequest {
 #[derive(Clone, Debug)]
 pub struct ListAccountBalancesResponse {
     // Funds available in state channel
-    pub state_channel: HashMap<Asset, AssetAmount>,
+    pub state_channel: HashMap<Asset, BigDecimal>,
     // Funds pending in state channel
-    pub pending: HashMap<Asset, AssetAmount>,
+    pub pending: HashMap<Asset, BigDecimal>,
     // Funds in personal wallet
-    pub personal: HashMap<Asset, AssetAmount>,
+    pub personal: HashMap<Asset, BigDecimal>,
     // Funds in current orders
-    pub in_orders: HashMap<Asset, AssetAmount>
+    pub in_orders: HashMap<Asset, BigDecimal>
 }
 
 #[async_trait]

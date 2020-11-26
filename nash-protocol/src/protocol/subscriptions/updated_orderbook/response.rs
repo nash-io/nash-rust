@@ -6,11 +6,15 @@ use crate::types::OrderbookOrder;
 use crate::protocol::state::State;
 use std::sync::Arc;
 use futures::lock::Mutex;
+use bigdecimal::BigDecimal;
+use std::str::FromStr;
 
 /// Order book updates pushed over a subscription consist of a list of bid orders and
 /// a list of ask orders.
 #[derive(Clone, Debug)]
 pub struct SubscribeOrderbookResponse {
+    pub last_update_id: i64,
+    pub update_id: i64,
     pub bids: Vec<OrderbookOrder>,
     pub asks: Vec<OrderbookOrder>,
 }
@@ -20,10 +24,8 @@ impl SubscribeOrderbook {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<updated_orderbook::ResponseData>,
-        state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<SubscribeOrderbookResponse>> {
-        let state = state.lock().await;
-        let market = state.get_market(&self.market)?;
         match response {
             ResponseOrError::Response(data) => {
                 let response = data.data;
@@ -33,19 +35,21 @@ impl SubscribeOrderbook {
                 for ask in book.asks {
                     asks.push(OrderbookOrder {
                         price: ask.price.amount.to_string(),
-                        amount: market.asset_a.with_amount(&ask.amount.amount)?,
+                        amount: BigDecimal::from_str(&ask.amount.amount)?,
                     });
                 }
                 for bid in book.bids {
                     bids.push(OrderbookOrder {
                         price: bid.price.amount.to_string(),
-                        amount: market.asset_a.with_amount(&bid.amount.amount)?,
+                        amount: BigDecimal::from_str(&bid.amount.amount)?,
                     });
                 }
                 Ok(ResponseOrError::Response(DataResponse {
                     data: SubscribeOrderbookResponse {
-                        asks: asks,
-                        bids: bids,
+                        update_id: book.update_id,
+                        last_update_id: book.last_update_id,
+                        asks,
+                        bids,
                     },
                 }))
             }

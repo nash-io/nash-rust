@@ -1,5 +1,7 @@
 subscription UpdatedOrderbook($marketName: MarketName!){
   updatedOrderBook(marketName: $marketName){
+    updateId
+    lastUpdateId
     market {
       name
     },

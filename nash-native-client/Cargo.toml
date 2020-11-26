@@ -13,7 +13,9 @@ name = "nash_native_client"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["rust_gmp"]
+default = ["rust_gmp", "rustcrypto"]
+rustcrypto = ["nash-protocol/rustcrypto"]
+libsecp256k1 = ["nash-protocol/libsecp256k1"]
 rust_gmp = ["nash-protocol/rust_gmp"]
 num_bigint = ["nash-protocol/num_bigint"]
 

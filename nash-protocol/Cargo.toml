@@ -1,7 +1,7 @@
 [package]
 name = "nash-protocol"
-version = "0.1.14"
-authors = ["Ethan Fast <ejhfast@gmail.com>", "Robert Annessi <robert@nash.io>"]
+version = "0.1.15"
+authors = ["Ethan Fast <ejhfast@gmail.com>", "Robert Annessi <robert@nash.io>", "Jan Kjaergaard <jan@jankjr.dk>"]
 edition = "2018"
 license = "MIT"
 repository = "https://github.com/nash-io/nash-rust/nash-protocol"

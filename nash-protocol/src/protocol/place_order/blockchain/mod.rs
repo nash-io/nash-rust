@@ -5,6 +5,7 @@ pub mod neo;
 use super::super::signer::Signer;
 use crate::errors::Result;
 use crate::graphql::place_limit_order;
+use crate::graphql::place_market_order;
 
 /// Generic representation of FillOrder payloads across blockchains. These enable
 /// Nash to settle active orders directly with the smart contract if necessary
@@ -32,6 +33,17 @@ impl FillOrder {
             Self::Ethereum(fill_order) => fill_order.to_blockchain_signature(signer),
             Self::Bitcoin(fill_order) => fill_order.to_blockchain_signature(signer),
             Self::NEO(fill_order) => fill_order.to_blockchain_signature(signer),
+        }
+    }
+
+    pub fn to_market_blockchain_signature(
+        &self,
+        signer: &mut Signer,
+    ) -> Result<place_market_order::BlockchainSignature> {
+        match self {
+            Self::Ethereum(fill_order) => fill_order.to_market_blockchain_signature(signer),
+            Self::Bitcoin(fill_order) => fill_order.to_market_blockchain_signature(signer),
+            Self::NEO(fill_order) => fill_order.to_market_blockchain_signature(signer),
         }
     }
 }

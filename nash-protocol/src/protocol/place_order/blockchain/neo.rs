@@ -1,5 +1,6 @@
 use crate::errors::Result;
 use crate::graphql::place_limit_order;
+use crate::graphql::place_market_order;
 use crate::types::neo::{Address, PublicKey};
 use crate::types::{Amount, Blockchain, Nonce, Rate};
 use crate::types::{AssetOrCrosschain, Prefix};
@@ -101,6 +102,22 @@ impl FillOrder {
         let (sig, r, pub_key) = signer.sign_child_key(payload_hash, Blockchain::NEO)?;
         let graphql_output = place_limit_order::BlockchainSignature {
             blockchain: place_limit_order::Blockchain::NEO,
+            nonce_from: Some(self.nonce_from.into()),
+            nonce_to: Some(self.nonce_to.into()),
+            public_key: Some(pub_key),
+            signature: bigint_to_nash_sig(sig),
+            r: Some(bigint_to_nash_r(r)),
+        };
+        Ok(graphql_output)
+    }
+    pub fn to_market_blockchain_signature(
+        &self,
+        signer: &mut Signer,
+    ) -> Result<place_market_order::BlockchainSignature> {
+        let payload_hash = self.hash()?;
+        let (sig, r, pub_key) = signer.sign_child_key(payload_hash, Blockchain::NEO)?;
+        let graphql_output = place_market_order::BlockchainSignature {
+            blockchain: place_market_order::Blockchain::NEO,
             nonce_from: Some(self.nonce_from.into()),
             nonce_to: Some(self.nonce_to.into()),
             public_key: Some(pub_key),

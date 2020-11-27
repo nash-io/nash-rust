@@ -1,0 +1,17 @@
+mutation PlaceMarketOrder(
+    $payload: PlaceMarketOrderParams!
+    $signature: Signature!
+    $affiliate: AffiliateDeveloperCode
+) {
+    placeMarketOrder(payload: $payload, signature: $signature, affiliateDeveloperCode:$affiliate) {
+        id
+        status
+        ordersTillSignState,
+        buyOrSell,
+        market {
+            name
+        },
+        placedAt,
+        type
+    }
+}

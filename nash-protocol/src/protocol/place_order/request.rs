@@ -1,7 +1,6 @@
 use crate::errors::{ProtocolError, Result};
 use crate::graphql;
 use crate::graphql::place_limit_order;
-use crate::graphql::place_market_order;
 use crate::types::neo::PublicKey as NeoPublicKey;
 use crate::types::PublicKey;
 use crate::types::{
@@ -14,19 +13,13 @@ use std::convert::TryInto;
 use super::super::signer::Signer;
 use super::super::{general_canonical_string, RequestPayloadSignature, State};
 use super::blockchain::{btc, eth, neo, FillOrder};
-use super::types::{
-    LimitOrderConstructor, LimitOrderRequest,
-    MarketOrderConstructor, MarketOrderRequest,
-    PayloadNonces
-};
+use super::types::{LimitOrderConstructor, LimitOrderRequest, PayloadNonces};
 
 use futures::lock::Mutex;
 use std::sync::Arc;
 
 type LimitOrderMutation = graphql_client::QueryBody<place_limit_order::Variables>;
-type MarketOrderMutation = graphql_client::QueryBody<place_market_order::Variables>;
-type LimitBlockchainSignatures = Vec<Option<place_limit_order::BlockchainSignature>>;
-type MarketBlockchainSignatures = Vec<Option<place_market_order::BlockchainSignature>>;
+type BlockchainSignatures = Vec<Option<place_limit_order::BlockchainSignature>>;
 
 impl LimitOrderRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
@@ -69,39 +62,6 @@ impl LimitOrderRequest {
             source,
             destination,
             rate,
-        })
-    }
-}
-
-
-impl MarketOrderRequest {
-    // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
-    // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<MarketOrderConstructor> {
-
-        let state = state.lock().await;
-
-        let (source, destination, market) = match self.buy_or_sell {
-            BuyOrSell::Buy => {
-                let market = state.get_market(&self.market)?.invert();
-                let amount = market.asset_a.with_amount(&self.amount)?;
-                // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount, market.asset_a, market)
-            }
-            BuyOrSell::Sell => {
-                let market = state.get_market(&self.market)?;
-                let amount = market.asset_a.with_amount(&self.amount)?;
-                // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount, market.asset_a, market)
-            }
-        };
-
-        Ok(MarketOrderConstructor {
-            me_amount: source.clone(),
-            market: market.clone(),
-            buy_or_sell: BuyOrSell::Sell,
-            source,
-            destination,
         })
     }
 }
@@ -179,7 +139,7 @@ impl LimitOrderConstructor {
         &self,
         signer: &mut Signer,
         nonces: &[PayloadNonces],
-    ) -> Result<LimitBlockchainSignatures> {
+    ) -> Result<BlockchainSignatures> {
         let mut order_payloads = Vec::new();
         let blockchains = self.market.blockchains();
         for blockchain in blockchains {
@@ -300,172 +260,6 @@ impl LimitOrderConstructor {
     }
 }
 
-impl MarketOrderConstructor {
-    /// Helper to transform a limit order into signed fillorder data on every blockchain
-    pub fn make_fill_order(
-        &self,
-        chain: Blockchain,
-        pub_key: &PublicKey,
-        nonces: &PayloadNonces,
-    ) -> Result<FillOrder> {
-        // Rate is in "dest per source", so a higher rate is always beneficial to a user
-        // Here we insure the minimum rate is the rate they specified
-        let min_order = Rate::MinOrderRate;
-        let max_order = Rate::MaxOrderRate;
-        // Amount is specified in the "source" asset
-        let amount = self.source.amount.clone();
-        let fee_rate = Rate::MinFeeRate; // 0
-
-        match chain {
-            Blockchain::Ethereum => Ok(FillOrder::Ethereum(eth::FillOrder::new(
-                pub_key.to_address()?.try_into()?,
-                self.source.asset.into(),
-                self.destination.into(),
-                map_crosschain(nonces.nonce_from, chain, self.source.asset.into()),
-                map_crosschain(nonces.nonce_to, chain, self.destination.into()),
-                amount,
-                min_order,
-                max_order,
-                fee_rate,
-                nonces.order_nonce,
-            ))),
-            Blockchain::Bitcoin => Ok(FillOrder::Bitcoin(btc::FillOrder::new(
-                map_crosschain(nonces.nonce_from, chain, self.source.asset.into()),
-                map_crosschain(nonces.nonce_to, chain, self.destination.into()),
-            ))),
-            Blockchain::NEO => {
-                // FIXME: this can still be improved...
-                let neo_pub_key: NeoPublicKey = pub_key.clone().try_into()?;
-                let neo_order = neo::FillOrder::new(
-                    neo_pub_key,
-                    self.source.asset.into(),
-                    self.destination.into(),
-                    map_crosschain(nonces.nonce_from, chain, self.source.asset.into()),
-                    map_crosschain(nonces.nonce_to, chain, self.destination.into()),
-                    amount,
-                    min_order,
-                    max_order,
-                    fee_rate,
-                    nonces.order_nonce,
-                );
-                Ok(FillOrder::NEO(neo_order))
-            }
-        }
-    }
-
-    /// Create a signed blockchain payload in the format expected by GraphQL when
-    /// given `nonces` and a `Client` as `signer`. FIXME: handle other chains
-    pub fn blockchain_signatures(
-        &self,
-        signer: &mut Signer,
-        nonces: &[PayloadNonces],
-    ) -> Result<MarketBlockchainSignatures> {
-        let mut order_payloads = Vec::new();
-        let blockchains = self.market.blockchains();
-        for blockchain in blockchains {
-            let pub_key = signer.child_public_key(blockchain)?;
-            for nonce_group in nonces {
-                let fill_order = self.make_fill_order(blockchain, &pub_key, nonce_group)?;
-                order_payloads.push(Some(fill_order.to_market_blockchain_signature(signer)?))
-            }
-        }
-        Ok(order_payloads)
-    }
-
-    /// Create a GraphQL request with everything filled in besides blockchain order payloads
-    /// and signatures (for both the overall request and blockchain payloads)
-    pub fn graphql_request(
-        &self,
-        current_time: i64,
-        affiliate: Option<String>,
-    ) -> Result<place_market_order::Variables> {
-        let order_args = place_market_order::Variables {
-            payload: place_market_order::PlaceMarketOrderParams {
-                buy_or_sell: BuyOrSell::Sell.into(),
-                market_name: self.market.market_name(),
-                amount: self.me_amount.clone().try_into()?,
-                // These two nonces are deprecated...
-                nonce_from: None,
-                nonce_to: None,
-                nonce_order: (current_time as u32) as i64, // 4146194029, // Fixme: what do we validate on this?
-                timestamp: current_time,
-                blockchain_signatures: vec![],
-            },
-            affiliate,
-            signature: RequestPayloadSignature::empty().into(),
-        };
-        Ok(order_args)
-    }
-
-    /// Create a signed GraphQL request with blockchain payloads that can be submitted
-    /// to Nash
-    pub fn signed_graphql_request(
-        &self,
-        nonces: Vec<PayloadNonces>,
-        current_time: i64,
-        affiliate: Option<String>,
-        signer: &mut Signer,
-    ) -> Result<MarketOrderMutation> {
-        let mut request = self.graphql_request(current_time, affiliate)?;
-        // compute and add blockchain signatures
-        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
-        request.payload.blockchain_signatures = bc_sigs;
-        // now compute overall request payload signature
-        let canonical_string = market_order_canonical_string(&request);
-        let sig: place_market_order::Signature =
-            signer.sign_canonical_string(&canonical_string).into();
-        request.signature = sig;
-        Ok(graphql::PlaceMarketOrder::build_query(request))
-    }
-
-    // Construct payload nonces with source as `from` asset name and destination as
-    // `to` asset name. Nonces will be retrieved from current values in `State`
-    pub async fn make_payload_nonces(
-        &self,
-        state: Arc<Mutex<State>>,
-        current_time: i64,
-    ) -> Result<Vec<PayloadNonces>> {
-        let state = state.lock().await;
-        let asset_nonces = state.asset_nonces.as_ref()
-            .ok_or(ProtocolError("Asset nonce map does not exist"))?;
-        let (from, to) = match self.buy_or_sell {
-            BuyOrSell::Buy => (
-                self.market.asset_b.asset.name(),
-                self.market.asset_a.asset.name(),
-            ),
-            BuyOrSell::Sell => (
-                self.market.asset_a.asset.name(),
-                self.market.asset_b.asset.name(),
-            ),
-        };
-        let nonce_froms: Vec<Nonce> = asset_nonces
-            .get(from)
-            .ok_or(ProtocolError("Asset nonce for source does not exist"))?
-            .iter()
-            .map(|nonce| Nonce::Value(*nonce))
-            .collect();
-        let nonce_tos: Vec<Nonce> = asset_nonces
-            .get(to)
-            .ok_or(ProtocolError(
-                "Asset nonce for destination a does not exist",
-            ))?
-            .iter()
-            .map(|nonce| Nonce::Value(*nonce))
-            .collect();
-        let mut nonce_combinations = Vec::new();
-        for nonce_from in &nonce_froms {
-            for nonce_to in &nonce_tos {
-                nonce_combinations.push(PayloadNonces {
-                    nonce_from: *nonce_from,
-                    nonce_to: *nonce_to,
-                    order_nonce: Nonce::Value(current_time as u32),
-                })
-            }
-        }
-        Ok(nonce_combinations)
-    }
-}
-
 pub fn limit_order_canonical_string(variables: &place_limit_order::Variables) -> String {
     let serialized_all = serde_json::to_string(variables).unwrap();
     general_canonical_string(
@@ -474,49 +268,6 @@ pub fn limit_order_canonical_string(variables: &place_limit_order::Variables) ->
         vec!["blockchain_signatures".to_string()],
     )
 }
-
-pub fn market_order_canonical_string(variables: &place_market_order::Variables) -> String {
-    let serialized_all = serde_json::to_string(variables).unwrap();
-    general_canonical_string(
-        "place_market_order".to_string(),
-        serde_json::from_str(&serialized_all).unwrap(),
-        vec!["blockchain_signatures".to_string()],
-    )
-}
-
-impl Into<place_market_order::OrderBuyOrSell> for BuyOrSell {
-    fn into(self) -> place_market_order::OrderBuyOrSell {
-        match self {
-            BuyOrSell::Buy => place_market_order::OrderBuyOrSell::BUY,
-            BuyOrSell::Sell => place_market_order::OrderBuyOrSell::SELL,
-        }
-    }
-}
-
-impl From<RequestPayloadSignature> for place_market_order::Signature {
-    fn from(sig: RequestPayloadSignature) -> Self {
-        place_market_order::Signature {
-            signed_digest: sig.signed_digest,
-            public_key: sig.public_key,
-        }
-    }
-}
-
-impl TryInto<place_market_order::CurrencyAmountParams> for AssetAmount {
-    type Error = ProtocolError;
-    fn try_into(self) -> Result<place_market_order::CurrencyAmountParams> {
-        Ok(place_market_order::CurrencyAmountParams {
-            amount: pad_zeros(
-                &self.amount.to_bigdecimal().to_string(),
-                self.amount.precision,
-            )?,
-            // FIXME: asset.asset is ugly
-            currency: self.asset.asset.name().to_string(),
-        })
-    }
-}
-
-
 
 impl Into<place_limit_order::OrderBuyOrSell> for BuyOrSell {
     fn into(self) -> place_limit_order::OrderBuyOrSell {

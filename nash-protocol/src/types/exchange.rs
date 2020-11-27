@@ -261,15 +261,6 @@ impl Market {
             Err(ProtocolError("Asset not associated with market"))
         }
     }
-
-    pub fn invert(&self) -> Market {
-        Market::new(
-            self.asset_b.clone(),
-            self.asset_a.clone(),
-            self.min_trade_size_b.clone(),
-            self.min_trade_size_a.clone(),
-        )
-    }
 }
 
 /// Buy or sell type for Nash protocol. We don't use the one generated automatically

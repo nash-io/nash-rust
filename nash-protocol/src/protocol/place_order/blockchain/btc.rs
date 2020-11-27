@@ -2,7 +2,6 @@ use nash_mpc::rust_bigint::BigInt;
 
 use crate::errors::Result;
 use crate::graphql::place_limit_order;
-use crate::graphql::place_market_order;
 use crate::types::{Blockchain, Nonce};
 use crate::utils::{bigint_to_nash_r, bigint_to_nash_sig};
 
@@ -32,24 +31,6 @@ impl FillOrder {
             signer.sign_child_key(BigInt::from(0 as u64), Blockchain::Bitcoin)?;
         let graphql_output = place_limit_order::BlockchainSignature {
             blockchain: place_limit_order::Blockchain::BTC,
-            nonce_from: Some(self.nonce_from.into()),
-            nonce_to: Some(self.nonce_to.into()),
-            public_key: Some(pub_key),
-            signature: bigint_to_nash_sig(sig),
-            r: Some(bigint_to_nash_r(r)),
-        };
-        Ok(graphql_output)
-    }
-
-    pub fn to_market_blockchain_signature(
-        &self,
-        signer: &mut Signer,
-    ) -> Result<place_market_order::BlockchainSignature> {
-        // The only way I could get this to work with backend is to sign garbage data...
-        let (sig, r, pub_key) =
-            signer.sign_child_key(BigInt::from(0 as u64), Blockchain::Bitcoin)?;
-        let graphql_output = place_market_order::BlockchainSignature {
-            blockchain: place_market_order::Blockchain::BTC,
             nonce_from: Some(self.nonce_from.into()),
             nonce_to: Some(self.nonce_to.into()),
             public_key: Some(pub_key),

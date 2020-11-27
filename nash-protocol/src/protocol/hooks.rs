@@ -7,7 +7,7 @@ use super::cancel_all_orders::{CancelAllOrders, CancelAllOrdersResponse};
 use super::dh_fill_pool::{DhFillPoolRequest, DhFillPoolResponse};
 use super::list_markets::{ListMarketsRequest, ListMarketsResponse};
 use super::orderbook::{OrderbookRequest, OrderbookResponse};
-use super::place_order::{LimitOrderRequest, PlaceOrderResponse};
+use super::place_order::{LimitOrderRequest, LimitOrderResponse};
 use super::sign_all_states::{SignAllPipelineState, SignAllStates};
 use super::sign_states::{SignStatesRequest, SignStatesResponse};
 use super::traits::{NashProtocol, NashProtocolPipeline};
@@ -36,7 +36,7 @@ pub enum NashProtocolRequest {
 pub enum NashProtocolResponse {
     AssetNonces(AssetNoncesResponse),
     DhFill(DhFillPoolResponse),
-    LimitOrder(PlaceOrderResponse),
+    LimitOrder(LimitOrderResponse),
     Orderbook(OrderbookResponse),
     CancelOrders(CancelAllOrdersResponse),
     SignState(SignStatesResponse),

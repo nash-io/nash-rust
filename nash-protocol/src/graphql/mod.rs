@@ -90,14 +90,6 @@ pub struct PlaceLimitOrder;
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "src/graphql/schema.json",
-    query_path = "src/graphql/mutations/market_order.graphql",
-    response_derives = "Debug"
-)]
-pub struct PlaceMarketOrder;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/graphql/schema.json",
     query_path = "src/graphql/mutations/sign_states.graphql",
     response_derives = "Debug"
 )]

@@ -33,7 +33,7 @@ impl AssetNoncesRequest {
             },
             signature: RequestPayloadSignature::empty().into(),
         };
-        let sig_payload = asset_nonces_canonical_string(&asset_nonce_args);
+        let sig_payload = asset_nonces_canonical_string(&asset_nonce_args)?;
         let sig = signer.sign_canonical_string(&sig_payload);
         asset_nonce_args.signature = sig.into();
         Ok(graphql::GetAssetsNonces::build_query(asset_nonce_args))
@@ -41,13 +41,13 @@ impl AssetNoncesRequest {
 }
 
 /// Generate canonical string for on request to get asset nonces
-pub fn asset_nonces_canonical_string(variables: &get_assets_nonces::Variables) -> String {
-    let serialized_all = serde_json::to_string(variables).unwrap();
-    general_canonical_string(
+pub fn asset_nonces_canonical_string(variables: &get_assets_nonces::Variables) -> Result<String> {
+    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize variables"))?;
+    Ok(general_canonical_string(
         "get_assets_nonces".to_string(),
-        serde_json::from_str(&serialized_all).unwrap(),
+        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize variables"))?,
         vec![],
-    )
+    ))
 }
 
 /// Convert ugly generated `get_assets_nonces::Signature` type into common signature

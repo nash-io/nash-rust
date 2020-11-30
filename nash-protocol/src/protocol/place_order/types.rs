@@ -34,7 +34,6 @@ pub struct LimitOrderRequest {
 #[derive(Clone, Debug)]
 pub struct MarketOrderRequest {
     pub market: String,
-    pub buy_or_sell: BuyOrSell,
     pub amount: String
 }
 
@@ -63,12 +62,10 @@ impl LimitOrderRequest {
 impl MarketOrderRequest {
     pub fn new(
         market: String,
-        buy_or_sell: BuyOrSell,
         amount_a: &str,
     ) -> Result<Self> {
         Ok(Self {
             market,
-            buy_or_sell,
             amount: amount_a.to_string(),
         })
     }
@@ -91,7 +88,6 @@ pub struct LimitOrderConstructor {
 
 pub struct MarketOrderConstructor {
     // These fields are for GraphQL
-    pub buy_or_sell: BuyOrSell,
     pub market: Market,
     pub me_amount: AssetAmount,
     // These fields are for the smart contracts

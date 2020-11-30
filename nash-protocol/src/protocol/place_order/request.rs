@@ -81,23 +81,26 @@ impl MarketOrderRequest {
 
         let state = state.lock().await;
 
-        let (source, destination, market) = match self.buy_or_sell {
-            BuyOrSell::Buy => {
-                let market = state.get_market(&self.market)?.invert();
-                let amount = market.asset_a.with_amount(&self.amount)?;
-                (amount, market.asset_b, market)
-            }
-            BuyOrSell::Sell => {
-                let market = state.get_market(&self.market)?;
-                let amount = market.asset_a.with_amount(&self.amount)?;
-                (amount, market.asset_b, market)
+        
+
+        let market = match state.get_market(&self.market) {
+            Ok(market) => market,
+            Err(_) => {
+                let reverse_market: Vec<&str> = self.market.split('_').rev().collect();
+                let reverse_market = reverse_market.join("_");
+                match state.get_market(&reverse_market) {
+                    Ok(market) => market,
+                    Err(err) => return Err(err)
+                }
             }
         };
+
+        let source = market.asset_a.with_amount(&self.amount)?;
+        let destination =  market.asset_b;
 
         Ok(MarketOrderConstructor {
             me_amount: source.clone(),
             market: market.clone(),
-            buy_or_sell: BuyOrSell::Sell,
             source,
             destination,
         })
@@ -243,7 +246,7 @@ impl LimitOrderConstructor {
         let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
         request.payload.blockchain_signatures = bc_sigs;
         // now compute overall request payload signature
-        let canonical_string = limit_order_canonical_string(&request);
+        let canonical_string = limit_order_canonical_string(&request)?;
         let sig: place_limit_order::Signature =
             signer.sign_canonical_string(&canonical_string).into();
         request.signature = sig;
@@ -409,7 +412,7 @@ impl MarketOrderConstructor {
         let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
         request.payload.blockchain_signatures = bc_sigs;
         // now compute overall request payload signature
-        let canonical_string = market_order_canonical_string(&request);
+        let canonical_string = market_order_canonical_string(&request)?;
         let sig: place_market_order::Signature =
             signer.sign_canonical_string(&canonical_string).into();
         request.signature = sig;
@@ -426,16 +429,10 @@ impl MarketOrderConstructor {
         let state = state.lock().await;
         let asset_nonces = state.asset_nonces.as_ref()
             .ok_or(ProtocolError("Asset nonce map does not exist"))?;
-        let (from, to) = match self.buy_or_sell {
-            BuyOrSell::Buy => (
-                self.market.asset_b.asset.name(),
-                self.market.asset_a.asset.name(),
-            ),
-            BuyOrSell::Sell => (
-                self.market.asset_a.asset.name(),
-                self.market.asset_b.asset.name(),
-            ),
-        };
+        let (from, to) = (
+            self.market.asset_a.asset.name(),
+            self.market.asset_b.asset.name(),
+        );
         let nonce_froms: Vec<Nonce> = asset_nonces
             .get(from)
             .ok_or(ProtocolError("Asset nonce for source does not exist"))?
@@ -464,22 +461,24 @@ impl MarketOrderConstructor {
     }
 }
 
-pub fn limit_order_canonical_string(variables: &place_limit_order::Variables) -> String {
-    let serialized_all = serde_json::to_string(variables).unwrap();
-    general_canonical_string(
+pub fn limit_order_canonical_string(variables: &place_limit_order::Variables) -> Result<String> {
+    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize limit order into canonical string"))?;
+
+    Ok(general_canonical_string(
         "place_limit_order".to_string(),
-        serde_json::from_str(&serialized_all).unwrap(),
+        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize limit order into canonical string"))?,
         vec!["blockchain_signatures".to_string()],
-    )
+    ))
 }
 
-pub fn market_order_canonical_string(variables: &place_market_order::Variables) -> String {
-    let serialized_all = serde_json::to_string(variables).unwrap();
-    general_canonical_string(
+pub fn market_order_canonical_string(variables: &place_market_order::Variables) -> Result<String> {
+    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize market order into canonical string"))?;
+
+    Ok(general_canonical_string(
         "place_market_order".to_string(),
-        serde_json::from_str(&serialized_all).unwrap(),
+        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize market order into canonical string"))?,
         vec!["blockchain_signatures".to_string()],
-    )
+    ))
 }
 
 impl Into<place_market_order::OrderBuyOrSell> for BuyOrSell {

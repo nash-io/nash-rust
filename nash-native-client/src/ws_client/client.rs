@@ -569,7 +569,7 @@ mod tests {
     use nash_protocol::protocol::list_markets::ListMarketsRequest;
     use nash_protocol::protocol::list_trades::ListTradesRequest;
     use nash_protocol::protocol::orderbook::OrderbookRequest;
-    use nash_protocol::protocol::place_order::LimitOrderRequest;
+    use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest};
     use nash_protocol::protocol::sign_all_states::SignAllStates;
     use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
     use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
@@ -1041,6 +1041,20 @@ mod tests {
                 .unwrap();
             println!("{:?}", response);
             assert_eq!(response.response().unwrap().accepted, true);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
+    fn end_to_end_market_order() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let response = client.run(MarketOrderRequest {
+                market: "eth_usdc".to_string(),
+                amount: "0.02".to_string() // This is USDC! because of weird Nash API
+            }).await;
+            println!("{:?}", response);
         };
         runtime.block_on(async_block);
     }

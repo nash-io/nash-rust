@@ -89,7 +89,7 @@ impl MarketOrderRequest {
                 let reverse_market: Vec<&str> = self.market.split('_').rev().collect();
                 let reverse_market = reverse_market.join("_");
                 match state.get_market(&reverse_market) {
-                    Ok(market) => market,
+                    Ok(market) => market.invert(),
                     Err(err) => return Err(err)
                 }
             }

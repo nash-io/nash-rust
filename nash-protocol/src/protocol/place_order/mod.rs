@@ -6,4 +6,4 @@ mod request;
 mod response;
 mod types;
 
-pub use types::{LimitOrderRequest, PlaceOrderResponse};
+pub use types::{LimitOrderRequest, MarketOrderRequest, PlaceOrderResponse};

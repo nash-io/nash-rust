@@ -85,14 +85,12 @@ impl MarketOrderRequest {
             BuyOrSell::Buy => {
                 let market = state.get_market(&self.market)?.invert();
                 let amount = market.asset_a.with_amount(&self.amount)?;
-                // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount, market.asset_a, market)
+                (amount, market.asset_b, market)
             }
             BuyOrSell::Sell => {
                 let market = state.get_market(&self.market)?;
                 let amount = market.asset_a.with_amount(&self.amount)?;
-                // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount, market.asset_a, market)
+                (amount, market.asset_b, market)
             }
         };
 
@@ -314,7 +312,7 @@ impl MarketOrderConstructor {
         let max_order = Rate::MaxOrderRate;
         // Amount is specified in the "source" asset
         let amount = self.source.amount.clone();
-        let fee_rate = Rate::MinFeeRate; // 0
+        let fee_rate = Rate::MinOrderRate; // 0
 
         match chain {
             Blockchain::Ethereum => Ok(FillOrder::Ethereum(eth::FillOrder::new(
@@ -385,8 +383,8 @@ impl MarketOrderConstructor {
                 market_name: self.market.market_name(),
                 amount: self.me_amount.clone().try_into()?,
                 // These two nonces are deprecated...
-                nonce_from: None,
-                nonce_to: None,
+                nonce_from: Some(0),
+                nonce_to: Some(0),
                 nonce_order: (current_time as u32) as i64, // 4146194029, // Fixme: what do we validate on this?
                 timestamp: current_time,
                 blockchain_signatures: vec![],

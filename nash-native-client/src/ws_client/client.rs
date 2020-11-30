@@ -1051,8 +1051,8 @@ mod tests {
         let async_block = async {
             let client = init_client().await;
             let response = client.run(MarketOrderRequest {
-                market: "eth_usdc".to_string(),
-                amount: "0.02".to_string() // This is USDC! because of weird Nash API
+                market: "usdc_eth".to_string(),
+                amount: "10".to_string()
             }).await;
             println!("{:?}", response);
         };

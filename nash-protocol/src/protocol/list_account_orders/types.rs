@@ -30,8 +30,7 @@ use std::sync::Arc;
 /// ```
 #[derive(Clone, Debug)]
 pub struct ListAccountOrdersRequest {
-    /// FIXME: this is a required field because of a backend bug, it should be optional
-    pub market: String,
+    pub market: Option<String>,
     /// page before if using pagination
     pub before: Option<String>,
     pub buy_or_sell: Option<BuyOrSell>,

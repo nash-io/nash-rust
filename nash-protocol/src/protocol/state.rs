@@ -31,7 +31,7 @@ pub struct State {
     // optional affiliate code, will recieve a share of fees generated
     pub affiliate_code: Option<String>, // FIXME: move r-pool from global indexmap here
     pub assets_nonces_refresh: bool,
-    pub state_sign_refersh: bool
+    pub state_sign_refresh: bool // TODO, not 100% we need this
 }
 
 impl State {
@@ -48,7 +48,7 @@ impl State {
             assets: None,
             asset_nonces: None,
             assets_nonces_refresh: false,
-            state_sign_refersh: false
+            state_sign_refresh: false
         })
     }
 

@@ -30,6 +30,8 @@ pub struct State {
     pub remaining_orders: u64,
     // optional affiliate code, will recieve a share of fees generated
     pub affiliate_code: Option<String>, // FIXME: move r-pool from global indexmap here
+    pub assets_nonces_refresh: bool,
+    pub state_sign_refersh: bool
 }
 
 impl State {
@@ -45,6 +47,8 @@ impl State {
             markets: None,
             assets: None,
             asset_nonces: None,
+            assets_nonces_refresh: false,
+            state_sign_refersh: false
         })
     }
 
@@ -57,6 +61,8 @@ impl State {
             markets: None,
             assets: None,
             asset_nonces: None,
+            assets_nonces_refresh: false,
+            state_sign_refersh: false
         })
     }
 

@@ -266,6 +266,15 @@ impl Environment {
     }
 }
 
+// FIXME
+async fn manage_client_error(state: Arc<Mutex<State>>) {
+    let mut state = state.lock().await;
+    // quick fix, on any client error trigger an asset nonces refresh
+    // in future, next step would be to destructure the error recieved from ME
+    // passed via an extra argument and act on client state appropriately
+    state.assets_nonces_refresh = true;
+}
+
 /// Interface for interacting with a websocket connection
 pub struct Client {
     ws_outgoing_sender: UnboundedSender<AbsintheWSRequest>,
@@ -392,7 +401,7 @@ impl Client {
             request
                 .process_response(response, self.state.clone())
                 .await?;
-        };
+        }
         Ok(protocol_response)
     }
 
@@ -445,6 +454,9 @@ impl Client {
                 let protocol_response = self.execute_protocol(protocol_request).await?;
                 // If error, end pipeline early and return GraphQL/network error data
                 if protocol_response.is_error() {
+                    
+                    manage_client_error(self.state.clone()).await;
+
                     return Ok(ResponseOrError::Error(
                         protocol_response
                             .consume_error()
@@ -555,7 +567,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, Environment};
+    use super::{Client, Environment, HashMap};
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -1008,25 +1020,48 @@ mod tests {
         runtime.block_on(async_block);
     }
 
+
     #[test]
-    fn end_to_end_sell_limit_order() {
+    fn limit_order_nonce_recovery() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
+            let lor = LimitOrderRequest {
+                market: "eth_usdc".to_string(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "0.02".to_string(),
+                price: "900".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilTime(
+                    Utc.ymd(2020, 12, 16).and_hms(0, 0, 0),
+                ),
+                allow_taker: true,
+            };
+            // Get nonces
+            let response = client.run(AssetNoncesRequest::new()).await;
+            let response = client.run(SignAllStates::new()).await;
+
+            // Break nonces
+            let mut state_lock = client.state.lock().await;
+            let mut bad_map = HashMap::new();
+            bad_map.insert("eth".to_string(), vec![0 as u32]);
+            bad_map.insert("usdc".to_string(), vec![0 as u32]);
+            state_lock.remaining_orders = 100;
+            state_lock.asset_nonces = Some(bad_map);
+            drop(state_lock);
+
+            // First attempt should fail with nonces complaint
             let response = client
-                .run(LimitOrderRequest {
-                    market: "eth_usdc".to_string(),
-                    buy_or_sell: BuyOrSell::Sell,
-                    amount: "0.02".to_string(),
-                    price: "800".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilTime(
-                        Utc.ymd(2020, 12, 16).and_hms(0, 0, 0),
-                    ),
-                    allow_taker: true,
-                })
+                .run(lor.clone())
                 .await
                 .unwrap();
             println!("{:?}", response);
+            // Second attempt should succeed because client state is set to refresh nonces
+            let response = client
+                .run(lor.clone())
+                .await
+                .unwrap();
+            println!("{:?}", response);
+            // Now cancel
             let order_id = response.response().unwrap().order_id.clone();
             let response = client
                 .run(GetAccountOrderRequest { order_id })

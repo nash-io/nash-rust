@@ -20,7 +20,7 @@ neon-build = "0.4"
 # FIXME: need to pin neon to 0.4.0 until https://github.com/GabrielCastro/neon-serde/issues/61 is fixed
 neon = "=0.4.0"
 neon-serde = "0.4"
-nash-mpc = { version = "*", path = '../../nash-mpc', default-features = false, features = ["rust_gmp"] }
+nash-mpc = { version = "*", path = '../../nash-mpc', features = ["rust_gmp"] }
 serde_json = "1.0"
 
 [profile.release]

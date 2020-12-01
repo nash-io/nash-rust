@@ -12,7 +12,6 @@ keywords = ["nash", "cryptography", "threshold", "signature", "mpc"]
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["rust_gmp", "secp256k1"]
 rust_gmp = ["rust-bigint/rust_gmp", "paillier-common/rust_gmp"]
 num_bigint = ["rust-bigint/num_bigint", "paillier-common/num_bigint", "num-integer", "num-traits"]
 wasm = ["chrono/wasmbind", "getrandom/js"]

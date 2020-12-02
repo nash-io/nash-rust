@@ -34,6 +34,14 @@ pub struct GetOrderbook;
 )]
 pub struct GetTicker;
 
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/graphql/schema.json",
+    query_path = "src/graphql/subscriptions/updated_ticker.graphql",
+    response_derives = "Debug"
+)]
+pub struct UpdatedTicker;
+
 /// Rust constructor for subscription to incoming trades
 #[derive(GraphQLQuery)]
 #[graphql(

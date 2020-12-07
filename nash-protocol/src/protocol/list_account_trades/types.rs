@@ -13,8 +13,7 @@ use std::sync::Arc;
 /// List trades associated with current account session filtered by several optional fields.
 #[derive(Clone, Debug)]
 pub struct ListAccountTradesRequest {
-    /// FIXME: this is a required field because of a backend bug, it should be optional
-    pub market: String,
+    pub market: Option<String>,
     /// page before if using pagination
     pub before: Option<String>,
     /// max trades to return

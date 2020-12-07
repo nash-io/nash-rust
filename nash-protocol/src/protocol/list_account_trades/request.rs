@@ -10,7 +10,7 @@ impl ListAccountTradesRequest {
             payload: list_account_trades::ListAccountTradesParams {
                 before: self.before.clone(),
                 limit: self.limit,
-                market_name: Some(self.market.clone()),
+                market_name: self.market.clone(),
                 range_start: self.range.as_ref().map(|x| format!("{:?}", x.start)),
                 range_stop: self.range.as_ref().map(|x| format!("{:?}", x.stop)),
             },

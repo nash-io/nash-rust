@@ -63,7 +63,9 @@ impl NashProtocol for AssetNoncesRequest {
         for (key, value) in &response.nonces {
             nonces_map.insert(key.clone(), value.clone());
         }
-        state.lock().await.asset_nonces = Some(nonces_map);
+        let mut state = state.lock().await;
+        state.asset_nonces = Some(nonces_map);
+        state.assets_nonces_refresh = false; // set to false as we just grabbed nonces
         Ok(())
     }
 

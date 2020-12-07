@@ -178,11 +178,14 @@ impl NashProtocol for LimitOrderRequest {
             }
         }
 
-        // Retrieve asset nonces if we don't have them
-        if let None = state.asset_nonces {
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                AssetNoncesRequest::new(),
-            )));
+        // Retrieve asset nonces if we don't have them or an error triggered need to refresh
+        match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
+            (None, _) | (_, true) => {
+                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
+                    AssetNoncesRequest::new(),
+                )));
+            }
+            _ => {}
         }
 
         // If we are about to out of orders...
@@ -262,15 +265,18 @@ impl NashProtocol for MarketOrderRequest {
             }
         }
 
-        // Retrieve asset nonces if we don't have them
-        if let None = state.asset_nonces {
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                AssetNoncesRequest::new(),
-            )));
+        // Retrieve asset nonces if we don't have them or an error triggered need to refresh
+        match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
+            (None, _) | (_, true) => {
+                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
+                    AssetNoncesRequest::new(),
+                )));
+            }
+            _ => {}
         }
 
-        // If have run out of orders...
-        if state.remaining_orders == 0 {
+        // If have run out of orders... (temp setting conservatively)
+        if state.remaining_orders == 20 {
             // Need to sign states
             hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
             // After signing states, need to update nonces again

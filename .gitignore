@@ -3,3 +3,4 @@ target/
 Cargo.lock
 .DS_Store
 nash-native-client/test_data/*
+.idea

@@ -62,7 +62,7 @@ impl State {
             assets: None,
             asset_nonces: None,
             assets_nonces_refresh: false,
-            state_sign_refersh: false
+            state_sign_refresh: false
         })
     }
 

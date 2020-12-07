@@ -6,7 +6,6 @@ use futures_util::future::{select, Either};
 use nash_protocol::protocol::{
     NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError, State,
 };
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpStream;

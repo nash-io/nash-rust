@@ -16,7 +16,7 @@ impl ListAccountOrdersRequest {
                     .as_ref()
                     .map(|x| x.iter().map(|x| Some(x.clone().into())).collect()),
                 buy_or_sell: self.buy_or_sell.map(|x| x.into()),
-                market_name: Some(self.market.clone()),
+                market_name: self.market.clone(),
                 type_: self
                     .order_type
                     .as_ref()

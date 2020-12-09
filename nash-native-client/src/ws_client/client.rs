@@ -23,7 +23,7 @@ use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheW
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
 // this will add hearbeat (keep alive) messages to the channel for ws to send out every 15s
-pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<AbsintheWSRequest>) {
+pub fn spawn_heartbeat_loop(period: Duration, client_id: u64, outgoing_sender: UnboundedSender<AbsintheWSRequest>) {
     tokio::spawn(async move {
         loop {
             let heartbeat = AbsintheWSRequest::new(
@@ -37,8 +37,7 @@ pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<Abs
                 // if outgoing sender is dead just ignore, will be handled elsewhere
                 break;
             }
-            // every 15s
-            delay_for(Duration::from_millis(15000)).await;
+            delay_for(period).await;
         }
     });
 }
@@ -46,6 +45,7 @@ pub fn spawn_heartbeat_loop(client_id: u64, outgoing_sender: UnboundedSender<Abs
 // this will recieve messages to send out over websockets on one channel, and pass incoming ws messages
 // back up to client on anoter channel.
 pub fn spawn_sender_loop(
+    timeout_duration: Duration,
     mut websocket: WebSocket,
     mut ws_outgoing_receiver: UnboundedReceiver<AbsintheWSRequest>,
     message_broker_link: UnboundedSender<BrokerAction>,
@@ -53,7 +53,7 @@ pub fn spawn_sender_loop(
     tokio::spawn(async move {
         loop {
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
-            let next_incoming = websocket.next();
+            let next_incoming = timeout(timeout_duration, websocket.next());
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
@@ -76,7 +76,7 @@ pub fn spawn_sender_loop(
                     }
                 }
                 Either::Right((in_msg, _)) => {
-                    if let Some(Ok(Ok(resp))) = in_msg.map(|x| x.map(|x| x.into_text())) {
+                    if let Some(Ok(Ok(resp))) = in_msg.ok().and_then(|in_msg| in_msg.map(|x| x.map(|x| x.into_text()))) {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
                             // Similarly, let the client timeout on incoming response if this fails and handle that
                             // todo: this is a hack since the graphql library has not implemented clone() for responses
@@ -281,7 +281,7 @@ pub struct Client {
     client_id: u64,
     message_broker: MessageBroker,
     state: Arc<Mutex<State>>,
-    timeout: u64,
+    timeout: Duration,
     global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
     pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }
@@ -294,7 +294,7 @@ impl Client {
         client_id: u64,
         affiliate_code: Option<String>,
         env: Environment,
-        timeout: u64,
+        timeout: Duration,
     ) -> Result<Self> {
         let state = State::new(keys_path)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
@@ -306,7 +306,7 @@ impl Client {
         affiliate_code: Option<String>,
         client_id: u64,
         env: Environment,
-        timeout: u64,
+        timeout: Duration,
     ) -> Result<Self> {
         let state = State::from_key_data(secret, session)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
@@ -317,7 +317,7 @@ impl Client {
         client_id: u64,
         affiliate_code: Option<String>,
         env: Environment,
-        timeout: u64,
+        timeout: Duration,
     ) -> Result<Self> {
         let version = "2.0.0";
 
@@ -348,6 +348,7 @@ impl Client {
 
         // This will loop over WS connection, send things out, and route things in
         spawn_sender_loop(
+            timeout,
             socket,
             ws_outgoing_receiver,
             message_broker.link.clone(),
@@ -360,7 +361,7 @@ impl Client {
             .map_err(|_| ProtocolError("Could not initialize connection with Nash"))?;
 
         // start a heartbeat loop
-        spawn_heartbeat_loop(client_id, ws_outgoing_sender.clone());
+        spawn_heartbeat_loop(timeout, client_id, ws_outgoing_sender.clone());
 
         let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
@@ -388,7 +389,7 @@ impl Client {
     ) -> Result<ResponseOrError<T::Response>> {
         let query = request.graphql(self.state.clone()).await?;
         let ws_response = timeout(
-            Duration::from_millis(self.timeout),
+            self.timeout,
             self.request(query).await?.next(),
         )
         .await
@@ -592,6 +593,7 @@ mod tests {
     use chrono::Utc;
     use futures_util::StreamExt;
     use dotenv::dotenv;
+    use tokio::time::Duration;
 
     async fn init_client() -> Client {
         dotenv().ok();
@@ -603,14 +605,14 @@ mod tests {
             None,
             0,
             Environment::Production,
-            1500
+            Duration::from_secs_f32(5.0)
         )
         .await
         .unwrap()
     }
 
     async fn init_sandbox_client() -> Client {
-        Client::new(None, 0, None, Environment::Sandbox, 1500)
+        Client::new(None, 0, None, Environment::Sandbox, Duration::from_secs_f32(5.0))
             .await
             .unwrap()
     }

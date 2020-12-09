@@ -585,21 +585,25 @@ mod tests {
     use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
     use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
     use nash_protocol::types::{
-        Blockchain, BuyOrSell, DateTimeRange, Market, OrderCancellationPolicy, OrderStatus,
-        OrderType,
+        Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
     };
 
     use chrono::offset::TimeZone;
     use chrono::Utc;
     use futures_util::StreamExt;
+    use dotenv::dotenv;
 
     async fn init_client() -> Client {
-        Client::new(
-            Some("test_data/27db.json"),
+        dotenv().ok();
+        let secret  = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
+        let session = std::env::var("NASH_API_KEY").expect("Couldn't get environment variable.");
+        Client::from_key_data(
+            &secret,
+            &session,
+            None,
             0,
-            Some("voCKma".to_string()),
             Environment::Production,
-            1500,
+            1500
         )
         .await
         .unwrap()
@@ -671,7 +675,7 @@ mod tests {
             let response = client
                 .run(ListAccountOrdersRequest {
                     before: None,
-                    market: "eth_usdc".to_string(),
+                    market: Some("eth_usdc".to_string()),
                     buy_or_sell: None,
                     limit: Some(1),
                     status: Some(vec![
@@ -700,7 +704,7 @@ mod tests {
             let response = client
                 .run(ListAccountTradesRequest {
                     before: Some("1598934832187000008".to_string()),
-                    market: "eth_usdc".to_string(),
+                    market: Some("eth_usdc".to_string()),
                     limit: Some(1),
                     range: None,
                 })
@@ -1036,8 +1040,8 @@ mod tests {
                 allow_taker: true,
             };
             // Get nonces
-            let response = client.run(AssetNoncesRequest::new()).await;
-            let response = client.run(SignAllStates::new()).await;
+            client.run(AssetNoncesRequest::new()).await.ok();
+            client.run(SignAllStates::new()).await.ok();
 
             // Break nonces
             let mut state_lock = client.state.lock().await;

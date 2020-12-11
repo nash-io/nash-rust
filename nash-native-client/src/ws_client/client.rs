@@ -605,7 +605,7 @@ mod tests {
             None,
             0,
             Environment::Production,
-            Duration::from_secs_f32(5.0)
+            Duration::from_secs_f32(2.0)
         )
         .await
         .unwrap()
@@ -1008,17 +1008,15 @@ mod tests {
     fn sub_orderbook_via_client_stream() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
-            let mut client = init_client().await;
-            {
-                let _response = client
-                    .subscribe_protocol(SubscribeOrderbook {
-                        market: "btc_usdc".to_string(),
-                    })
-                    .await
-                    .unwrap();
-            }
+            let client = init_client().await;
+            let mut response = client
+                .subscribe_protocol(SubscribeOrderbook {
+                    market: "btc_usdc".to_string(),
+                })
+                .await
+                .unwrap();
             for _ in 0..10 {
-                let item = client.next().await;
+                let item = response.next().await;
                 println!("{:?}", item.unwrap().unwrap());
             }
         };

@@ -1098,16 +1098,16 @@ mod tests {
     }
 
     #[test]
-    fn end_to_end_buy_limit_order() {
+    fn end_to_end_sell_limit_order() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
                 .run(LimitOrderRequest {
                     market: "eth_usdc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.2".to_string(),
-                    price: "50".to_string(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "0.02".to_string(),
+                    price: "900".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,
                 })

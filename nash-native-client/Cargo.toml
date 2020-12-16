@@ -1,6 +1,6 @@
 [package]
 name = "nash-native-client"
-version = "0.1.12"
+version = "0.1.13"
 authors = ["Ethan Fast <ethan@nash.io>", "Danilo Guanabara <danilo@nash.io"]
 edition = "2018"
 license = "MIT"
@@ -20,7 +20,7 @@ rust_gmp = ["nash-protocol/rust_gmp"]
 num_bigint = ["nash-protocol/num_bigint"]
 
 [dependencies]
-nash-protocol = { version = "^0.1.19", path = "../nash-protocol", default-features = false }
+nash-protocol = { version = "^0.1.20", path = "../nash-protocol", default-features = false }
 tokio-tungstenite = {version = "0.11", features=["tls"]}
 tokio = {version = "0.2.22", features=["full", "rt-threaded", "time"]}
 tokio-native-tls = {version = "0.1"}

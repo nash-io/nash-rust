@@ -62,16 +62,28 @@ impl RecycledOrder {
 /// Sign off on a piece of state data such as an account balance or a recycled open order
 /// with a higher nonce. These states can be submitted by the ME to the settlement contract
 pub fn sign_state_data(state_data: &StateData, signer: &mut Signer) -> Result<ClientSignedState> {
-    let data = match state_data.blockchain {
+    let (message, hash) = match state_data.blockchain {
         // Recycled orders should not be double hashed, but that is what we are doing here
-        Blockchain::Ethereum => hash_eth_message(&decode_hexstr(&state_data.payload)?),
-        Blockchain::NEO => hash_neo_message(&decode_hexstr(&state_data.payload)?),
-        // No hashing for BTC. This should be fixed in ME
-        Blockchain::Bitcoin => BigInt::from_str_radix(&state_data.payload, 16)
-            .map_err(|_| ProtocolError("Could not parse BTC hash as BigInt"))?,
+        Blockchain::Ethereum => { 
+            let message = state_data.payload.clone();
+            let hash = hash_eth_message(&decode_hexstr(&message)?);
+            (message, hash) 
+        },
+        Blockchain::NEO => { 
+            let message = state_data.payload.clone(); 
+            let hash = hash_neo_message(&decode_hexstr(&message)?);
+            (message, hash)
+        },
+        Blockchain::Bitcoin => { 
+            // Bug/inconsistency in ME, it wants hash instead of message
+            let message = state_data.payload_hash.clone();
+            let hash = BigInt::from_str_radix(&state_data.payload_hash, 16)
+            .map_err(|_| ProtocolError("Could not parse BTC hash as BigInt"))?;
+            (message, hash) 
+        },
     };
-    let (sig, r, _pub) = signer.sign_child_key(data, state_data.blockchain)?;
-    Ok(ClientSignedState::from_state_data(state_data, r, sig))
+    let (sig, r, _pub) = signer.sign_child_key(hash, state_data.blockchain)?;
+    Ok(ClientSignedState::new(&message, state_data.blockchain, r, sig))
 }
 
 impl From<std::array::TryFromSliceError> for ProtocolError {

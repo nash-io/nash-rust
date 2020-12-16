@@ -96,10 +96,10 @@ pub struct ClientSignedState {
 
 impl ClientSignedState {
     /// Construct signed state from a `StateData` and a signature.
-    pub fn from_state_data(state_data: &StateData, r: BigInt, signature: BigInt) -> Self {
+    pub fn new(message: &str, blockchain: Blockchain, r: BigInt, signature: BigInt) -> Self {
         Self {
-            message: state_data.payload.clone(),
-            blockchain: state_data.blockchain,
+            message: message.to_string(),
+            blockchain,
             r,
             signature,
         }

@@ -48,10 +48,14 @@ pub fn spawn_sender_loop(
     timeout_duration: Duration,
     mut websocket: WebSocket,
     mut ws_outgoing_receiver: UnboundedReceiver<AbsintheWSRequest>,
+    mut ws_disconnect_receiver: UnboundedReceiver<()>,
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
         loop {
+            if let Ok(_) = ws_disconnect_receiver.try_recv() {
+                websocket.close(None).await.ok();
+            }
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = timeout(timeout_duration, websocket.next());
             match select(next_outgoing, next_incoming).await {
@@ -277,6 +281,7 @@ async fn manage_client_error(state: Arc<Mutex<State>>) {
 /// Interface for interacting with a websocket connection
 pub struct Client {
     ws_outgoing_sender: UnboundedSender<AbsintheWSRequest>,
+    ws_disconnect_sender: UnboundedSender<()>,
     last_message_id: Mutex<u64>,
     client_id: u64,
     message_broker: MessageBroker,
@@ -311,6 +316,10 @@ impl Client {
         let state = State::from_key_data(secret, session)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
+
+    pub async fn disconnect(&self) {
+        self.ws_disconnect_sender.send(()).ok();
+    }
     /// Main client setup logic
     async fn client_setup(
         mut state: State,
@@ -341,6 +350,7 @@ impl Client {
 
         // channels to pass messages between threads. bounded at 100 unprocessed
         let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();
+        let (ws_disconnect_sender, ws_disconnect_receiver) = unbounded_channel();
 
         let (global_subscription_sender, global_subscription_receiver) = unbounded_channel();
 
@@ -351,6 +361,7 @@ impl Client {
             timeout,
             socket,
             ws_outgoing_receiver,
+            ws_disconnect_receiver,
             message_broker.link.clone(),
         );
 
@@ -365,6 +376,7 @@ impl Client {
 
         let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
+            ws_disconnect_sender,
             last_message_id: Mutex::new(last_message_id),
             client_id,
             message_broker,

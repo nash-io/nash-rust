@@ -42,10 +42,12 @@ impl AssetNoncesRequest {
 
 /// Generate canonical string for on request to get asset nonces
 pub fn asset_nonces_canonical_string(variables: &get_assets_nonces::Variables) -> Result<String> {
-    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize variables"))?;
+    let serialized_all = serde_json::to_string(variables)
+        .map_err(|_| ProtocolError("Failed to serialize variables"))?;
     Ok(general_canonical_string(
         "get_assets_nonces".to_string(),
-        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize variables"))?,
+        serde_json::from_str(&serialized_all)
+            .map_err(|_| ProtocolError("Failed to deserialize variables"))?,
         vec![],
     ))
 }

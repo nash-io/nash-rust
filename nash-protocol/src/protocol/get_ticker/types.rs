@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
-use crate::errors::Result;
-use bigdecimal::BigDecimal;
 use super::super::{
     json_to_type_or_error, serializable_to_json, NashProtocol, ResponseOrError, State,
 };
+use crate::errors::Result;
+use bigdecimal::BigDecimal;
 
 /// Get ticker associated with market
 #[derive(Clone, Debug)]
@@ -44,7 +44,7 @@ impl NashProtocol for TickerRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
         self.response_from_graphql(as_graphql, state).await

@@ -2,16 +2,16 @@ use super::super::super::ResponseOrError;
 use super::request::SubscribeTrades;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql;
-use crate::types::{BuyOrSell, Trade, AccountTradeSide};
-use graphql::subscribe_trades;
-use chrono::{DateTime, Utc};
-use bigdecimal::BigDecimal;
-use std::str::FromStr;
-use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::protocol::traits::TryFromState;
+use crate::types::{AccountTradeSide, BuyOrSell, Trade};
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
+use futures::lock::Mutex;
+use graphql::subscribe_trades;
+use std::str::FromStr;
+use std::sync::Arc;
 
 /// List of new incoming trades for a market via subscription.
 #[derive(Clone, Debug)]
@@ -21,7 +21,10 @@ pub struct TradesResponse {
 }
 #[async_trait]
 impl TryFromState<subscribe_trades::ResponseData> for Vec<Trade> {
-    async fn from(response: subscribe_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<Vec<Trade>> {
+    async fn from(
+        response: subscribe_trades::ResponseData,
+        _state: Arc<Mutex<State>>,
+    ) -> Result<Vec<Trade>> {
         let mut trades = Vec::new();
         for trade_data in response.new_trades {
             let market = trade_data.market.name.clone();
@@ -56,7 +59,7 @@ impl SubscribeTrades {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<subscribe_trades::ResponseData>,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<TradesResponse>> {
         Ok(match response {
             ResponseOrError::Response(data) => {

@@ -218,12 +218,7 @@ impl PublicKey {
     /// generate Neo address from public key
     pub fn to_address(&self) -> Address {
         // 0x21 (PUSHBYTES21 opcode = size of compressed public key) | compressed public key | 0xac (CHECKSIG opcode)
-        let addr_script = [
-            vec![0x21],
-            self.inner.to_vec(),
-            vec![0xac],
-        ]
-        .concat();
+        let addr_script = [vec![0x21], self.inner.to_vec(), vec![0xac]].concat();
 
         // compute script hash: sha256 first, then ripemd160
         let hash = Ripemd160::digest(&Sha256::digest(&addr_script));

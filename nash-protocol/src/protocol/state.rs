@@ -31,7 +31,7 @@ pub struct State {
     // optional affiliate code, will recieve a share of fees generated
     pub affiliate_code: Option<String>, // FIXME: move r-pool from global indexmap here
     pub assets_nonces_refresh: bool,
-    pub state_sign_refresh: bool // TODO, not 100% we need this
+    pub state_sign_refresh: bool, // TODO, not 100% we need this
 }
 
 impl State {
@@ -48,7 +48,7 @@ impl State {
             assets: None,
             asset_nonces: None,
             assets_nonces_refresh: false,
-            state_sign_refresh: false
+            state_sign_refresh: false,
         })
     }
 
@@ -62,7 +62,7 @@ impl State {
             assets: None,
             asset_nonces: None,
             assets_nonces_refresh: false,
-            state_sign_refresh: false
+            state_sign_refresh: false,
         })
     }
 
@@ -72,8 +72,14 @@ impl State {
             .ok_or(ProtocolError("Signer not initiated"))
     }
 
-    pub fn get_market(&self, market_name: &str) -> Result<Market>{
-        let market_map = self.markets.as_ref().ok_or(ProtocolError("Market map does not exist"))?;
-        market_map.get(market_name).ok_or(ProtocolError("Market name does not exist")).map(|m| m.clone() )
+    pub fn get_market(&self, market_name: &str) -> Result<Market> {
+        let market_map = self
+            .markets
+            .as_ref()
+            .ok_or(ProtocolError("Market map does not exist"))?;
+        market_map
+            .get(market_name)
+            .ok_or(ProtocolError("Market name does not exist"))
+            .map(|m| m.clone())
     }
 }

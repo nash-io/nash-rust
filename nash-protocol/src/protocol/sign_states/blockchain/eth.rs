@@ -57,8 +57,11 @@ mod tests {
     }
 
     #[test]
-    fn test_noia(){
-        let _state_update = StateUpdatePayloadEth::from_hex("000019000000055b99def00000000acfe0b67c5ac477191cc1bae28f1f7b016027be20").unwrap();
+    fn test_noia() {
+        let _state_update = StateUpdatePayloadEth::from_hex(
+            "000019000000055b99def00000000acfe0b67c5ac477191cc1bae28f1f7b016027be20",
+        )
+        .unwrap();
     }
 
     #[test]

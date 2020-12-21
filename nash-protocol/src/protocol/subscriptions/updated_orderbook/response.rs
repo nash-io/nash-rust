@@ -2,12 +2,12 @@ use super::super::super::{DataResponse, ResponseOrError};
 use super::request::SubscribeOrderbook;
 use crate::errors::Result;
 use crate::graphql::updated_orderbook;
-use crate::types::OrderbookOrder;
 use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::types::OrderbookOrder;
 use bigdecimal::BigDecimal;
+use futures::lock::Mutex;
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// Order book updates pushed over a subscription consist of a list of bid orders and
 /// a list of ask orders.
@@ -24,7 +24,7 @@ impl SubscribeOrderbook {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<updated_orderbook::ResponseData>,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<SubscribeOrderbookResponse>> {
         match response {
             ResponseOrError::Response(data) => {

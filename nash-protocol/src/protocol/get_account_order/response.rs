@@ -1,21 +1,24 @@
 use super::types::GetAccountOrderResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::get_account_order;
+use crate::protocol::{traits::TryFromState, State};
 use crate::types::{
     AccountTradeSide, BuyOrSell, Order, OrderCancellationPolicy, OrderCancellationReason,
     OrderStatus, OrderType, Trade,
 };
-use crate::protocol::{State, traits::TryFromState};
-use chrono::{DateTime, Utc};
-use std::str::FromStr;
-use bigdecimal::BigDecimal;
-use std::sync::Arc;
-use futures::lock::Mutex;
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
+use futures::lock::Mutex;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[async_trait]
 impl TryFromState<get_account_order::ResponseData> for GetAccountOrderResponse {
-    async fn from(response: get_account_order::ResponseData, _state: Arc<Mutex<State>>) -> Result<GetAccountOrderResponse> {
+    async fn from(
+        response: get_account_order::ResponseData,
+        _state: Arc<Mutex<State>>,
+    ) -> Result<GetAccountOrderResponse> {
         let order_data = response.get_account_order;
         let market = order_data.market.name.clone();
         let amount_placed = BigDecimal::from_str(&order_data.amount.amount)?;

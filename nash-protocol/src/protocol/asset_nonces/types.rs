@@ -49,7 +49,7 @@ impl NashProtocol for AssetNoncesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<AssetNoncesResponse, get_assets_nonces::ResponseData>(response)
     }

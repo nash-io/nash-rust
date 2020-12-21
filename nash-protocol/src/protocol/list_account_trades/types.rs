@@ -1,11 +1,11 @@
+use super::super::hooks::{NashProtocolRequest, ProtocolHook};
+use super::super::list_markets::ListMarketsRequest;
 use super::super::{
     serializable_to_json, try_response_with_state_from_json, NashProtocol, ResponseOrError, State,
 };
 use crate::errors::Result;
 use crate::graphql::list_account_trades;
 use crate::types::{DateTimeRange, Trade};
-use super::super::list_markets::ListMarketsRequest;
-use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -40,11 +40,13 @@ impl NashProtocol for ListAccountTradesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_with_state_from_json::<ListAccountTradesResponse, list_account_trades::ResponseData>(
-            response, state
-        ).await
+        try_response_with_state_from_json::<
+            ListAccountTradesResponse,
+            list_account_trades::ResponseData,
+        >(response, state)
+        .await
     }
 
     async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {

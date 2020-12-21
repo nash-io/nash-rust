@@ -2,18 +2,18 @@ use super::super::{DataResponse, ResponseOrError};
 use super::types::{OrderbookRequest, OrderbookResponse};
 use crate::errors::Result;
 use crate::graphql::get_orderbook;
-use crate::types::OrderbookOrder;
 use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::types::OrderbookOrder;
 use bigdecimal::BigDecimal;
+use futures::lock::Mutex;
 use std::str::FromStr;
-
+use std::sync::Arc;
 
 impl OrderbookRequest {
     pub async fn response_from_graphql(
         &self,
-        response: ResponseOrError<get_orderbook::ResponseData>, _state: Arc<Mutex<State>>
+        response: ResponseOrError<get_orderbook::ResponseData>,
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<OrderbookResponse>> {
         match response {
             ResponseOrError::Response(data) => {
@@ -40,7 +40,7 @@ impl OrderbookRequest {
                         asks,
                         bids,
                         update_id,
-                        last_update_id
+                        last_update_id,
                     },
                 }))
             }

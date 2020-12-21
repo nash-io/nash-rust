@@ -355,9 +355,7 @@ mod tests {
     use nash_protocol::graphql;
     use nash_protocol::protocol::asset_nonces::AssetNoncesResponse;
     use nash_protocol::protocol::ResponseOrError;
-    use nash_protocol::protocol::{
-        dh_fill_pool::DhFillPoolResponse, try_response_from_json,
-    };
+    use nash_protocol::protocol::{dh_fill_pool::DhFillPoolResponse, try_response_from_json};
 
     #[test]
     fn test_empty() {

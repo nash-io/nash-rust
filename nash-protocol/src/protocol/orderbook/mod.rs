@@ -5,4 +5,3 @@ mod response;
 mod types;
 
 pub use types::{OrderbookRequest, OrderbookResponse};
-

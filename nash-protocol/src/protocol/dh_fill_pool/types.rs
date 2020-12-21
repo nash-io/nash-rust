@@ -119,7 +119,9 @@ impl NashProtocol for DhFillPoolRequest {
         state: Arc<Mutex<State>>,
     ) -> Result<()> {
         let server_publics = ServerPublics::from_hexstrings(self.blockchain(), response)?;
+        println!("Filling pool for {:?}", self.blockchain());
         response::fill_pool(self, server_publics, state.clone()).await?;
+        println!("Filled pool for {:?}", self.blockchain());
         let mut state = state.lock().await;
         // Update state to indicate we now have 100 new r values
         state.signer()?.fill_r_vals(self.blockchain(), 100);

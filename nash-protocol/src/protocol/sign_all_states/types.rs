@@ -100,6 +100,7 @@ impl NashProtocolPipeline for SignAllStates {
 
         for chain in Blockchain::all() {
             if state.signer()?.remaining_r_vals(chain) <= 10 {
+                println!("Triggering FillPool (sign_all_states) for {:?}", chain);
                 hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
                     DhFillPoolRequest::new(chain)?,
                 )))

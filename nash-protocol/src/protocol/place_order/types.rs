@@ -172,6 +172,7 @@ impl NashProtocol for LimitOrderRequest {
         for chain in Blockchain::all() {
             // 10 here is too much, but we can use multiple r-values in a single request
             if state.signer()?.remaining_r_vals(chain) <= 10 {
+                println!("Triggering FillPool (place_order) for {:?}", chain);
                 hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
                     DhFillPoolRequest::new(chain)?,
                 )));
@@ -259,6 +260,7 @@ impl NashProtocol for MarketOrderRequest {
         for chain in Blockchain::all() {
             // 10 here is too much, but we can use multiple r-values in a single request
             if state.signer()?.remaining_r_vals(chain) <= 10 {
+                println!("Triggering FillPool (place_order) for {:?}", chain);
                 hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
                     DhFillPoolRequest::new(chain)?,
                 )));
@@ -277,6 +279,7 @@ impl NashProtocol for MarketOrderRequest {
 
         // If have run out of orders... (temp setting conservatively)
         if !state.dont_sign_states && state.remaining_orders == 20 {
+            println!("Triggering SignAllStates");
             // Need to sign states
             hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
             // After signing states, need to update nonces again

@@ -19,7 +19,11 @@ impl TryFrom<list_markets::ResponseData> for ListMarketsResponse {
 
     fn try_from(response: list_markets::ResponseData) -> Result<Self> {
         let mut markets = HashMap::new();
-        for market_data in response.list_markets.iter().filter(|market_data| market_data.primary) {
+        for market_data in response
+            .list_markets
+            .iter()
+            .filter(|market_data| market_data.primary)
+        {
             let market_name = market_data.name.clone();
             let asset_a_str = &market_data.a_asset.symbol;
             let asset_b_str = &market_data.b_asset.symbol;

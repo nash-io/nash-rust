@@ -19,7 +19,7 @@ impl NashProtocolSubscription for SubscribeTrades {
     async fn subscription_response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::SubscriptionResponse>> {
         let as_graphql = json_to_type_or_error(response)?;
         self.response_from_graphql(as_graphql, state).await
@@ -28,9 +28,11 @@ impl NashProtocolSubscription for SubscribeTrades {
     async fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<SubscriptionResponse>> {
-        let response = self.subscription_response_from_json(response, state).await?;
+        let response = self
+            .subscription_response_from_json(response, state)
+            .await?;
         let wrapped_response = response.map(Box::new(SubscriptionResponse::Trades));
         Ok(wrapped_response)
     }

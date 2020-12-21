@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::time::{delay_for, timeout, Duration};
+use tokio::time::{Duration};
 use tokio_native_tls::TlsStream;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{connect_async, stream::Stream, WebSocketStream};
@@ -37,7 +37,7 @@ pub fn spawn_heartbeat_loop(period: Duration, client_id: u64, outgoing_sender: U
                 // if outgoing sender is dead just ignore, will be handled elsewhere
                 break;
             }
-            delay_for(period).await;
+            tokio::time::sleep(period).await;
         }
     });
 }
@@ -56,7 +56,7 @@ pub fn spawn_sender_loop(
         // This is a bit ugly imo and we should probably change in the future
         while ws_disconnect_receiver.try_recv().is_err() {
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
-            let next_incoming = timeout(timeout_duration, websocket.next());
+            let next_incoming = tokio::time::timeout(timeout_duration, websocket.next());
             match select(next_outgoing, next_incoming).await {
                 Either::Left((out_msg, _)) => {
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
@@ -402,7 +402,7 @@ impl InnerClient {
         request: T,
     ) -> Result<ResponseOrError<T::Response>> {
         let query = request.graphql(self.state.clone()).await?;
-        let ws_response = timeout(
+        let ws_response = tokio::time::timeout(
             self.timeout,
             self.request(query).await?.next(),
         )
@@ -699,7 +699,7 @@ impl Client {
                     drop(state_lock);
                     drop(client_lock);
                 }
-                tokio::time::delay_for(Duration::from_secs(period)).await;
+                tokio::time::sleep(Duration::from_secs(period)).await;
             }
         });
     }
@@ -1054,7 +1054,7 @@ mod tests {
                 println!("{:?}", response);
                 let order_id = response.response().unwrap().order_id.clone();
                 // Small delay to make sure it is processed
-                tokio::time::delay_for(tokio::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 let response = client
                     .run(GetAccountOrderRequest {
                         order_id: order_id.clone(),

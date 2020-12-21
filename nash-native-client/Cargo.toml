@@ -20,18 +20,15 @@ rust_gmp = ["nash-protocol/rust_gmp"]
 num_bigint = ["nash-protocol/num_bigint"]
 
 [dependencies]
-nash-protocol = { version = "^0.1.21", default-features = false }
-tokio-tungstenite = {version = "0.11", features=["tls"]}
-tokio = {version = "0.2.22", features=["full", "rt-threaded", "time"]}
-tokio-native-tls = {version = "0.1"}
+nash-protocol = { version = "^0.1.21", path = "../nash-protocol", default-features = false }
+tokio = { version = "0.3", features = ["full"] }
+tokio-native-tls = { version = "0.2" }
+tokio-tungstenite = { version = "0.12", features = ["tls"] }
 serde = "1.0"
 serde_json = "1.0"
-futures = "0.3.4"
+futures = "0.3"
 futures-util = "0.3"
 chrono = "0.4"
 
-[patch.crates-io]
-nash-protocol = { path = "../nash-protocol", default-features = false }
-
 [dev-dependencies]
-dotenv = "0.15.0"
+dotenv = "0.15"

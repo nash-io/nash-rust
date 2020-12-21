@@ -207,9 +207,7 @@ fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
 fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
     // unwrap() is safe because pk has been validated in publickey_from_secretkey()
     let tmp = AffinePoint_k256::from_encoded_point(&pk.ge.to_encoded_point(false)).unwrap();
-    Ok("0".to_string()
-        + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes())
-            .to_hex())
+    Ok("0".to_string() + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes()).to_hex())
 }
 
 /// derive public key from secret key, in uncompressed format as expected by ME

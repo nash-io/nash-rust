@@ -37,7 +37,7 @@ impl NashProtocol for CancelOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<CancelOrderResponse, cancel_order::ResponseData>(response)
     }

@@ -6,4 +6,3 @@ mod types;
 
 pub use request::SubscribeOrderbook;
 pub use response::SubscribeOrderbookResponse;
-

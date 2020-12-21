@@ -1,7 +1,7 @@
-use graphql_client::GraphQLQuery;
+use super::types::ListTradesRequest;
 use crate::graphql;
 use crate::graphql::list_trades;
-use super::types::ListTradesRequest;
+use graphql_client::GraphQLQuery;
 
 impl ListTradesRequest {
     pub fn make_query(&self) -> graphql_client::QueryBody<list_trades::Variables> {

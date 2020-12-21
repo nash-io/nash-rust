@@ -64,26 +64,31 @@ impl RecycledOrder {
 pub fn sign_state_data(state_data: &StateData, signer: &mut Signer) -> Result<ClientSignedState> {
     let (message, hash) = match state_data.blockchain {
         // Recycled orders should not be double hashed, but that is what we are doing here
-        Blockchain::Ethereum => { 
+        Blockchain::Ethereum => {
             let message = state_data.payload.clone();
             let hash = hash_eth_message(&decode_hexstr(&message)?);
-            (message, hash) 
-        },
-        Blockchain::NEO => { 
-            let message = state_data.payload.clone(); 
+            (message, hash)
+        }
+        Blockchain::NEO => {
+            let message = state_data.payload.clone();
             let hash = hash_neo_message(&decode_hexstr(&message)?);
             (message, hash)
-        },
-        Blockchain::Bitcoin => { 
+        }
+        Blockchain::Bitcoin => {
             // Bug/inconsistency in ME, it wants hash instead of message
             let message = state_data.payload_hash.clone();
             let hash = BigInt::from_str_radix(&state_data.payload_hash, 16)
-            .map_err(|_| ProtocolError("Could not parse BTC hash as BigInt"))?;
-            (message, hash) 
-        },
+                .map_err(|_| ProtocolError("Could not parse BTC hash as BigInt"))?;
+            (message, hash)
+        }
     };
     let (sig, r, _pub) = signer.sign_child_key(hash, state_data.blockchain)?;
-    Ok(ClientSignedState::new(&message, state_data.blockchain, r, sig))
+    Ok(ClientSignedState::new(
+        &message,
+        state_data.blockchain,
+        r,
+        sig,
+    ))
 }
 
 impl From<std::array::TryFromSliceError> for ProtocolError {

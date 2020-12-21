@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_fillorder(){
+    fn decode_fillorder() {
         let x = FillOrder::from_hex("0136c8b049a6a32421f8a2e16c1f3c4e5efea1706000030000000000010000000100000000077359400000000af2066ba0ffffffffffffffff000000000003d09057b78d6c").unwrap();
         println!("{:#?}", x);
     }

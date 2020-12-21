@@ -1,19 +1,22 @@
 use super::types::ListAccountTradesResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_account_trades;
-use crate::types::{AccountTradeSide, BuyOrSell, Trade};
-use chrono::{DateTime, Utc};
-use std::str::FromStr;
-use bigdecimal::BigDecimal;
-use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::protocol::traits::TryFromState;
+use crate::types::{AccountTradeSide, BuyOrSell, Trade};
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
+use futures::lock::Mutex;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[async_trait]
 impl TryFromState<list_account_trades::ResponseData> for ListAccountTradesResponse {
-    async fn from(response: list_account_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListAccountTradesResponse> {
+    async fn from(
+        response: list_account_trades::ResponseData,
+        _state: Arc<Mutex<State>>,
+    ) -> Result<ListAccountTradesResponse> {
         let mut trades = Vec::new();
         for trade_data in response.list_account_trades.trades {
             let market = trade_data.market.name.clone();
@@ -23,7 +26,7 @@ impl TryFromState<list_account_trades::ResponseData> for ListAccountTradesRespon
             let maker_recieved = BigDecimal::from_str(&trade_data.maker_received.amount)?;
             let taker_recieved = BigDecimal::from_str(&trade_data.taker_received.amount)?;
             let limit_price = BigDecimal::from_str(&trade_data.limit_price.amount)?;
-            
+
             trades.push(Trade {
                 market,
                 amount,

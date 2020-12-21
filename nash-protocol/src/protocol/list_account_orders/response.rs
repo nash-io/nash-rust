@@ -1,22 +1,25 @@
 use super::types::ListAccountOrdersResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_account_orders;
+use crate::protocol::state::State;
+use crate::protocol::traits::TryFromState;
 use crate::types::{
     AccountTradeSide, BuyOrSell, Order, OrderCancellationPolicy, OrderCancellationReason,
     OrderStatus, OrderType, Trade,
 };
-use chrono::{DateTime, Utc};
-use bigdecimal::BigDecimal;
-use std::str::FromStr;
-use crate::protocol::traits::TryFromState;
-use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
+use futures::lock::Mutex;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[async_trait]
 impl TryFromState<list_account_orders::ResponseData> for ListAccountOrdersResponse {
-    async fn from(response: list_account_orders::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListAccountOrdersResponse> {
+    async fn from(
+        response: list_account_orders::ResponseData,
+        _state: Arc<Mutex<State>>,
+    ) -> Result<ListAccountOrdersResponse> {
         // FIXME (if possible): there is significant duplication of code between here and the response handles for list_account_trades
         // and get_account_order. unfortunately, given the way the graphql_client library works, it is not obvious how to make this
         // response processing generic

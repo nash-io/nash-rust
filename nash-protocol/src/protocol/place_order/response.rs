@@ -58,8 +58,6 @@ impl From<place_limit_order::OrderType> for OrderType {
     }
 }
 
-
-
 impl From<place_market_order::ResponseData> for PlaceOrderResponse {
     fn from(response: place_market_order::ResponseData) -> Self {
         let response = response.place_market_order;

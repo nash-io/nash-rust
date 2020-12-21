@@ -34,7 +34,7 @@ pub struct LimitOrderRequest {
 #[derive(Clone, Debug)]
 pub struct MarketOrderRequest {
     pub market: String,
-    pub amount: String
+    pub amount: String,
 }
 
 impl LimitOrderRequest {
@@ -57,13 +57,8 @@ impl LimitOrderRequest {
     }
 }
 
-
-
 impl MarketOrderRequest {
-    pub fn new(
-        market: String,
-        amount_a: &str,
-    ) -> Result<Self> {
+    pub fn new(market: String, amount_a: &str) -> Result<Self> {
         Ok(Self {
             market,
             amount: amount_a.to_string(),
@@ -139,7 +134,7 @@ impl NashProtocol for LimitOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_limit_order::ResponseData>(response)
     }
@@ -202,7 +197,6 @@ impl NashProtocol for LimitOrderRequest {
     }
 }
 
-
 #[async_trait]
 impl NashProtocol for MarketOrderRequest {
     type Response = PlaceOrderResponse;
@@ -226,7 +220,7 @@ impl NashProtocol for MarketOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_market_order::ResponseData>(response)
     }

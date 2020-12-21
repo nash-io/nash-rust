@@ -22,7 +22,7 @@ use std::sync::Arc;
 /// same shared secret value (diffie-hellman). Bitcoin and Ethereum both use the
 /// Secp256k1 curve, while NEO users the Secp256r1 curve. While this request type
 /// holds both the secret and the public values, only the public values are used in
-/// creating the GraphQL request. The secrets are used to process a response. Pool 
+/// creating the GraphQL request. The secrets are used to process a response. Pool
 /// requests will always generate 100 new R values.
 #[derive(Clone, Debug)]
 pub enum DhFillPoolRequest {
@@ -108,7 +108,7 @@ impl NashProtocol for DhFillPoolRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<DhFillPoolResponse, dh_fill_pool::ResponseData>(response)
     }

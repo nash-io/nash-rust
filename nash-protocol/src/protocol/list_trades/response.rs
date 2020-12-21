@@ -1,20 +1,22 @@
-use std::str::FromStr;
-use chrono::{DateTime, Utc};
+use super::types::ListTradesResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_trades;
-use crate::types::{AccountTradeSide, BuyOrSell, Trade};
-use super::types::ListTradesResponse;
-use bigdecimal::BigDecimal;
-use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::protocol::traits::TryFromState;
+use crate::types::{AccountTradeSide, BuyOrSell, Trade};
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
+use futures::lock::Mutex;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[async_trait]
 impl TryFromState<list_trades::ResponseData> for ListTradesResponse {
-
-    async fn from(response: list_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListTradesResponse> {
+    async fn from(
+        response: list_trades::ResponseData,
+        _state: Arc<Mutex<State>>,
+    ) -> Result<ListTradesResponse> {
         let mut trades = Vec::new();
 
         for trade_data in response.list_trades.trades {

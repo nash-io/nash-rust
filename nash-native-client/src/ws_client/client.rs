@@ -53,7 +53,7 @@ pub fn spawn_sender_loop(
 ) {
     tokio::spawn(async move {
         loop {
-            if let Ok(_) = ws_disconnect_receiver.try_recv() {
+            if ws_disconnect_receiver.try_recv().is_ok() {
                 websocket.close(None).await.ok();
             }
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
@@ -120,55 +120,51 @@ impl MessageBroker {
         tokio::spawn(async move {
             let mut request_map = HashMap::new();
             let mut subscription_map = HashMap::new();
-            loop {
-                if let Some(next_incoming) = internal_reciever.next().await {
-                    match next_incoming {
-                        // Register a channel to send messages to with given id
-                        BrokerAction::RegisterRequest(id, channel) => {
-                            request_map.insert(id, channel);
-                        }
-                        BrokerAction::RegisterSubscription(id, channel) => {
-                            subscription_map.insert(id, channel);
-                        }
-                        // When message comes in, if id is registered with channel, send there
-                        BrokerAction::Message(Ok(response)) => {
-                            // if message has subscription id, send it to subscription
-                            if let Some(id) = response.subscription_id() {
-                                if let Some(channel) = subscription_map.get_mut(&id) {
-                                    // Again, we will let client timeout on waiting a response using its own policy.
-                                    // Crashing inside the broker process does not allow us to handle the error gracefully
-                                    if let Err(_ignore) = channel.send(Ok(response)) {
-                                        // Kill process on error
-                                        break;
-                                    }
-                                }
-                            }
-                            // otherwise check if it is a response to a registered request
-                            else if let Some(id) = response.message_id() {
-                                if let Some(channel) = request_map.get_mut(&id) {
-                                    if let Err(_ignore) = channel.send(Ok(response)) {
-                                        // Kill process on error
-                                        break;
-                                    }
-                                    // queries only have one response, so no need to keep this around
-                                    request_map.remove(&id);
+            while let Some(next_incoming) = internal_reciever.next().await {
+                match next_incoming {
+                    // Register a channel to send messages to with given id
+                    BrokerAction::RegisterRequest(id, channel) => {
+                        request_map.insert(id, channel);
+                    }
+                    BrokerAction::RegisterSubscription(id, channel) => {
+                        subscription_map.insert(id, channel);
+                    }
+                    // When message comes in, if id is registered with channel, send there
+                    BrokerAction::Message(Ok(response)) => {
+                        // if message has subscription id, send it to subscription
+                        if let Some(id) = response.subscription_id() {
+                            if let Some(channel) = subscription_map.get_mut(&id) {
+                                // Again, we will let client timeout on waiting a response using its own policy.
+                                // Crashing inside the broker process does not allow us to handle the error gracefully
+                                if let Err(_ignore) = channel.send(Ok(response)) {
+                                    // Kill process on error
+                                    break;
                                 }
                             }
                         }
-                        BrokerAction::Message(Err(e)) => {
-                            // iterate over all subscription and request channels and propogate error
-                            for (_id, channel) in request_map.iter_mut() {
-                                let _ = channel.send(Err(e.clone()));
+                        // otherwise check if it is a response to a registered request
+                        else if let Some(id) = response.message_id() {
+                            if let Some(channel) = request_map.get_mut(&id) {
+                                if let Err(_ignore) = channel.send(Ok(response)) {
+                                    // Kill process on error
+                                    break;
+                                }
+                                // queries only have one response, so no need to keep this around
+                                request_map.remove(&id);
                             }
-                            for (_id, channel) in subscription_map.iter_mut() {
-                                let _ = channel.send(Err(e.clone()));
-                            }
-                            // kill broker process if WS connection closed
-                            break;
                         }
                     }
-                } else {
-                    break;
+                    BrokerAction::Message(Err(e)) => {
+                        // iterate over all subscription and request channels and propogate error
+                        for (_id, channel) in request_map.iter_mut() {
+                            let _ = channel.send(Err(e.clone()));
+                        }
+                        for (_id, channel) in subscription_map.iter_mut() {
+                            let _ = channel.send(Err(e.clone()));
+                        }
+                        // kill broker process if WS connection closed
+                        break;
+                    }
                 }
             }
         });
@@ -458,36 +454,31 @@ impl Client {
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline containst more actions for client to take, execute them
-        loop {
-            if let Some(protocol_request) = request
-                .next_step(&protocol_state, self.state.clone())
-                .await?
-            {
-                let protocol_response = self.execute_protocol(protocol_request).await?;
-                // If error, end pipeline early and return GraphQL/network error data
-                if protocol_response.is_error() {
-                    
-                    manage_client_error(self.state.clone()).await;
+        while let Some(protocol_request) = request
+            .next_step(&protocol_state, self.state.clone())
+            .await?
+        {
+            let protocol_response = self.execute_protocol(protocol_request).await?;
+            // If error, end pipeline early and return GraphQL/network error data
+            if protocol_response.is_error() {
 
-                    return Ok(ResponseOrError::Error(
-                        protocol_response
-                            .consume_error()
-                            .expect("Destructure error after check. Impossible to fail."),
-                    ));
-                }
-                // Otherwise update the pipeline and continue
-                request
-                    .process_step(
-                        protocol_response
-                            .consume_response()
-                            .expect("Destructure response after check. Impossible to fail."),
-                        &mut protocol_state,
-                    )
-                    .await;
-            } else {
-                // If no more actions left, then done
-                break;
+                manage_client_error(self.state.clone()).await;
+
+                return Ok(ResponseOrError::Error(
+                    protocol_response
+                        .consume_error()
+                        .expect("Destructure error after check. Impossible to fail."),
+                ));
             }
+            // Otherwise update the pipeline and continue
+            request
+                .process_step(
+                    protocol_response
+                        .consume_response()
+                        .expect("Destructure response after check. Impossible to fail."),
+                    &mut protocol_state,
+                )
+                .await;
         }
         // Get pipeline output
         let output = request.output(protocol_state)?;
@@ -535,7 +526,7 @@ impl Client {
         global_subscription_loop(
             callback_channel,
             user_callback_sender,
-            global_subscription_sender.clone(),
+            global_subscription_sender,
             request.clone(),
             self.state.clone(),
         );

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 
 fn decimal_str_to_precision(decimal_str: &str) -> Result<u32> {
-    let parts: Vec<&str> = decimal_str.split(".").collect();
+    let parts: Vec<&str> = decimal_str.split('.').collect();
     if parts.len() != 2 {
         return Err(ProtocolError("Invalid format for decimal string"));
     }
@@ -19,16 +19,12 @@ impl TryFrom<list_markets::ResponseData> for ListMarketsResponse {
 
     fn try_from(response: list_markets::ResponseData) -> Result<Self> {
         let mut markets = HashMap::new();
-        for market_data in response.list_markets {
-            let market_name = market_data.name;
-            // Skip all markets that are not primary
-            if market_data.primary == false {
-                continue;
-            }
-            let asset_a_str = market_data.a_asset.symbol;
-            let asset_b_str = market_data.b_asset.symbol;
-            let asset_a = Asset::from_str(&asset_a_str);
-            let asset_b = Asset::from_str(&asset_b_str);
+        for market_data in response.list_markets.iter().filter(|market_data| market_data.primary) {
+            let market_name = market_data.name.clone();
+            let asset_a_str = &market_data.a_asset.symbol;
+            let asset_b_str = &market_data.b_asset.symbol;
+            let asset_a = Asset::try_from(asset_a_str.as_str());
+            let asset_b = Asset::try_from(asset_b_str.as_str());
             // Only return markets for assets known to the client
             // These unwraps are safe if
             if let (Ok(asset_a), Ok(asset_b)) = (asset_a, asset_b) {

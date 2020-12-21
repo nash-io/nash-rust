@@ -14,12 +14,12 @@ use std::sync::Arc;
 /// Retrieve asset nonces from Nash server. Asset nonces increment over time with
 /// the property that orders and state signed with older nonces is considered
 /// invalid by smart contracts on Ethereum and NEO.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AssetNoncesRequest;
 
 impl AssetNoncesRequest {
     pub fn new() -> Self {
-        Self {}
+        Default::default()
     }
 }
 

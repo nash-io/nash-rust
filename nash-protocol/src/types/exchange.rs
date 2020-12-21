@@ -97,29 +97,6 @@ impl Asset {
         }
     }
 
-    pub fn from_str(asset_str: &str) -> Result<Self> {
-        match asset_str {
-            "eth" => Ok(Self::ETH),
-            "usdc" => Ok(Self::USDC),
-            "usdt" => Ok(Self::USDT),
-            "bat" => Ok(Self::BAT),
-            "omg" => Ok(Self::OMG),
-            "zrx" => Ok(Self::ZRX),
-            "link" => Ok(Self::LINK),
-            "qnt" => Ok(Self::QNT),
-            "rlc" => Ok(Self::RLC),
-            "ant" => Ok(Self::ANT),
-            "btc" => Ok(Self::BTC),
-            "neo" => Ok(Self::NEO),
-            "gas" => Ok(Self::GAS),
-            "trac" => Ok(Self::TRAC),
-            "gunthy" => Ok(Self::GUNTHY),
-            "nnn" => Ok(Self::NNN),
-            "noia" => Ok(Self::NOIA),
-            _ => Err(ProtocolError("Asset not known")),
-        }
-    }
-
     // FIXME: can this be more cleverly automated?
     /// Return list of all supported `Asset` types
     pub fn assets() -> Vec<Self> {
@@ -140,6 +117,33 @@ impl Asset {
             Self::GUNTHY,
             Self::NNN,
         ]
+    }
+}
+
+impl std::convert::TryFrom<&str> for Asset {
+    type Error = ProtocolError;
+
+    fn try_from(asset_str: &str) -> Result<Self> {
+        match asset_str {
+            "eth" => Ok(Self::ETH),
+            "usdc" => Ok(Self::USDC),
+            "usdt" => Ok(Self::USDT),
+            "bat" => Ok(Self::BAT),
+            "omg" => Ok(Self::OMG),
+            "zrx" => Ok(Self::ZRX),
+            "link" => Ok(Self::LINK),
+            "qnt" => Ok(Self::QNT),
+            "rlc" => Ok(Self::RLC),
+            "ant" => Ok(Self::ANT),
+            "btc" => Ok(Self::BTC),
+            "neo" => Ok(Self::NEO),
+            "gas" => Ok(Self::GAS),
+            "trac" => Ok(Self::TRAC),
+            "gunthy" => Ok(Self::GUNTHY),
+            "nnn" => Ok(Self::NNN),
+            "noia" => Ok(Self::NOIA),
+            _ => Err(ProtocolError("Asset not known")),
+        }
     }
 }
 
@@ -254,9 +258,9 @@ impl Market {
     /// Get market asset by string name
     pub fn get_asset(&self, asset_name: &str) -> Result<AssetofPrecision> {
         if asset_name == self.asset_a.asset.name() {
-            Ok(self.asset_a.clone())
+            Ok(self.asset_a)
         } else if asset_name == self.asset_b.asset.name() {
-            Ok(self.asset_b.clone())
+            Ok(self.asset_b)
         } else {
             Err(ProtocolError("Asset not associated with market"))
         }
@@ -264,8 +268,8 @@ impl Market {
 
     pub fn invert(&self) -> Market {
         Market::new(
-            self.asset_b.clone(),
-            self.asset_a.clone(),
+            self.asset_b,
+            self.asset_a,
             self.min_trade_size_b.clone(),
             self.min_trade_size_a.clone(),
         )

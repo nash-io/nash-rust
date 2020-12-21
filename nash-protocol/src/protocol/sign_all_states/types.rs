@@ -14,12 +14,12 @@ use futures::lock::Mutex;
 use std::sync::Arc;
 
 /// Request to initiate pipeline for signing all states
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SignAllStates;
 
 impl SignAllStates {
     pub fn new() -> Self {
-        Self {}
+        Default::default()
     }
 }
 /// State associated with pipeline for signing all the states. The pipeline is
@@ -92,7 +92,7 @@ impl NashProtocolPipeline for SignAllStates {
 
         // If the client doesn't currently have a list of assets, run a list markets query to
         // get that. The assets will then be stored in client state
-        if let None = state.assets {
+        if state.assets.is_none() {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
                 ListMarketsRequest,
             )));

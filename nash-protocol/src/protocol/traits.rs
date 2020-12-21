@@ -112,7 +112,7 @@ where
         _client_state: Arc<Mutex<State>>,
     ) -> Result<Option<Self::ActionType>> {
         // If we have a response already, things are done
-        if let Some(_) = pipeline_state {
+        if pipeline_state.is_some() {
             Ok(None)
         }
         // Else this request itself is the first (and only) item in the pipeline

@@ -46,7 +46,7 @@ impl NashProtocol for OrderbookRequest {
     async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.lock().await;
         let mut hooks = Vec::new();
-        if let None = state.markets {
+        if state.markets.is_none() {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
                 ListMarketsRequest,
             )))

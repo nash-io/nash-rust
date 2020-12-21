@@ -81,8 +81,8 @@ impl TryFromState<list_account_orders::ResponseData> for ListAccountOrdersRespon
             })
         }
         Ok(ListAccountOrdersResponse {
-            orders: orders,
-            next_page: response.list_account_orders.next.clone(),
+            orders,
+            next_page: response.list_account_orders.next,
         })
     }
 }

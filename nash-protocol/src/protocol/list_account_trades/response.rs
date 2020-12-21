@@ -43,7 +43,7 @@ impl TryFromState<list_account_trades::ResponseData> for ListAccountTradesRespon
         }
         Ok(ListAccountTradesResponse {
             trades,
-            next_page: response.list_account_trades.next.clone(),
+            next_page: response.list_account_trades.next,
         })
     }
 }

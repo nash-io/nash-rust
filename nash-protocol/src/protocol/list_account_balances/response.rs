@@ -3,6 +3,7 @@ use crate::graphql::list_account_balances;
 use crate::types::Asset;
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
+use std::convert::TryFrom;
 
 use std::collections::HashMap;
 
@@ -16,7 +17,7 @@ impl From<list_account_balances::ResponseData> for ListAccountBalancesResponse {
         // The inner unwraps are safe (ME_FIXME), the outer ones are not (FIXME)
         for balance in balance_list {
             let symbol = balance.asset.unwrap().symbol;
-            if let Ok(asset) = Asset::from_str(&symbol) {
+            if let Ok(asset) = Asset::try_from(symbol.as_str()) {
                 let state_channel_amount = BigDecimal::from_str(&balance.available.unwrap().amount)
                     .unwrap();
                 state_channel.insert(asset, state_channel_amount);

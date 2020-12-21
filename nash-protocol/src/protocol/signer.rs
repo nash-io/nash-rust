@@ -107,7 +107,7 @@ impl Signer {
         data: BigInt,
         chain: Blockchain,
     ) -> Result<(BigInt, BigInt, String)> {
-        if self.remaining_r_vals(chain) <= 0 {
+        if self.remaining_r_vals(chain) == 0 {
             return Err(ProtocolError("Ran out of R values"));
         }
         let key = self.get_child_key(chain);

@@ -15,7 +15,7 @@ use std::sync::Arc;
 /// Type to generate a new sign states request. It takes an optional
 /// set of `input_states` to sign. The server will return states for the
 /// client to sign until no unsigned states remain.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SignStatesRequest {
     pub input_states: Option<SignStatesResponse>,
 }
@@ -23,7 +23,7 @@ pub struct SignStatesRequest {
 impl SignStatesRequest {
     /// Create new SignStates protocol request
     pub fn new() -> Self {
-        Self { input_states: None }
+        Default::default()
     }
     /// Create new SignStates request using response from a prior request
     pub fn from_response(sign_states: SignStatesResponse) -> Self {
@@ -49,7 +49,7 @@ pub struct SignStatesResponse {
 impl SignStatesResponse {
     /// Return true if response data has states for the client to sign
     pub fn has_states_to_sign(&self) -> bool {
-        self.recycled_orders.len() > 0 || self.states.len() > 0
+        !self.recycled_orders.is_empty() || !self.states.is_empty()
     }
 }
 /// Common representation of smart contract state data

@@ -30,9 +30,7 @@ impl NashProtocolSubscription for SubscribeOrderbook {
         state: Arc<Mutex<State>>
     ) -> Result<ResponseOrError<SubscriptionResponse>> {
         let response = self.subscription_response_from_json(response, state).await?;
-        let wrapped_response = response.map(Box::new(|res| 
-            SubscriptionResponse::Orderbook(res)
-        ));
+        let wrapped_response = response.map(Box::new(SubscriptionResponse::Orderbook));
         Ok(wrapped_response)
     }
 }

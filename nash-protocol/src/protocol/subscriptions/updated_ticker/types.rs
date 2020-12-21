@@ -32,7 +32,7 @@ impl NashProtocolSubscription for SubscribeTicker {
         let response = self
             .subscription_response_from_json(response, state)
             .await?;
-        let wrapped_response = response.map(Box::new(|res| SubscriptionResponse::Ticker(res)));
+        let wrapped_response = response.map(Box::new(|res| SubscriptionResponse::Ticker(Box::new(res))));
         Ok(wrapped_response)
     }
 }

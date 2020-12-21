@@ -51,7 +51,7 @@ impl LimitOrderRequest {
         let (source, rate, destination) = match self.buy_or_sell {
             BuyOrSell::Buy => {
                 // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount_of_b, a_per_b.clone(), market.asset_a)
+                (amount_of_b, a_per_b, market.asset_a)
             }
             BuyOrSell::Sell => {
                 // Selling: in SC, source is A, rate is A, and moving to asset B
@@ -62,7 +62,7 @@ impl LimitOrderRequest {
         Ok(LimitOrderConstructor {
             me_amount: amount_of_a,
             me_rate: b_per_a,
-            market: market.clone(),
+            market,
             buy_or_sell: self.buy_or_sell,
             cancellation_policy: self.cancellation_policy,
             allow_taker: self.allow_taker,
@@ -100,7 +100,7 @@ impl MarketOrderRequest {
 
         Ok(MarketOrderConstructor {
             me_amount: source.clone(),
-            market: market.clone(),
+            market,
             source,
             destination,
         })
@@ -208,7 +208,7 @@ impl LimitOrderConstructor {
             payload: place_limit_order::PlaceLimitOrderParams {
                 allow_taker: self.allow_taker,
                 buy_or_sell: self.buy_or_sell.into(),
-                cancel_at: cancel_at,
+                cancel_at,
                 cancellation_policy: self.cancellation_policy.into(),
                 market_name: self.market.market_name(),
                 amount: self.me_amount.clone().try_into()?,

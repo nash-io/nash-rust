@@ -75,7 +75,7 @@ fn k1_from_hexstring(hex_str: &str) -> Result<Secp256k1Point> {
 
 impl From<dh_fill_pool::ResponseData> for DhFillPoolResponse {
     fn from(res: dh_fill_pool::ResponseData) -> Self {
-        let server_publics = res.dh_fill_pool.iter().map(|value| value.clone()).collect();
+        let server_publics = res.dh_fill_pool.to_vec();
         Self { server_publics }
     }
 }

@@ -37,7 +37,7 @@ impl TryFromState<list_candles::ResponseData> for ListCandlesResponse {
         }
         Ok(ListCandlesResponse {
             candles,
-            next_page: response.list_candles.next.clone(),
+            next_page: response.list_candles.next,
         })
     }
 }

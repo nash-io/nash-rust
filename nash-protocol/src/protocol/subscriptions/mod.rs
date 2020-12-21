@@ -22,7 +22,7 @@ pub enum SubscriptionRequest {
 #[derive(Debug)]
 pub enum SubscriptionResponse {
     Orderbook(updated_orderbook::SubscribeOrderbookResponse),
-    Ticker(updated_ticker::SubscribeTickerResponse),
+    Ticker(Box<updated_ticker::SubscribeTickerResponse>),
     Trades(trades::TradesResponse),
 }
 
@@ -45,15 +45,15 @@ impl NashProtocolSubscription for SubscriptionRequest {
             Self::Trades(trades_req) => Ok(trades_req
                 .subscription_response_from_json(response, state)
                 .await?
-                .map(Box::new(|res| SubscriptionResponse::Trades(res)))),
+                .map(Box::new(SubscriptionResponse::Trades))),
             Self::Ticker(ticker_req) => Ok(ticker_req
                 .subscription_response_from_json(response, state)
                 .await?
-                .map(Box::new(|res| SubscriptionResponse::Ticker(res)))),
+                .map(Box::new(|res| SubscriptionResponse::Ticker(Box::new(res))))),
             Self::Orderbook(orderbook_req) => Ok(orderbook_req
                 .subscription_response_from_json(response, state)
                 .await?
-                .map(Box::new(|res| SubscriptionResponse::Orderbook(res)))),
+                .map(Box::new(SubscriptionResponse::Orderbook))),
         }
     }
     async fn wrap_response_as_any_subscription(

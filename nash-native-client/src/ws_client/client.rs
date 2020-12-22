@@ -805,7 +805,7 @@ mod tests {
         runtime.block_on(async_block);
     }
 
-    // FIXME: validation error caused by 'account_funds' - requirement:  - reason: Insufficient Funds - got: ~C[50.0000000 usdc]
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
     // #[test]
     fn _test_account_order_lookup_then_cancel() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
@@ -1045,7 +1045,7 @@ mod tests {
         runtime.block_on(async_block);
     }
 
-    // FIXME: validation error caused by 'account_funds' - requirement:  - reason: Insufficient Funds - got: ~C[50.0000000 usdc]
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
     // #[test]
     fn _limit_order_nonce_recovery() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();

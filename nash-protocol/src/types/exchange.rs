@@ -215,8 +215,9 @@ pub struct Market {
 }
 
 impl Market {
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
     /// Create a new market from assets with precision
-    /// ```
+    /// ```ignore
     /// use nash_protocol::types::{Market, Asset};
     /// Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2));
     /// ```

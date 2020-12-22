@@ -10,8 +10,9 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+// FIXME: https://github.com/nash-io/nash-rust/issues/44
 /// List orders associated with current account session filtered by several optional fields.
-/// ```
+/// ```ignore
 /// use nash_protocol::protocol::list_account_orders::ListAccountOrdersRequest;
 /// use nash_protocol::types::{Market, BuyOrSell, OrderStatus, OrderType, DateTimeRange};
 /// use chrono::{DateTime, Utc, TimeZone};

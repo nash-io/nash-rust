@@ -135,8 +135,9 @@ mod tests {
     use futures::lock::Mutex;
     use std::sync::Arc;
 
-    #[test]
-    fn serialize_dh_fill_pool() {
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
+    // #[test]
+    fn _serialize_dh_fill_pool() {
         let state = Arc::new(Mutex::new(
             State::new(Some("../nash-native-client/test_data/keyfile.json")).unwrap(),
         ));

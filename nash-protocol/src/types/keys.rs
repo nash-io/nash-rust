@@ -36,7 +36,6 @@ impl ApiKeys {
             .map_err(|_| ProtocolError("Could not decode secret string as Base64"))?;
         let decoded_str = std::str::from_utf8(&decoded)
             .map_err(|_| ProtocolError("Could not encode decoded base64 as string (impossible)"))?;
-        println!("Decoded: {}", decoded_str);
         let keys: KeyMap = serde_json::from_str(decoded_str)
             .map_err(|_| ProtocolError("Could not convert secret string value to KeyMap"))?;
         Ok(ApiKeys {

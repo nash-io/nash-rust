@@ -52,10 +52,7 @@ pub fn spawn_sender_loop(
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
-        loop {
-            if let Ok(_) = ws_disconnect_receiver.try_recv() {
-                websocket.close(None).await.ok();
-            }
+        while ws_disconnect_receiver.try_recv().is_err() {
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = timeout(timeout_duration, websocket.next());
             match select(next_outgoing, next_incoming).await {
@@ -346,7 +343,9 @@ impl Client {
         // create connection
         let (socket, _response) = connect_async(&conn_path)
             .await
-            .map_err(|_| ProtocolError("Could not connect to WS"))?;
+            .map_err(|error| {
+                ProtocolError::coerce_static_from_str(&format!("Could not connect to WS: {}", error))
+            })?;
 
         // channels to pass messages between threads. bounded at 100 unprocessed
         let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();

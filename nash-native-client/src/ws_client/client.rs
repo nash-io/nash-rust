@@ -630,6 +630,19 @@ mod tests {
     }
 
     #[test]
+    fn test_disconnect() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let _d = client.disconnect().await;
+            let resp = client.run(ListMarketsRequest).await;
+            // println!("{:?}", resp);
+            assert_eq!(resp.is_err(), true);
+        };
+        runtime.block_on(async_block);
+    }
+
+    #[test]
     fn test_list_markets_sandbox() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {

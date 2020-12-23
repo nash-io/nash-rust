@@ -52,6 +52,8 @@ pub fn spawn_sender_loop(
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
+        // The idea is that try_recv will only work when it recieves a disconnect signal
+        // This is a bit ugly imo and we should probably change in the future
         while ws_disconnect_receiver.try_recv().is_err() {
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = timeout(timeout_duration, websocket.next());

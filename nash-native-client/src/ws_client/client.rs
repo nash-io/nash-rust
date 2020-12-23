@@ -351,11 +351,9 @@ impl Client {
         };
 
         // create connection
-        let (socket, _response) = connect_async(&conn_path)
-            .await
-            .map_err(|error| {
-                ProtocolError::coerce_static_from_str(&format!("Could not connect to WS: {}", error))
-            })?;
+        let (socket, _response) = connect_async(&conn_path).await.map_err(|error| {
+            ProtocolError::coerce_static_from_str(&format!("Could not connect to WS: {}", error))
+        })?;
 
         // channels to pass messages between threads. bounded at 100 unprocessed
         let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();

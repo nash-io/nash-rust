@@ -56,10 +56,9 @@ pub fn spawn_sender_loop(
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
-        loop {
-            if ws_disconnect_receiver.try_recv().is_ok() {
-                websocket.close(None).await.ok();
-            }
+        // The idea is that try_recv will only work when it recieves a disconnect signal
+        // This is a bit ugly imo and we should probably change in the future
+        while ws_disconnect_receiver.try_recv().is_err() {
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = timeout(timeout_duration, websocket.next());
             match select(next_outgoing, next_incoming).await {
@@ -354,7 +353,9 @@ impl Client {
         // create connection
         let (socket, _response) = connect_async(&conn_path)
             .await
-            .map_err(|_| ProtocolError("Could not connect to WS"))?;
+            .map_err(|error| {
+                ProtocolError::coerce_static_from_str(&format!("Could not connect to WS: {}", error))
+            })?;
 
         // channels to pass messages between threads. bounded at 100 unprocessed
         let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();
@@ -636,6 +637,19 @@ mod tests {
         )
         .await
         .unwrap()
+    }
+
+    #[test]
+    fn test_disconnect() {
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let async_block = async {
+            let client = init_client().await;
+            let _d = client.disconnect().await;
+            let resp = client.run(ListMarketsRequest).await;
+            // println!("{:?}", resp);
+            assert_eq!(resp.is_err(), true);
+        };
+        runtime.block_on(async_block);
     }
 
     #[test]

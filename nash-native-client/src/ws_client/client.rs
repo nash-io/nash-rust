@@ -662,7 +662,7 @@ impl Client {
         client.subscribe_protocol(request).await
     }
 
-    pub fn init_state_signing(&self, period: u64){
+    pub fn init_state_signing(&self, period: u64) {
         let client = self.inner.clone();
         let sign_loop_status = self.sign_loop_status.clone();
         tokio::spawn(async move {
@@ -703,7 +703,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, Environment, HashMap, Arc, Mutex};
+    use super::{Client, Environment, HashMap, Arc};
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -756,7 +756,7 @@ mod tests {
 
     #[tokio::test(core_threads = 2)]
     async fn test_autosigning(){
-        let client = init_client().await;
+        let _client = init_client().await;
         tokio::time::delay_for(Duration::from_secs(100)).await;
     }
 
@@ -764,14 +764,31 @@ mod tests {
     async fn multiple_concurrent_requests(){
         let client = init_client().await;
         let share_client = Arc::new(client);
-        async fn make_request(client: Arc<Client>, i: u64) {
+        async fn make_long_request(client: Arc<Client>, i: u64) {
             println!("started loop {}", i);
-            let _req = client.run(ListMarketsRequest).await;
-            println!("done {}", i);
+            let req = client.run(SignAllStates::new()).await;
+            if !req.is_err() {
+                println!("done (long) {}", i); 
+            } else {
+                println!("error (long) {}", i);
+            }
+        }
+        async fn make_short_request(client: Arc<Client>, i: u64) {
+            println!("started loop {}", i);
+            let req = client.run(ListMarketsRequest).await;
+            if !req.is_err() {
+                println!("done (short) {}", i); 
+            } else {
+                println!("error (short) {}", i);
+            }
         }
         let mut handles = Vec::new();
-        for i in 0..10 {
-            handles.push(tokio::spawn(make_request(share_client.clone(), i)));
+        let mut count = 0;
+        for _ in 0..10 {
+            handles.push(tokio::spawn(make_long_request(share_client.clone(), count)));
+            count += 1;
+            handles.push(tokio::spawn(make_short_request(share_client.clone(), count)));
+            count += 1;
         }
         futures::future::join_all(handles).await;
     }

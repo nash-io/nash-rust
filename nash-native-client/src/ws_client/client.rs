@@ -627,7 +627,7 @@ impl Client {
         let client = Self { inner: client, global_subscription_receiver: g_sub, sign_loop_status };
         if let Some(period) = sign_states_loop_interval {
             client.init_state_signing(period);
-        }
+        }        
         Ok(client)
     }
 
@@ -666,7 +666,6 @@ impl Client {
         let client = self.inner.clone();
         let sign_loop_status = self.sign_loop_status.clone();
         tokio::spawn(async move {
-            println!("starting loop...");
             // set loop status to true once it begins, then free the lock
             // holding the lock throughout the loop wouldn't allow access to value
             let mut status = sign_loop_status.lock().await;         
@@ -679,23 +678,32 @@ impl Client {
                     // running the client requires a free lock...
                     drop(state_lock);
                     let req = client_lock.run(nash_protocol::protocol::sign_all_states::SignAllStates::new()).await;
+                    drop(client_lock);
                     if req.is_err() {
                         let mut status = sign_loop_status.lock().await;         
                         *status = false;
                         // kill process
                         break;
                     }
+                } else {
+                    drop(state_lock);
+                    drop(client_lock);
                 }
                 tokio::time::delay_for(Duration::from_secs(period)).await;
             }
         });
+    }
+
+    /// Get status of state signing loop
+    pub async fn state_signing_loop_status(&self) -> bool {
+        self.sign_loop_status.lock().await.clone()
     }
 }
 
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, Environment, HashMap};
+    use super::{Client, Environment, HashMap, Arc, Mutex};
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -734,7 +742,7 @@ mod tests {
             0,
             Environment::Production,
             Duration::from_secs_f32(2.0),
-            Some(1)
+            Some(10)
         )
         .await
         .unwrap()
@@ -750,6 +758,22 @@ mod tests {
     async fn test_autosigning(){
         let client = init_client().await;
         tokio::time::delay_for(Duration::from_secs(100)).await;
+    }
+
+    #[tokio::test(core_threads = 2)]
+    async fn multiple_concurrent_requests(){
+        let client = init_client().await;
+        let share_client = Arc::new(client);
+        async fn make_request(client: Arc<Client>, i: u64) {
+            println!("started loop {}", i);
+            let _req = client.run(ListMarketsRequest).await;
+            println!("done {}", i);
+        }
+        let mut handles = Vec::new();
+        for i in 0..10 {
+            handles.push(tokio::spawn(make_request(share_client.clone(), i)));
+        }
+        futures::future::join_all(handles).await;
     }
 
     #[test]

@@ -33,7 +33,6 @@ pub fn spawn_heartbeat_loop(period: Duration, client_id: u64, outgoing_sender: U
                 AbsintheEvent::Heartbeat,
                 None,
             );
-            println!("Heartbeat!");
             if let Err(_ignore) = outgoing_sender.send(heartbeat) {
                 // if outgoing sender is dead just ignore, will be handled elsewhere
                 break;
@@ -435,7 +434,6 @@ impl InnerClient {
         }
 
         // Now run the pipeline
-        // FIXME: get rid of the move here
         let out = self.run_helper(request.clone()).await;
 
         // Get things to run after the request/pipeline
@@ -582,6 +580,7 @@ impl InnerClient {
 // In particular this is necessary to spawn a process in the background that signs state
 pub struct Client {
     inner: Arc<Mutex<InnerClient>>,
+    sign_loop_status: Arc<Mutex<bool>>,
     pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>
 }
 
@@ -594,9 +593,10 @@ impl Client {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
+        sign_states_loop_interval: Option<u64>
     ) -> Result<Self> {
         let state = State::new(keys_path)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout).await
+        Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
     }
 
     /// Initialize client from key data directly
@@ -607,9 +607,10 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
+        sign_states_loop_interval: Option<u64>
     ) -> Result<Self> {
         let state = State::from_key_data(secret, session)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout).await
+        Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
     }
 
     async fn setup(
@@ -618,10 +619,16 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
+        sign_states_loop_interval: Option<u64>
     ) -> Result<Self>{
         let (client, g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
         let client = Arc::new(Mutex::new(client));
-        Ok(Self { inner: client, global_subscription_receiver: g_sub })
+        let sign_loop_status = Arc::new(Mutex::new(false));
+        let client = Self { inner: client, global_subscription_receiver: g_sub, sign_loop_status };
+        if let Some(period) = sign_states_loop_interval {
+            client.init_state_signing(period);
+        }
+        Ok(client)
     }
 
     /// Disconnect the client
@@ -655,14 +662,31 @@ impl Client {
         client.subscribe_protocol(request).await
     }
 
-    fn init_state_signing(&self){
+    pub fn init_state_signing(&self, period: u64){
         let client = self.inner.clone();
+        let sign_loop_status = self.sign_loop_status.clone();
         tokio::spawn(async move {
+            println!("starting loop...");
+            // set loop status to true once it begins, then free the lock
+            // holding the lock throughout the loop wouldn't allow access to value
+            let mut status = sign_loop_status.lock().await;         
+            *status = true;
+            drop(status);
             loop {
-                // let client_lock = client.lock().await;
-                // let state_lock = client_lock.state.lock().await;
-                println!("hey i want to sign state");
-                tokio::time::delay_for(Duration::from_secs(1)).await;
+                let client_lock = client.lock().await;
+                let state_lock = client_lock.state.lock().await;
+                if state_lock.remaining_orders < 10 {
+                    // running the client requires a free lock...
+                    drop(state_lock);
+                    let req = client_lock.run(nash_protocol::protocol::sign_all_states::SignAllStates::new()).await;
+                    if req.is_err() {
+                        let mut status = sign_loop_status.lock().await;         
+                        *status = false;
+                        // kill process
+                        break;
+                    }
+                }
+                tokio::time::delay_for(Duration::from_secs(period)).await;
             }
         });
     }
@@ -709,16 +733,23 @@ mod tests {
             None,
             0,
             Environment::Production,
-            Duration::from_secs_f32(2.0)
+            Duration::from_secs_f32(2.0),
+            Some(1)
         )
         .await
         .unwrap()
     }
 
     async fn init_sandbox_client() -> Client {
-        Client::new(None, 0, None, Environment::Sandbox, Duration::from_secs_f32(5.0))
+        Client::new(None, 0, None, Environment::Sandbox, Duration::from_secs_f32(5.0), None)
             .await
             .unwrap()
+    }
+
+    #[tokio::test(core_threads = 2)]
+    async fn test_autosigning(){
+        let client = init_client().await;
+        tokio::time::delay_for(Duration::from_secs(100)).await;
     }
 
     #[test]

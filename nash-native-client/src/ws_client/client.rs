@@ -33,6 +33,7 @@ pub fn spawn_heartbeat_loop(period: Duration, client_id: u64, outgoing_sender: U
                 AbsintheEvent::Heartbeat,
                 None,
             );
+            println!("Heartbeat!");
             if let Err(_ignore) = outgoing_sender.send(heartbeat) {
                 // if outgoing sender is dead just ignore, will be handled elsewhere
                 break;
@@ -595,9 +596,7 @@ impl Client {
         timeout: Duration,
     ) -> Result<Self> {
         let state = State::new(keys_path)?;
-        let (client,g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
-        let client = Arc::new(Mutex::new(client));
-        Ok(Self { inner: client, global_subscription_receiver: g_sub })
+        Self::setup(state, affiliate_code, client_id, env, timeout).await
     }
 
     /// Initialize client from key data directly
@@ -610,6 +609,16 @@ impl Client {
         timeout: Duration,
     ) -> Result<Self> {
         let state = State::from_key_data(secret, session)?;
+        Self::setup(state, affiliate_code, client_id, env, timeout).await
+    }
+
+    async fn setup(
+        state: State,
+        affiliate_code: Option<String>,
+        client_id: u64,
+        env: Environment,
+        timeout: Duration,
+    ) -> Result<Self>{
         let (client, g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
         let client = Arc::new(Mutex::new(client));
         Ok(Self { inner: client, global_subscription_receiver: g_sub })
@@ -644,6 +653,18 @@ impl Client {
     {
         let client = self.inner.lock().await;
         client.subscribe_protocol(request).await
+    }
+
+    fn init_state_signing(&self){
+        let client = self.inner.clone();
+        tokio::spawn(async move {
+            loop {
+                // let client_lock = client.lock().await;
+                // let state_lock = client_lock.state.lock().await;
+                println!("hey i want to sign state");
+                tokio::time::delay_for(Duration::from_secs(1)).await;
+            }
+        });
     }
 }
 

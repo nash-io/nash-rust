@@ -278,7 +278,7 @@ async fn manage_client_error(state: Arc<Mutex<State>>) {
 }
 
 /// Interface for interacting with a websocket connection
-pub struct Client {
+pub struct InnerClient {
     ws_outgoing_sender: UnboundedSender<AbsintheWSRequest>,
     ws_disconnect_sender: UnboundedSender<()>,
     last_message_id: Mutex<u64>,
@@ -287,10 +287,9 @@ pub struct Client {
     state: Arc<Mutex<State>>,
     timeout: Duration,
     global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }
 
-impl Client {
+impl InnerClient {
     /// Create a new client using an optional `keys_path`. The `client_id` is an identifier
     /// registered with the absinthe WS connection. It can possibly be removed.
     pub async fn new(
@@ -299,7 +298,7 @@ impl Client {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-    ) -> Result<Self> {
+    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
         let state = State::new(keys_path)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
@@ -311,7 +310,7 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-    ) -> Result<Self> {
+    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
         let state = State::from_key_data(secret, session)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
@@ -326,7 +325,7 @@ impl Client {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-    ) -> Result<Self> {
+    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
         let version = "2.0.0";
 
         state.affiliate_code = affiliate_code;
@@ -383,14 +382,13 @@ impl Client {
             message_broker,
             state: Arc::new(Mutex::new(state)),
             timeout,
-            global_subscription_sender,
-            global_subscription_receiver,
+            global_subscription_sender
         };
 
         // grab market data upon initial setup
         let _ = client.run(nash_protocol::protocol::list_markets::ListMarketsRequest).await?;
 
-        Ok(client)
+        Ok((client, global_subscription_receiver))
     }
 
     /// Execute a NashProtocol request. Query will be created, executed over network, response will
@@ -578,6 +576,78 @@ impl Client {
     }
 }
 
+
+// Adding another layer of abstraction on top of client make it easier/safer to manage concurrent usage of the client
+// In particular this is necessary to spawn a process in the background that signs state
+pub struct Client {
+    inner: Arc<Mutex<InnerClient>>,
+    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>
+}
+
+impl Client {
+
+    /// Initialize client using a file path to API keys
+    pub async fn new(
+        keys_path: Option<&str>,
+        client_id: u64,
+        affiliate_code: Option<String>,
+        env: Environment,
+        timeout: Duration,
+    ) -> Result<Self> {
+        let state = State::new(keys_path)?;
+        let (client,g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
+        let client = Arc::new(Mutex::new(client));
+        Ok(Self { inner: client, global_subscription_receiver: g_sub })
+    }
+
+    /// Initialize client from key data directly
+    pub async fn from_key_data(
+        secret: &str,
+        session: &str,
+        affiliate_code: Option<String>,
+        client_id: u64,
+        env: Environment,
+        timeout: Duration,
+    ) -> Result<Self> {
+        let state = State::from_key_data(secret, session)?;
+        let (client, g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
+        let client = Arc::new(Mutex::new(client));
+        Ok(Self { inner: client, global_subscription_receiver: g_sub })
+    }
+
+    /// Disconnect the client
+    pub async fn disconnect(&self) {
+        let client = self.inner.lock().await;
+        client.ws_disconnect_sender.send(()).ok();
+    }
+
+    /// Entry point for Nash protocol requests
+    pub async fn run<T: NashProtocolPipeline + Clone + Sync>(
+        &self,
+        request: T,
+    ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
+        let client = self.inner.lock().await;
+        client.run(request).await
+    }
+
+    /// Entry point for running Nash protocol subscriptions
+    pub async fn subscribe_protocol<T>(
+        &self,
+        request: T,
+    ) -> Result<
+        UnboundedReceiver<
+            Result<ResponseOrError<<T as NashProtocolSubscription>::SubscriptionResponse>>,
+        >,
+    >
+    where
+        T: NashProtocolSubscription + Send + Sync + 'static,
+    {
+        let client = self.inner.lock().await;
+        client.subscribe_protocol(request).await
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::{Client, Environment, HashMap};
@@ -650,7 +720,6 @@ mod tests {
             let client = init_sandbox_client().await;
             let response = client.run(ListMarketsRequest).await.unwrap();
             println!("{:?}", response);
-            println!("{:?}", client.state.lock().await.assets);
         };
         runtime.block_on(async_block);
     }
@@ -667,7 +736,6 @@ mod tests {
                 .await
                 .unwrap();
             println!("{:?}", response);
-            println!("{:?}", client.state.lock().await);
         };
         runtime.block_on(async_block);
     }
@@ -679,7 +747,6 @@ mod tests {
             let client = init_client().await;
             let response = client.run(AssetNoncesRequest::new()).await.unwrap();
             println!("{:?}", response);
-            println!("{:?}", client.state.lock().await.asset_nonces);
         };
         runtime.block_on(async_block);
     }
@@ -805,7 +872,6 @@ mod tests {
             let client = init_client().await;
             let response = client.run(ListMarketsRequest).await.unwrap();
             println!("{:?}", response);
-            println!("{:?}", client.state.lock().await.assets);
         };
         runtime.block_on(async_block);
     }
@@ -1070,7 +1136,8 @@ mod tests {
             client.run(SignAllStates::new()).await.ok();
 
             // Break nonces
-            let mut state_lock = client.state.lock().await;
+            let inner_client = client.inner.lock().await;
+            let mut state_lock = inner_client.state.lock().await;
             let mut bad_map = HashMap::new();
             bad_map.insert("eth".to_string(), vec![0 as u32]);
             bad_map.insert("usdc".to_string(), vec![0 as u32]);
@@ -1159,7 +1226,6 @@ mod tests {
             let client = init_client().await;
             let response = client.run(ListMarketsRequest).await.unwrap();
             println!("{:?}", response);
-            println!("{:?}", client.state.lock().await.assets);
         };
         runtime.block_on(async_block);
     }

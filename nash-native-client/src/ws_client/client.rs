@@ -305,7 +305,10 @@ impl InnerClient {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
+    ) -> Result<(
+        Self,
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
+    )> {
         let state = State::new(keys_path)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
@@ -317,7 +320,10 @@ impl InnerClient {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
+    ) -> Result<(
+        Self,
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
+    )> {
         let state = State::from_key_data(secret, session)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
@@ -332,7 +338,10 @@ impl InnerClient {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
+    ) -> Result<(
+        Self,
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
+    )> {
         let version = "2.0.0";
 
         state.affiliate_code = affiliate_code;
@@ -387,7 +396,7 @@ impl InnerClient {
             message_broker,
             state: Arc::new(Mutex::new(state)),
             timeout,
-            global_subscription_sender
+            global_subscription_sender,
         };
 
         // grab market data upon initial setup
@@ -575,17 +584,16 @@ impl InnerClient {
     }
 }
 
-
 // Adding another layer of abstraction on top of client make it easier/safer to manage concurrent usage of the client
 // In particular this is necessary to spawn a process in the background that signs state
 pub struct Client {
     inner: Arc<Mutex<InnerClient>>,
     sign_loop_status: Arc<Mutex<bool>>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>
+    pub(crate) global_subscription_receiver:
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }
 
 impl Client {
-
     /// Initialize client using a file path to API keys
     pub async fn new(
         keys_path: Option<&str>,
@@ -593,10 +601,18 @@ impl Client {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-        sign_states_loop_interval: Option<u64>
+        sign_states_loop_interval: Option<u64>,
     ) -> Result<Self> {
         let state = State::new(keys_path)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
+        Self::setup(
+            state,
+            affiliate_code,
+            client_id,
+            env,
+            timeout,
+            sign_states_loop_interval,
+        )
+        .await
     }
 
     /// Initialize client from key data directly
@@ -607,10 +623,18 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-        sign_states_loop_interval: Option<u64>
+        sign_states_loop_interval: Option<u64>,
     ) -> Result<Self> {
         let state = State::from_key_data(secret, session)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
+        Self::setup(
+            state,
+            affiliate_code,
+            client_id,
+            env,
+            timeout,
+            sign_states_loop_interval,
+        )
+        .await
     }
 
     async fn setup(
@@ -619,12 +643,17 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-        sign_states_loop_interval: Option<u64>
-    ) -> Result<Self>{
-        let (client, g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
+        sign_states_loop_interval: Option<u64>,
+    ) -> Result<Self> {
+        let (client, g_sub) =
+            InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
         let client = Arc::new(Mutex::new(client));
         let sign_loop_status = Arc::new(Mutex::new(false));
-        let client = Self { inner: client, global_subscription_receiver: g_sub, sign_loop_status };
+        let client = Self {
+            inner: client,
+            global_subscription_receiver: g_sub,
+            sign_loop_status,
+        };
         if let Some(period) = sign_states_loop_interval {
             client.init_state_signing(period);
         }
@@ -677,7 +706,9 @@ impl Client {
                 if state_lock.remaining_orders < 10 {
                     // running the client requires a free lock...
                     drop(state_lock);
-                    let req = client_lock.run(nash_protocol::protocol::sign_all_states::SignAllStates::new()).await;
+                    let req = client_lock
+                        .run(nash_protocol::protocol::sign_all_states::SignAllStates::new())
+                        .await;
                     drop(client_lock);
                     if req.is_err() {
                         let mut status = sign_loop_status.lock().await;
@@ -700,10 +731,9 @@ impl Client {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::{Client, Environment, HashMap, Arc};
+    use super::{Arc, Client, Environment, HashMap};
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -742,26 +772,33 @@ mod tests {
             0,
             Environment::Sandbox,
             Duration::from_secs_f32(2.0),
-            Some(10)
+            Some(10),
         )
         .await
         .unwrap()
     }
 
     async fn init_sandbox_client() -> Client {
-        Client::new(None, 0, None, Environment::Sandbox, Duration::from_secs_f32(5.0), None)
-            .await
-            .unwrap()
+        Client::new(
+            None,
+            0,
+            None,
+            Environment::Sandbox,
+            Duration::from_secs_f32(5.0),
+            None,
+        )
+        .await
+        .unwrap()
     }
 
     #[tokio::test(core_threads = 2)]
-    async fn test_autosigning(){
+    async fn test_autosigning() {
         let _client = init_client().await;
         tokio::time::delay_for(Duration::from_secs(100)).await;
     }
 
     #[tokio::test(core_threads = 2)]
-    async fn multiple_concurrent_requests(){
+    async fn multiple_concurrent_requests() {
         let client = init_client().await;
         let share_client = Arc::new(client);
         async fn make_long_request(client: Arc<Client>, i: u64) {
@@ -787,7 +824,10 @@ mod tests {
         for _ in 0..10 {
             handles.push(tokio::spawn(make_long_request(share_client.clone(), count)));
             count += 1;
-            handles.push(tokio::spawn(make_short_request(share_client.clone(), count)));
+            handles.push(tokio::spawn(make_short_request(
+                share_client.clone(),
+                count,
+            )));
             count += 1;
         }
         futures::future::join_all(handles).await;

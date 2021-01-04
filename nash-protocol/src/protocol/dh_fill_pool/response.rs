@@ -75,7 +75,7 @@ fn k1_from_hexstring(hex_str: &str) -> Result<Secp256k1Point> {
 
 impl From<dh_fill_pool::ResponseData> for DhFillPoolResponse {
     fn from(res: dh_fill_pool::ResponseData) -> Self {
-        let server_publics = res.dh_fill_pool.iter().map(|value| value.clone()).collect();
+        let server_publics = res.dh_fill_pool.to_vec();
         Self { server_publics }
     }
 }
@@ -93,22 +93,14 @@ pub async fn fill_pool(
         DhFillPoolRequest::Bitcoin(request) | DhFillPoolRequest::Ethereum(request) => {
             let k1_secrets = request.secrets.clone();
             let k1_server_publics = server_publics.publics_for_k1()?;
-            nash_mpc::client::fill_rpool_secp256k1(
-                k1_secrets,
-                &k1_server_publics,
-                paillier_pk,
-            )
-            .map_err(|_| ProtocolError("Error filling k1 pool"))?;
+            nash_mpc::client::fill_rpool_secp256k1(k1_secrets, &k1_server_publics, paillier_pk)
+                .map_err(|_| ProtocolError("Error filling k1 pool"))?;
         }
         DhFillPoolRequest::NEO(request) => {
             let r1_secrets = request.secrets.clone();
             let r1_server_publics = server_publics.publics_for_r1()?;
-            nash_mpc::client::fill_rpool_secp256r1(
-                r1_secrets,
-                &r1_server_publics,
-                paillier_pk,
-            )
-            .map_err(|_| ProtocolError("Error filling r1 pool"))?;
+            nash_mpc::client::fill_rpool_secp256r1(r1_secrets, &r1_server_publics, paillier_pk)
+                .map_err(|_| ProtocolError("Error filling r1 pool"))?;
         }
     }
     Ok(())

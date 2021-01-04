@@ -3,9 +3,9 @@ use super::super::{
 };
 use crate::errors::Result;
 use crate::graphql::list_account_balances;
-use crate::types::{Asset};
-use bigdecimal::BigDecimal;
+use crate::types::Asset;
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
 use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ pub struct ListAccountBalancesResponse {
     // Funds in personal wallet
     pub personal: HashMap<Asset, BigDecimal>,
     // Funds in current orders
-    pub in_orders: HashMap<Asset, BigDecimal>
+    pub in_orders: HashMap<Asset, BigDecimal>,
 }
 
 #[async_trait]
@@ -42,7 +42,7 @@ impl NashProtocol for ListAccountBalancesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<ListAccountBalancesResponse, list_account_balances::ResponseData>(
             response,

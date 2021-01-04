@@ -23,7 +23,11 @@ use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheW
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
 // this will add hearbeat (keep alive) messages to the channel for ws to send out every 15s
-pub fn spawn_heartbeat_loop(period: Duration, client_id: u64, outgoing_sender: UnboundedSender<AbsintheWSRequest>) {
+pub fn spawn_heartbeat_loop(
+    period: Duration,
+    client_id: u64,
+    outgoing_sender: UnboundedSender<AbsintheWSRequest>,
+) {
     tokio::spawn(async move {
         loop {
             let heartbeat = AbsintheWSRequest::new(
@@ -79,7 +83,10 @@ pub fn spawn_sender_loop(
                     }
                 }
                 Either::Right((in_msg, _)) => {
-                    if let Some(Ok(Ok(resp))) = in_msg.ok().and_then(|in_msg| in_msg.map(|x| x.map(|x| x.into_text()))) {
+                    if let Some(Ok(Ok(resp))) = in_msg
+                        .ok()
+                        .and_then(|in_msg| in_msg.map(|x| x.map(|x| x.into_text())))
+                    {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
                             // Similarly, let the client timeout on incoming response if this fails and handle that
                             // todo: this is a hack since the graphql library has not implemented clone() for responses
@@ -119,55 +126,51 @@ impl MessageBroker {
         tokio::spawn(async move {
             let mut request_map = HashMap::new();
             let mut subscription_map = HashMap::new();
-            loop {
-                if let Some(next_incoming) = internal_reciever.next().await {
-                    match next_incoming {
-                        // Register a channel to send messages to with given id
-                        BrokerAction::RegisterRequest(id, channel) => {
-                            request_map.insert(id, channel);
-                        }
-                        BrokerAction::RegisterSubscription(id, channel) => {
-                            subscription_map.insert(id, channel);
-                        }
-                        // When message comes in, if id is registered with channel, send there
-                        BrokerAction::Message(Ok(response)) => {
-                            // if message has subscription id, send it to subscription
-                            if let Some(id) = response.subscription_id() {
-                                if let Some(channel) = subscription_map.get_mut(&id) {
-                                    // Again, we will let client timeout on waiting a response using its own policy.
-                                    // Crashing inside the broker process does not allow us to handle the error gracefully
-                                    if let Err(_ignore) = channel.send(Ok(response)) {
-                                        // Kill process on error
-                                        break;
-                                    }
-                                }
-                            }
-                            // otherwise check if it is a response to a registered request
-                            else if let Some(id) = response.message_id() {
-                                if let Some(channel) = request_map.get_mut(&id) {
-                                    if let Err(_ignore) = channel.send(Ok(response)) {
-                                        // Kill process on error
-                                        break;
-                                    }
-                                    // queries only have one response, so no need to keep this around
-                                    request_map.remove(&id);
+            while let Some(next_incoming) = internal_reciever.next().await {
+                match next_incoming {
+                    // Register a channel to send messages to with given id
+                    BrokerAction::RegisterRequest(id, channel) => {
+                        request_map.insert(id, channel);
+                    }
+                    BrokerAction::RegisterSubscription(id, channel) => {
+                        subscription_map.insert(id, channel);
+                    }
+                    // When message comes in, if id is registered with channel, send there
+                    BrokerAction::Message(Ok(response)) => {
+                        // if message has subscription id, send it to subscription
+                        if let Some(id) = response.subscription_id() {
+                            if let Some(channel) = subscription_map.get_mut(&id) {
+                                // Again, we will let client timeout on waiting a response using its own policy.
+                                // Crashing inside the broker process does not allow us to handle the error gracefully
+                                if let Err(_ignore) = channel.send(Ok(response)) {
+                                    // Kill process on error
+                                    break;
                                 }
                             }
                         }
-                        BrokerAction::Message(Err(e)) => {
-                            // iterate over all subscription and request channels and propogate error
-                            for (_id, channel) in request_map.iter_mut() {
-                                let _ = channel.send(Err(e.clone()));
+                        // otherwise check if it is a response to a registered request
+                        else if let Some(id) = response.message_id() {
+                            if let Some(channel) = request_map.get_mut(&id) {
+                                if let Err(_ignore) = channel.send(Ok(response)) {
+                                    // Kill process on error
+                                    break;
+                                }
+                                // queries only have one response, so no need to keep this around
+                                request_map.remove(&id);
                             }
-                            for (_id, channel) in subscription_map.iter_mut() {
-                                let _ = channel.send(Err(e.clone()));
-                            }
-                            // kill broker process if WS connection closed
-                            break;
                         }
                     }
-                } else {
-                    break;
+                    BrokerAction::Message(Err(e)) => {
+                        // iterate over all subscription and request channels and propogate error
+                        for (_id, channel) in request_map.iter_mut() {
+                            let _ = channel.send(Err(e.clone()));
+                        }
+                        for (_id, channel) in subscription_map.iter_mut() {
+                            let _ = channel.send(Err(e.clone()));
+                        }
+                        // kill broker process if WS connection closed
+                        break;
+                    }
                 }
             }
         });
@@ -193,31 +196,33 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                     // can the payload json be parsed?
                     if let Ok(json_payload) = response.subscription_json_payload() {
                         // First do normal subscription logic
-                        let output =
-                            match request.subscription_response_from_json(json_payload.clone(), state.clone()).await {
-                                Ok(response) => {
-                                    match response {
-                                        ResponseOrError::Error(err_resp) => {
-                                            Ok(ResponseOrError::Error(err_resp))
-                                        }
-                                        response => {
-                                            // this unwrap below is safe because previous match case checks for error
-                                            let sub_response = response.response().unwrap();
-                                            match request
-                                                .process_subscription_response(
-                                                    sub_response,
-                                                    state.clone(),
-                                                )
-                                                .await
-                                            {
-                                                Ok(_) => Ok(response),
-                                                Err(e) => Err(e),
-                                            }
+                        let output = match request
+                            .subscription_response_from_json(json_payload.clone(), state.clone())
+                            .await
+                        {
+                            Ok(response) => {
+                                match response {
+                                    ResponseOrError::Error(err_resp) => {
+                                        Ok(ResponseOrError::Error(err_resp))
+                                    }
+                                    response => {
+                                        // this unwrap below is safe because previous match case checks for error
+                                        let sub_response = response.response().unwrap();
+                                        match request
+                                            .process_subscription_response(
+                                                sub_response,
+                                                state.clone(),
+                                            )
+                                            .await
+                                        {
+                                            Ok(_) => Ok(response),
+                                            Err(e) => Err(e),
                                         }
                                     }
                                 }
-                                Err(e) => Err(e),
-                            };
+                            }
+                            Err(e) => Err(e),
+                        };
                         // If callback_channel fails, kill process
                         if let Err(_e) = user_callback_sender.send(output) {
                             // Note: we do not want to kill the process in this case! User could just have destroyed the individual callback stream
@@ -225,9 +230,11 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
                         }
 
                         // Now do global subscription logic. If global channel fails, also kill process
-                        if let Err(_e) = global_subscription_sender
-                            .send(request.wrap_response_as_any_subscription(json_payload, state.clone()).await)
-                        {
+                        if let Err(_e) = global_subscription_sender.send(
+                            request
+                                .wrap_response_as_any_subscription(json_payload, state.clone())
+                                .await,
+                        ) {
                             break;
                         }
                     } else {
@@ -298,7 +305,10 @@ impl InnerClient {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
+    ) -> Result<(
+        Self,
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
+    )> {
         let state = State::new(keys_path)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
@@ -310,7 +320,10 @@ impl InnerClient {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
+    ) -> Result<(
+        Self,
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
+    )> {
         let state = State::from_key_data(secret, session)?;
         Self::client_setup(state, client_id, affiliate_code, env, timeout).await
     }
@@ -325,7 +338,10 @@ impl InnerClient {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-    ) -> Result<(Self, UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>)> {
+    ) -> Result<(
+        Self,
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
+    )> {
         let version = "2.0.0";
 
         state.affiliate_code = affiliate_code;
@@ -342,11 +358,9 @@ impl InnerClient {
         };
 
         // create connection
-        let (socket, _response) = connect_async(&conn_path)
-            .await
-            .map_err(|error| {
-                ProtocolError::coerce_static_from_str(&format!("Could not connect to WS: {}", error))
-            })?;
+        let (socket, _response) = connect_async(&conn_path).await.map_err(|error| {
+            ProtocolError::coerce_static_from_str(&format!("Could not connect to WS: {}", error))
+        })?;
 
         // channels to pass messages between threads. bounded at 100 unprocessed
         let (ws_outgoing_sender, ws_outgoing_receiver) = unbounded_channel();
@@ -382,11 +396,13 @@ impl InnerClient {
             message_broker,
             state: Arc::new(Mutex::new(state)),
             timeout,
-            global_subscription_sender
+            global_subscription_sender,
         };
 
         // grab market data upon initial setup
-        let _ = client.run(nash_protocol::protocol::list_markets::ListMarketsRequest).await?;
+        let _ = client
+            .run(nash_protocol::protocol::list_markets::ListMarketsRequest)
+            .await?;
 
         Ok((client, global_subscription_receiver))
     }
@@ -399,15 +415,14 @@ impl InnerClient {
         request: T,
     ) -> Result<ResponseOrError<T::Response>> {
         let query = request.graphql(self.state.clone()).await?;
-        let ws_response = timeout(
-            self.timeout,
-            self.request(query).await?.next(),
-        )
-        .await
-        .map_err(|_| ProtocolError("Request timeout"))?
-        .ok_or(ProtocolError("Failed to recieve message"))??;
+        let ws_response = timeout(self.timeout, self.request(query).await?.next())
+            .await
+            .map_err(|_| ProtocolError("Request timeout"))?
+            .ok_or(ProtocolError("Failed to recieve message"))??;
         let json_payload = ws_response.json_payload()?;
-        let protocol_response = request.response_from_json(json_payload, self.state.clone()).await?;
+        let protocol_response = request
+            .response_from_json(json_payload, self.state.clone())
+            .await?;
         if let Some(response) = protocol_response.response() {
             request
                 .process_response(response, self.state.clone())
@@ -456,36 +471,30 @@ impl InnerClient {
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline containst more actions for client to take, execute them
-        loop {
-            if let Some(protocol_request) = request
-                .next_step(&protocol_state, self.state.clone())
-                .await?
-            {
-                let protocol_response = self.execute_protocol(protocol_request).await?;
-                // If error, end pipeline early and return GraphQL/network error data
-                if protocol_response.is_error() {
-                    
-                    manage_client_error(self.state.clone()).await;
+        while let Some(protocol_request) = request
+            .next_step(&protocol_state, self.state.clone())
+            .await?
+        {
+            let protocol_response = self.execute_protocol(protocol_request).await?;
+            // If error, end pipeline early and return GraphQL/network error data
+            if protocol_response.is_error() {
+                manage_client_error(self.state.clone()).await;
 
-                    return Ok(ResponseOrError::Error(
-                        protocol_response
-                            .consume_error()
-                            .expect("Destructure error after check. Impossible to fail."),
-                    ));
-                }
-                // Otherwise update the pipeline and continue
-                request
-                    .process_step(
-                        protocol_response
-                            .consume_response()
-                            .expect("Destructure response after check. Impossible to fail."),
-                        &mut protocol_state,
-                    )
-                    .await;
-            } else {
-                // If no more actions left, then done
-                break;
+                return Ok(ResponseOrError::Error(
+                    protocol_response
+                        .consume_error()
+                        .expect("Destructure error after check. Impossible to fail."),
+                ));
             }
+            // Otherwise update the pipeline and continue
+            request
+                .process_step(
+                    protocol_response
+                        .consume_response()
+                        .expect("Destructure response after check. Impossible to fail."),
+                    &mut protocol_state,
+                )
+                .await;
         }
         // Get pipeline output
         let output = request.output(protocol_state)?;
@@ -533,7 +542,7 @@ impl InnerClient {
         global_subscription_loop(
             callback_channel,
             user_callback_sender,
-            global_subscription_sender.clone(),
+            global_subscription_sender,
             request.clone(),
             self.state.clone(),
         );
@@ -575,17 +584,16 @@ impl InnerClient {
     }
 }
 
-
 // Adding another layer of abstraction on top of client make it easier/safer to manage concurrent usage of the client
 // In particular this is necessary to spawn a process in the background that signs state
 pub struct Client {
     inner: Arc<Mutex<InnerClient>>,
     sign_loop_status: Arc<Mutex<bool>>,
-    pub(crate) global_subscription_receiver: UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>
+    pub(crate) global_subscription_receiver:
+        UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }
 
 impl Client {
-
     /// Initialize client using a file path to API keys
     pub async fn new(
         keys_path: Option<&str>,
@@ -593,10 +601,18 @@ impl Client {
         affiliate_code: Option<String>,
         env: Environment,
         timeout: Duration,
-        sign_states_loop_interval: Option<u64>
+        sign_states_loop_interval: Option<u64>,
     ) -> Result<Self> {
         let state = State::new(keys_path)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
+        Self::setup(
+            state,
+            affiliate_code,
+            client_id,
+            env,
+            timeout,
+            sign_states_loop_interval,
+        )
+        .await
     }
 
     /// Initialize client from key data directly
@@ -607,10 +623,18 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-        sign_states_loop_interval: Option<u64>
+        sign_states_loop_interval: Option<u64>,
     ) -> Result<Self> {
         let state = State::from_key_data(secret, session)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
+        Self::setup(
+            state,
+            affiliate_code,
+            client_id,
+            env,
+            timeout,
+            sign_states_loop_interval,
+        )
+        .await
     }
 
     async fn setup(
@@ -619,15 +643,20 @@ impl Client {
         client_id: u64,
         env: Environment,
         timeout: Duration,
-        sign_states_loop_interval: Option<u64>
-    ) -> Result<Self>{
-        let (client, g_sub) = InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
+        sign_states_loop_interval: Option<u64>,
+    ) -> Result<Self> {
+        let (client, g_sub) =
+            InnerClient::client_setup(state, client_id, affiliate_code, env, timeout).await?;
         let client = Arc::new(Mutex::new(client));
         let sign_loop_status = Arc::new(Mutex::new(false));
-        let client = Self { inner: client, global_subscription_receiver: g_sub, sign_loop_status };
+        let client = Self {
+            inner: client,
+            global_subscription_receiver: g_sub,
+            sign_loop_status,
+        };
         if let Some(period) = sign_states_loop_interval {
             client.init_state_signing(period);
-        }        
+        }
         Ok(client)
     }
 
@@ -668,7 +697,7 @@ impl Client {
         tokio::spawn(async move {
             // set loop status to true once it begins, then free the lock
             // holding the lock throughout the loop wouldn't allow access to value
-            let mut status = sign_loop_status.lock().await;         
+            let mut status = sign_loop_status.lock().await;
             *status = true;
             drop(status);
             loop {
@@ -677,10 +706,12 @@ impl Client {
                 if state_lock.remaining_orders < 10 {
                     // running the client requires a free lock...
                     drop(state_lock);
-                    let req = client_lock.run(nash_protocol::protocol::sign_all_states::SignAllStates::new()).await;
+                    let req = client_lock
+                        .run(nash_protocol::protocol::sign_all_states::SignAllStates::new())
+                        .await;
                     drop(client_lock);
                     if req.is_err() {
-                        let mut status = sign_loop_status.lock().await;         
+                        let mut status = sign_loop_status.lock().await;
                         *status = false;
                         // kill process
                         break;
@@ -700,10 +731,9 @@ impl Client {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::{Client, Environment, HashMap, Arc};
+    use super::{Arc, Client, Environment, HashMap};
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -719,56 +749,63 @@ mod tests {
     use nash_protocol::protocol::orderbook::OrderbookRequest;
     use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest};
     use nash_protocol::protocol::sign_all_states::SignAllStates;
-    use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
     use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
+    use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
     };
 
     use chrono::offset::TimeZone;
     use chrono::Utc;
-    use futures_util::StreamExt;
     use dotenv::dotenv;
+    use futures_util::StreamExt;
     use tokio::time::Duration;
 
     async fn init_client() -> Client {
         dotenv().ok();
-        let secret  = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
+        let secret = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
         let session = std::env::var("NASH_API_KEY").expect("Couldn't get environment variable.");
         Client::from_key_data(
             &secret,
             &session,
             None,
             0,
-            Environment::Production,
+            Environment::Sandbox,
             Duration::from_secs_f32(2.0),
-            Some(10)
+            Some(10),
         )
         .await
         .unwrap()
     }
 
     async fn init_sandbox_client() -> Client {
-        Client::new(None, 0, None, Environment::Sandbox, Duration::from_secs_f32(5.0), None)
-            .await
-            .unwrap()
+        Client::new(
+            None,
+            0,
+            None,
+            Environment::Sandbox,
+            Duration::from_secs_f32(5.0),
+            None,
+        )
+        .await
+        .unwrap()
     }
 
     #[tokio::test(core_threads = 2)]
-    async fn test_autosigning(){
+    async fn test_autosigning() {
         let _client = init_client().await;
         tokio::time::delay_for(Duration::from_secs(100)).await;
     }
 
     #[tokio::test(core_threads = 2)]
-    async fn multiple_concurrent_requests(){
+    async fn multiple_concurrent_requests() {
         let client = init_client().await;
         let share_client = Arc::new(client);
         async fn make_long_request(client: Arc<Client>, i: u64) {
             println!("started loop {}", i);
             let req = client.run(SignAllStates::new()).await;
             if !req.is_err() {
-                println!("done (long) {}", i); 
+                println!("done (long) {}", i);
             } else {
                 println!("error (long) {}", i);
             }
@@ -777,7 +814,7 @@ mod tests {
             println!("started loop {}", i);
             let req = client.run(ListMarketsRequest).await;
             if !req.is_err() {
-                println!("done (short) {}", i); 
+                println!("done (short) {}", i);
             } else {
                 println!("error (short) {}", i);
             }
@@ -787,7 +824,10 @@ mod tests {
         for _ in 0..10 {
             handles.push(tokio::spawn(make_long_request(share_client.clone(), count)));
             count += 1;
-            handles.push(tokio::spawn(make_short_request(share_client.clone(), count)));
+            handles.push(tokio::spawn(make_short_request(
+                share_client.clone(),
+                count,
+            )));
             count += 1;
         }
         futures::future::join_all(handles).await;
@@ -969,8 +1009,9 @@ mod tests {
         runtime.block_on(async_block);
     }
 
-    #[test]
-    fn test_account_order_lookup_then_cancel() {
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
+    // #[test]
+    fn _test_account_order_lookup_then_cancel() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
@@ -1113,7 +1154,7 @@ mod tests {
                 .run(ListTradesRequest {
                     market: "eth_usdc".to_string(),
                     limit: None,
-                    before: None
+                    before: None,
                 })
                 .await
                 .unwrap();
@@ -1208,9 +1249,9 @@ mod tests {
         runtime.block_on(async_block);
     }
 
-
-    #[test]
-    fn limit_order_nonce_recovery() {
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
+    // #[test]
+    fn _limit_order_nonce_recovery() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
@@ -1220,7 +1261,7 @@ mod tests {
                 amount: "0.02".to_string(),
                 price: "900".to_string(),
                 cancellation_policy: OrderCancellationPolicy::GoodTilTime(
-                    Utc.ymd(2020, 12, 16).and_hms(0, 0, 0),
+                    Utc.ymd(2040, 12, 16).and_hms(0, 0, 0),
                 ),
                 allow_taker: true,
             };
@@ -1239,16 +1280,10 @@ mod tests {
             drop(state_lock);
 
             // First attempt should fail with nonces complaint
-            let response = client
-                .run(lor.clone())
-                .await
-                .unwrap();
+            let response = client.run(lor.clone()).await.unwrap();
             println!("{:?}", response);
             // Second attempt should succeed because client state is set to refresh nonces
-            let response = client
-                .run(lor.clone())
-                .await
-                .unwrap();
+            let response = client.run(lor.clone()).await.unwrap();
             println!("{:?}", response);
             // Now cancel
             let order_id = response.response().unwrap().order_id.clone();
@@ -1274,10 +1309,12 @@ mod tests {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
-            let response = client.run(MarketOrderRequest {
-                market: "usdc_eth".to_string(),
-                amount: "10".to_string()
-            }).await;
+            let response = client
+                .run(MarketOrderRequest {
+                    market: "usdc_eth".to_string(),
+                    amount: "10".to_string(),
+                })
+                .await;
             println!("{:?}", response);
         };
         runtime.block_on(async_block);

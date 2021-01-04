@@ -1,17 +1,18 @@
+use super::super::hooks::{NashProtocolRequest, ProtocolHook};
+use super::super::list_markets::ListMarketsRequest;
 use super::super::{
     serializable_to_json, try_response_with_state_from_json, NashProtocol, ResponseOrError, State,
 };
 use crate::errors::Result;
 use crate::graphql::list_account_orders;
 use crate::types::{BuyOrSell, DateTimeRange, Order, OrderStatus, OrderType};
-use super::super::list_markets::ListMarketsRequest;
-use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
 
+// FIXME: https://github.com/nash-io/nash-rust/issues/44
 /// List orders associated with current account session filtered by several optional fields.
-/// ```
+/// ```ignore
 /// use nash_protocol::protocol::list_account_orders::ListAccountOrdersRequest;
 /// use nash_protocol::types::{Market, BuyOrSell, OrderStatus, OrderType, DateTimeRange};
 /// use chrono::{DateTime, Utc, TimeZone};
@@ -25,7 +26,7 @@ use std::sync::Arc;
 ///   range: Some(DateTimeRange {
 ///     start: Utc.ymd(2020, 9, 12).and_hms(0, 0, 0), // after 9/12/2020
 ///     stop: Utc.ymd(2020, 9, 16).and_hms(0, 10, 0), // before 9/16/2020
-///   }) 
+///   })
 /// };
 /// ```
 #[derive(Clone, Debug)]
@@ -61,17 +62,19 @@ impl NashProtocol for ListAccountOrdersRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_with_state_from_json::<ListAccountOrdersResponse, list_account_orders::ResponseData>(
-            response, state
-        ).await
+        try_response_with_state_from_json::<
+            ListAccountOrdersResponse,
+            list_account_orders::ResponseData,
+        >(response, state)
+        .await
     }
 
     async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.lock().await;
         let mut hooks = Vec::new();
-        if let None = state.markets {
+        if state.markets.is_none() {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
                 ListMarketsRequest,
             )))

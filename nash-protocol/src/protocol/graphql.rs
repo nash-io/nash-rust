@@ -1,14 +1,14 @@
 //! Share protocol logic for structuring GraphQL requests and parsing responses
 
+use super::state::State;
+use super::traits::TryFromState;
 use crate::errors::{ProtocolError, Result};
+use futures::lock::Mutex;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use super::traits::TryFromState;
-use super::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
 
 //****************************************//
 //  GraphQL response parsing              //
@@ -56,7 +56,7 @@ where
 /// nicer library managed types A when failure is possible
 pub async fn try_response_with_state_from_json<A, B>(
     response: serde_json::Value,
-    state: Arc<Mutex<State>>
+    state: Arc<Mutex<State>>,
 ) -> Result<ResponseOrError<A>>
 where
     A: TryFromState<B>,
@@ -71,7 +71,7 @@ where
                 Ok(data) => Ok(ResponseOrError::from_data(data)),
                 Err(err) => Err(ProtocolError::coerce_static_from_str(&format!("{}", err))),
             }
-        },
+        }
         ResponseOrError::Error(e) => Ok(ResponseOrError::Error(e)),
     }
 }
@@ -126,8 +126,8 @@ impl<T> ResponseOrError<T> {
     /// Get response or else error
     pub fn response_or_error(self) -> Result<T> {
         match self {
-            Self::Response(DataResponse { data}) => Ok(data),
-            Self::Error(e) => Err(ProtocolError::coerce_static_from_str(&format!("{:?}", e)))
+            Self::Response(DataResponse { data }) => Ok(data),
+            Self::Error(e) => Err(ProtocolError::coerce_static_from_str(&format!("{:?}", e))),
         }
     }
     /// Get error from wrapper if it exists

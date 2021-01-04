@@ -64,30 +64,37 @@ impl NashProtocol for NashProtocolRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         match self {
             Self::AssetNonces(nonces) => Ok(nonces
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::AssetNonces(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::AssetNonces))),
             Self::DhFill(dh_req) => Ok(dh_req
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::DhFill(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::DhFill))),
             Self::LimitOrder(limit_order) => Ok(limit_order
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::LimitOrder(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::LimitOrder))),
             Self::Orderbook(orderbook) => Ok(orderbook
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::Orderbook(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::Orderbook))),
             Self::SignState(sign_state) => Ok(sign_state
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::SignState(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::SignState))),
             Self::CancelOrders(cancel_all) => Ok(cancel_all
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::CancelOrders(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::CancelOrders))),
             Self::ListMarkets(list_markets) => Ok(list_markets
-                .response_from_json(response, state).await?
-                .map(Box::new(|res| NashProtocolResponse::ListMarkets(res)))),
+                .response_from_json(response, state)
+                .await?
+                .map(Box::new(NashProtocolResponse::ListMarkets))),
         }
     }
 
@@ -192,7 +199,7 @@ impl NashProtocolPipeline for ProtocolHook {
                 Ok(sign_all
                     .next_step(sign_all_state, client_state)
                     .await?
-                    .map(|x| NashProtocolRequest::SignState(x)))
+                    .map(NashProtocolRequest::SignState))
             }
             (Self::Protocol(protocol), ProtocolHookState::Protocol(protocol_state)) => {
                 protocol.next_step(protocol_state, client_state).await

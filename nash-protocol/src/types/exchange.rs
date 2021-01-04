@@ -2,12 +2,12 @@
 //! specific to a single protocol request will live within the respetitive
 //! module. For example `protocol::place_order`.
 
+use super::blockchain::bigdecimal_to_nash_prec;
 use crate::errors::{ProtocolError, Result};
 use bigdecimal::BigDecimal;
-use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use super::blockchain::bigdecimal_to_nash_prec;
+use std::str::FromStr;
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -45,7 +45,7 @@ pub enum Asset {
     TRAC,
     GUNTHY,
     NNN,
-    NOIA
+    NOIA,
 }
 
 impl Asset {
@@ -68,7 +68,7 @@ impl Asset {
             Self::NEO => Blockchain::NEO,
             Self::GAS => Blockchain::NEO,
             Self::NNN => Blockchain::NEO,
-            Self::NOIA => Blockchain::Ethereum
+            Self::NOIA => Blockchain::Ethereum,
         }
     }
 
@@ -93,30 +93,7 @@ impl Asset {
             Self::TRAC => "trac",
             Self::GUNTHY => "gunthy",
             Self::NNN => "nnn",
-            Self::NOIA => "noia"
-        }
-    }
-
-    pub fn from_str(asset_str: &str) -> Result<Self> {
-        match asset_str {
-            "eth" => Ok(Self::ETH),
-            "usdc" => Ok(Self::USDC),
-            "usdt" => Ok(Self::USDT),
-            "bat" => Ok(Self::BAT),
-            "omg" => Ok(Self::OMG),
-            "zrx" => Ok(Self::ZRX),
-            "link" => Ok(Self::LINK),
-            "qnt" => Ok(Self::QNT),
-            "rlc" => Ok(Self::RLC),
-            "ant" => Ok(Self::ANT),
-            "btc" => Ok(Self::BTC),
-            "neo" => Ok(Self::NEO),
-            "gas" => Ok(Self::GAS),
-            "trac" => Ok(Self::TRAC),
-            "gunthy" => Ok(Self::GUNTHY),
-            "nnn" => Ok(Self::NNN),
-            "noia" => Ok(Self::NOIA),
-            _ => Err(ProtocolError("Asset not known")),
+            Self::NOIA => "noia",
         }
     }
 
@@ -140,6 +117,33 @@ impl Asset {
             Self::GUNTHY,
             Self::NNN,
         ]
+    }
+}
+
+impl std::convert::TryFrom<&str> for Asset {
+    type Error = ProtocolError;
+
+    fn try_from(asset_str: &str) -> Result<Self> {
+        match asset_str {
+            "eth" => Ok(Self::ETH),
+            "usdc" => Ok(Self::USDC),
+            "usdt" => Ok(Self::USDT),
+            "bat" => Ok(Self::BAT),
+            "omg" => Ok(Self::OMG),
+            "zrx" => Ok(Self::ZRX),
+            "link" => Ok(Self::LINK),
+            "qnt" => Ok(Self::QNT),
+            "rlc" => Ok(Self::RLC),
+            "ant" => Ok(Self::ANT),
+            "btc" => Ok(Self::BTC),
+            "neo" => Ok(Self::NEO),
+            "gas" => Ok(Self::GAS),
+            "trac" => Ok(Self::TRAC),
+            "gunthy" => Ok(Self::GUNTHY),
+            "nnn" => Ok(Self::NNN),
+            "noia" => Ok(Self::NOIA),
+            _ => Err(ProtocolError("Asset not known")),
+        }
     }
 }
 
@@ -211,8 +215,9 @@ pub struct Market {
 }
 
 impl Market {
+    // FIXME: https://github.com/nash-io/nash-rust/issues/44
     /// Create a new market from assets with precision
-    /// ```
+    /// ```ignore
     /// use nash_protocol::types::{Market, Asset};
     /// Market::new(Asset::ETH.with_precision(4), Asset::USDC.with_precision(2));
     /// ```
@@ -220,13 +225,13 @@ impl Market {
         asset_a: AssetofPrecision,
         asset_b: AssetofPrecision,
         min_trade_size_a: AssetAmount,
-        min_trade_size_b: AssetAmount
+        min_trade_size_b: AssetAmount,
     ) -> Self {
         Self {
             asset_a,
             asset_b,
             min_trade_size_a,
-            min_trade_size_b
+            min_trade_size_b,
         }
     }
 
@@ -254,9 +259,9 @@ impl Market {
     /// Get market asset by string name
     pub fn get_asset(&self, asset_name: &str) -> Result<AssetofPrecision> {
         if asset_name == self.asset_a.asset.name() {
-            Ok(self.asset_a.clone())
+            Ok(self.asset_a)
         } else if asset_name == self.asset_b.asset.name() {
-            Ok(self.asset_b.clone())
+            Ok(self.asset_b)
         } else {
             Err(ProtocolError("Asset not associated with market"))
         }
@@ -264,8 +269,8 @@ impl Market {
 
     pub fn invert(&self) -> Market {
         Market::new(
-            self.asset_b.clone(),
-            self.asset_a.clone(),
+            self.asset_b,
+            self.asset_a,
             self.min_trade_size_b.clone(),
             self.min_trade_size_a.clone(),
         )
@@ -424,7 +429,10 @@ impl Amount {
         let value = BigDecimal::from_str(str_num)
             .map_err(|_| ProtocolError("String to BigDecimal failed in creating Amount"))?;
         let adjust_precision = bigdecimal_to_nash_prec(&value, precision);
-        Ok(Self { value: adjust_precision, precision })
+        Ok(Self {
+            value: adjust_precision,
+            precision,
+        })
     }
 
     pub fn from_bigdecimal(value: BigDecimal, precision: u32) -> Self {

@@ -25,7 +25,7 @@ pub trait NashProtocol: Sync {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>>;
     /// Any state changes that result from execution of the protocol request
     /// The default implementation does nothing to state
@@ -112,7 +112,7 @@ where
         _client_state: Arc<Mutex<State>>,
     ) -> Result<Option<Self::ActionType>> {
         // If we have a response already, things are done
-        if let Some(_) = pipeline_state {
+        if pipeline_state.is_some() {
             Ok(None)
         }
         // Else this request itself is the first (and only) item in the pipeline
@@ -164,7 +164,7 @@ pub trait NashProtocolSubscription: Clone {
     async fn subscription_response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::SubscriptionResponse>>;
     /// Update state based on data from incoming subscription response
     async fn process_subscription_response(
@@ -177,7 +177,7 @@ pub trait NashProtocolSubscription: Clone {
     async fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<SubscriptionResponse>>;
 }
 

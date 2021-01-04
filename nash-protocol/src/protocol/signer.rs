@@ -19,14 +19,13 @@ use k256::ecdsa::signature::Signer as k256_Signer;
 #[cfg(feature = "k256")]
 use k256::ecdsa::{Signature, SigningKey};
 #[cfg(feature = "secp256k1")]
-use secp256k1::constants::{COMPACT_SIGNATURE_SIZE, MESSAGE_SIZE, SECRET_KEY_SIZE};
-#[cfg(feature = "secp256k1")]
-use secp256k1::{Message, SecretKey};
+use nash_mpc::curves::secp256_k1::get_context;
 #[cfg(feature = "secp256k1")]
 use rust_bigint::traits::Converter;
 #[cfg(feature = "secp256k1")]
-use nash_mpc::curves::secp256_k1::get_context;
-
+use secp256k1::constants::{COMPACT_SIGNATURE_SIZE, MESSAGE_SIZE, SECRET_KEY_SIZE};
+#[cfg(feature = "secp256k1")]
+use secp256k1::{Message, SecretKey};
 
 pub fn chain_path(chain: Blockchain) -> &'static str {
     match chain {
@@ -65,7 +64,8 @@ impl Signer {
     /// Either implemented with k256 from rustcrypto (pure rust) or secp256k1 (better performance)
     #[cfg(feature = "rustcrypto")]
     pub fn sign_canonical_string(&self, request: &str) -> RequestPayloadSignature {
-        let signing_key: Secp256k1Scalar = ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
+        let signing_key: Secp256k1Scalar =
+            ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
         let key = SigningKey::new(&signing_key.to_vec()).expect("invalid secret key");
         let sig_pre: Signature = key.try_sign(request.as_bytes()).expect("signing failed");
         let sig = sig_pre.to_asn1();
@@ -107,7 +107,7 @@ impl Signer {
         data: BigInt,
         chain: Blockchain,
     ) -> Result<(BigInt, BigInt, String)> {
-        if self.remaining_r_vals(chain) <= 0 {
+        if self.remaining_r_vals(chain) == 0 {
             return Err(ProtocolError("Ran out of R values"));
         }
         let key = self.get_child_key(chain);

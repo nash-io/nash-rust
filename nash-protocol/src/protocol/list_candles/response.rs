@@ -1,20 +1,22 @@
 use super::types::ListCandlesResponse;
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::list_candles;
-use crate::types::{Candle, CandleInterval};
-use chrono::{DateTime, Utc};
-use bigdecimal::BigDecimal;
-use std::str::FromStr;
-use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::protocol::traits::TryFromState;
+use crate::types::{Candle, CandleInterval};
 use async_trait::async_trait;
-
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
+use futures::lock::Mutex;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[async_trait]
 impl TryFromState<list_candles::ResponseData> for ListCandlesResponse {
-    async fn from(response: list_candles::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListCandlesResponse> {
+    async fn from(
+        response: list_candles::ResponseData,
+        _state: Arc<Mutex<State>>,
+    ) -> Result<ListCandlesResponse> {
         let mut candles = Vec::new();
         for candle_data in response.list_candles.candles {
             let a_volume = BigDecimal::from_str(&candle_data.a_volume.amount)?;
@@ -37,7 +39,7 @@ impl TryFromState<list_candles::ResponseData> for ListCandlesResponse {
         }
         Ok(ListCandlesResponse {
             candles,
-            next_page: response.list_candles.next.clone(),
+            next_page: response.list_candles.next,
         })
     }
 }

@@ -1,7 +1,7 @@
+use super::super::hooks::{NashProtocolRequest, ProtocolHook};
+use super::super::list_markets::ListMarketsRequest;
 use crate::errors::Result;
 use crate::types::OrderbookOrder;
-use super::super::list_markets::ListMarketsRequest;
-use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -37,7 +37,7 @@ impl NashProtocol for OrderbookRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
         self.response_from_graphql(as_graphql, state).await
@@ -46,7 +46,7 @@ impl NashProtocol for OrderbookRequest {
     async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.lock().await;
         let mut hooks = Vec::new();
-        if let None = state.markets {
+        if state.markets.is_none() {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
                 ListMarketsRequest,
             )))

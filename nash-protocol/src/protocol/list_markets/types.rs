@@ -54,7 +54,7 @@ impl NashProtocol for ListMarketsRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<Mutex<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<ListMarketsResponse, list_markets::ResponseData>(response)
     }

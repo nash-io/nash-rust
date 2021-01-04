@@ -5,7 +5,7 @@ use crate::graphql::place_market_order;
 use crate::types::neo::PublicKey as NeoPublicKey;
 use crate::types::PublicKey;
 use crate::types::{
-    Asset, AssetAmount, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, OrderRate, Rate
+    Asset, AssetAmount, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, OrderRate, Rate,
 };
 use crate::utils::pad_zeros;
 use graphql_client::GraphQLQuery;
@@ -15,9 +15,8 @@ use super::super::signer::Signer;
 use super::super::{general_canonical_string, RequestPayloadSignature, State};
 use super::blockchain::{btc, eth, neo, FillOrder};
 use super::types::{
-    LimitOrderConstructor, LimitOrderRequest,
-    MarketOrderConstructor, MarketOrderRequest,
-    PayloadNonces
+    LimitOrderConstructor, LimitOrderRequest, MarketOrderConstructor, MarketOrderRequest,
+    PayloadNonces,
 };
 
 use futures::lock::Mutex;
@@ -31,8 +30,10 @@ type MarketBlockchainSignatures = Vec<Option<place_market_order::BlockchainSigna
 impl LimitOrderRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
     // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<LimitOrderConstructor> {
-
+    pub async fn make_constructor(
+        &self,
+        state: Arc<Mutex<State>>,
+    ) -> Result<LimitOrderConstructor> {
         let state = state.lock().await;
         let market = state.get_market(&self.market)?;
 
@@ -43,7 +44,7 @@ impl LimitOrderRequest {
         // TODO: add precision to rate and handle this better
         let format_user_price = pad_zeros(&self.price, market.asset_b.precision)?;
         let b_per_a: Rate = OrderRate::new(&format_user_price)?.into();
-        
+
         let a_per_b = b_per_a.invert_rate(None)?;
 
         let amount_of_b = amount_of_a.exchange_at(&b_per_a, market.asset_b)?;
@@ -51,7 +52,7 @@ impl LimitOrderRequest {
         let (source, rate, destination) = match self.buy_or_sell {
             BuyOrSell::Buy => {
                 // Buying: in SC, source is B, rate is B, and moving to asset A
-                (amount_of_b, a_per_b.clone(), market.asset_a)
+                (amount_of_b, a_per_b, market.asset_a)
             }
             BuyOrSell::Sell => {
                 // Selling: in SC, source is A, rate is A, and moving to asset B
@@ -62,7 +63,7 @@ impl LimitOrderRequest {
         Ok(LimitOrderConstructor {
             me_amount: amount_of_a,
             me_rate: b_per_a,
-            market: market.clone(),
+            market,
             buy_or_sell: self.buy_or_sell,
             cancellation_policy: self.cancellation_policy,
             allow_taker: self.allow_taker,
@@ -73,15 +74,14 @@ impl LimitOrderRequest {
     }
 }
 
-
 impl MarketOrderRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
     // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<MarketOrderConstructor> {
-
+    pub async fn make_constructor(
+        &self,
+        state: Arc<Mutex<State>>,
+    ) -> Result<MarketOrderConstructor> {
         let state = state.lock().await;
-
-        
 
         let market = match state.get_market(&self.market) {
             Ok(market) => market,
@@ -90,17 +90,17 @@ impl MarketOrderRequest {
                 let reverse_market = reverse_market.join("_");
                 match state.get_market(&reverse_market) {
                     Ok(market) => market.invert(),
-                    Err(err) => return Err(err)
+                    Err(err) => return Err(err),
                 }
             }
         };
 
         let source = market.asset_a.with_amount(&self.amount)?;
-        let destination =  market.asset_b;
+        let destination = market.asset_b;
 
         Ok(MarketOrderConstructor {
             me_amount: source.clone(),
-            market: market.clone(),
+            market,
             source,
             destination,
         })
@@ -208,7 +208,7 @@ impl LimitOrderConstructor {
             payload: place_limit_order::PlaceLimitOrderParams {
                 allow_taker: self.allow_taker,
                 buy_or_sell: self.buy_or_sell.into(),
-                cancel_at: cancel_at,
+                cancel_at,
                 cancellation_policy: self.cancellation_policy.into(),
                 market_name: self.market.market_name(),
                 amount: self.me_amount.clone().try_into()?,
@@ -261,7 +261,9 @@ impl LimitOrderConstructor {
         current_time: i64,
     ) -> Result<Vec<PayloadNonces>> {
         let state = state.lock().await;
-        let asset_nonces = state.asset_nonces.as_ref()
+        let asset_nonces = state
+            .asset_nonces
+            .as_ref()
             .ok_or(ProtocolError("Asset nonce map does not exist"))?;
         let (from, to) = match self.buy_or_sell {
             BuyOrSell::Buy => (
@@ -427,7 +429,9 @@ impl MarketOrderConstructor {
         current_time: i64,
     ) -> Result<Vec<PayloadNonces>> {
         let state = state.lock().await;
-        let asset_nonces = state.asset_nonces.as_ref()
+        let asset_nonces = state
+            .asset_nonces
+            .as_ref()
             .ok_or(ProtocolError("Asset nonce map does not exist"))?;
         let (from, to) = (
             self.market.asset_a.asset.name(),
@@ -462,21 +466,27 @@ impl MarketOrderConstructor {
 }
 
 pub fn limit_order_canonical_string(variables: &place_limit_order::Variables) -> Result<String> {
-    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize limit order into canonical string"))?;
+    let serialized_all = serde_json::to_string(variables)
+        .map_err(|_| ProtocolError("Failed to serialize limit order into canonical string"))?;
 
     Ok(general_canonical_string(
         "place_limit_order".to_string(),
-        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize limit order into canonical string"))?,
+        serde_json::from_str(&serialized_all).map_err(|_| {
+            ProtocolError("Failed to deserialize limit order into canonical string")
+        })?,
         vec!["blockchain_signatures".to_string()],
     ))
 }
 
 pub fn market_order_canonical_string(variables: &place_market_order::Variables) -> Result<String> {
-    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize market order into canonical string"))?;
+    let serialized_all = serde_json::to_string(variables)
+        .map_err(|_| ProtocolError("Failed to serialize market order into canonical string"))?;
 
     Ok(general_canonical_string(
         "place_market_order".to_string(),
-        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize market order into canonical string"))?,
+        serde_json::from_str(&serialized_all).map_err(|_| {
+            ProtocolError("Failed to deserialize market order into canonical string")
+        })?,
         vec!["blockchain_signatures".to_string()],
     ))
 }
@@ -512,8 +522,6 @@ impl TryInto<place_market_order::CurrencyAmountParams> for AssetAmount {
         })
     }
 }
-
-
 
 impl Into<place_limit_order::OrderBuyOrSell> for BuyOrSell {
     fn into(self) -> place_limit_order::OrderBuyOrSell {

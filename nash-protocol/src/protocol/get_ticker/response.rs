@@ -3,10 +3,10 @@ use super::types::{TickerRequest, TickerResponse};
 use crate::errors::Result;
 use crate::graphql::get_ticker;
 use crate::protocol::state::State;
-use futures::lock::Mutex;
-use std::sync::Arc;
 use bigdecimal::BigDecimal;
+use futures::lock::Mutex;
 use std::str::FromStr;
+use std::sync::Arc;
 
 impl TickerRequest {
     pub async fn response_from_graphql(

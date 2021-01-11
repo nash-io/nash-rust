@@ -2,7 +2,6 @@
 
 use futures::lock::Mutex;
 use futures::{FutureExt, SinkExt, StreamExt};
-use futures_util::future::{select, Either};
 use nash_protocol::protocol::{
     NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError, State,
 };
@@ -10,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::time::{delay_for, timeout, Duration};
+use tokio::time::{sleep, timeout, Duration};
 use tokio_native_tls::TlsStream;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{connect_async, stream::Stream, WebSocketStream};
@@ -37,7 +36,7 @@ pub fn spawn_heartbeat_loop(period: Duration, client_id: u64, outgoing_sender: U
                 // if outgoing sender is dead just ignore, will be handled elsewhere
                 break;
             }
-            delay_for(period).await;
+            sleep(period).await;
         }
     });
 }
@@ -52,13 +51,14 @@ pub fn spawn_sender_loop(
     message_broker_link: UnboundedSender<BrokerAction>,
 ) {
     tokio::spawn(async move {
-        // The idea is that try_recv will only work when it recieves a disconnect signal
+        // The idea is that poll_recv will only work when it recieves a disconnect signal
         // This is a bit ugly imo and we should probably change in the future
-        while ws_disconnect_receiver.try_recv().is_err() {
+        loop {
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = timeout(timeout_duration, websocket.next());
-            match select(next_outgoing, next_incoming).await {
-                Either::Left((out_msg, _)) => {
+            let next_disconnect = ws_disconnect_receiver.recv().boxed();
+            tokio::select! {
+                out_msg = next_outgoing =>{
                     if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x)) {
                         // If sending fails, pass error through broker and global channel
                         match websocket.send(Message::Text(m_text)).await {
@@ -78,7 +78,7 @@ pub fn spawn_sender_loop(
                         break;
                     }
                 }
-                Either::Right((in_msg, _)) => {
+                in_msg = next_incoming => {
                     if let Some(Ok(Ok(resp))) = in_msg.ok().and_then(|in_msg| in_msg.map(|x| x.map(|x| x.into_text()))) {
                         if let Ok(resp_copy1) = serde_json::from_str(&resp) {
                             // Similarly, let the client timeout on incoming response if this fails and handle that
@@ -97,7 +97,10 @@ pub fn spawn_sender_loop(
                         break;
                     }
                 }
-            };
+                _ = next_disconnect => {
+                    return;
+                }
+            }
         }
     });
 }
@@ -120,7 +123,7 @@ impl MessageBroker {
             let mut request_map = HashMap::new();
             let mut subscription_map = HashMap::new();
             loop {
-                if let Some(next_incoming) = internal_reciever.next().await {
+                if let Some(next_incoming) = internal_reciever.recv().await {
                     match next_incoming {
                         // Register a channel to send messages to with given id
                         BrokerAction::RegisterRequest(id, channel) => {
@@ -186,7 +189,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
 ) {
     tokio::spawn(async move {
         loop {
-            let response = callback_channel.next().await;
+            let response = callback_channel.recv().await;
             // is there a valid incoming payload?
             match response {
                 Some(Ok(response)) => {
@@ -401,7 +404,7 @@ impl InnerClient {
         let query = request.graphql(self.state.clone()).await?;
         let ws_response = timeout(
             self.timeout,
-            self.request(query).await?.next(),
+            self.request(query).await?.recv(),
         )
         .await
         .map_err(|_| ProtocolError("Request timeout"))?
@@ -509,7 +512,7 @@ impl InnerClient {
         let subscription_response = self
             .request(query)
             .await?
-            .next()
+            .recv()
             .await
             .ok_or(ProtocolError("Could not get subscription response"))??;
         // create a channel where associated data will be pushed back
@@ -689,7 +692,7 @@ impl Client {
                     drop(state_lock);
                     drop(client_lock);
                 }
-                tokio::time::delay_for(Duration::from_secs(period)).await;
+                tokio::time::sleep(Duration::from_secs(period)).await;
             }
         });
     }
@@ -727,7 +730,6 @@ mod tests {
 
     use chrono::offset::TimeZone;
     use chrono::Utc;
-    use futures_util::StreamExt;
     use dotenv::dotenv;
     use tokio::time::Duration;
 
@@ -754,13 +756,13 @@ mod tests {
             .unwrap()
     }
 
-    #[tokio::test(core_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_autosigning(){
         let _client = init_client().await;
-        tokio::time::delay_for(Duration::from_secs(100)).await;
+        tokio::time::sleep(Duration::from_secs(100)).await;
     }
 
-    #[tokio::test(core_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn multiple_concurrent_requests(){
         let client = init_client().await;
         let share_client = Arc::new(client);
@@ -795,7 +797,7 @@ mod tests {
 
     #[test]
     fn test_disconnect() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let _d = client.disconnect().await;
@@ -808,7 +810,7 @@ mod tests {
 
     #[test]
     fn test_list_markets_sandbox() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_sandbox_client().await;
             let response = client.run(ListMarketsRequest).await.unwrap();
@@ -819,7 +821,7 @@ mod tests {
 
     #[test]
     fn end_to_end_dh_fill_pool() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
 
         let async_block = async {
             let client = init_client().await;
@@ -835,7 +837,7 @@ mod tests {
 
     #[test]
     fn end_to_end_asset_nonces() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client.run(AssetNoncesRequest::new()).await.unwrap();
@@ -846,7 +848,7 @@ mod tests {
 
     #[test]
     fn dependency_sign_all() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client.run(SignAllStates::new()).await.unwrap();
@@ -857,7 +859,7 @@ mod tests {
 
     #[test]
     fn list_account_orders() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -886,7 +888,7 @@ mod tests {
 
     #[test]
     pub fn list_account_trades() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -905,7 +907,7 @@ mod tests {
 
     #[test]
     pub fn list_candles() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -929,7 +931,7 @@ mod tests {
 
     #[test]
     fn end_to_end_cancel_all() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -946,7 +948,7 @@ mod tests {
 
     #[test]
     fn test_list_account_balances() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -960,7 +962,7 @@ mod tests {
 
     #[test]
     fn test_list_markets() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client.run(ListMarketsRequest).await.unwrap();
@@ -971,7 +973,7 @@ mod tests {
 
     #[test]
     fn test_account_order_lookup_then_cancel() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let mut requests = Vec::new();
@@ -1044,7 +1046,7 @@ mod tests {
                 println!("{:?}", response);
                 let order_id = response.response().unwrap().order_id.clone();
                 // Small delay to make sure it is processed
-                tokio::time::delay_for(tokio::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 let response = client
                     .run(GetAccountOrderRequest {
                         order_id: order_id.clone(),
@@ -1067,7 +1069,7 @@ mod tests {
 
     #[test]
     fn end_to_end_orderbook() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -1083,7 +1085,7 @@ mod tests {
 
     #[test]
     fn end_to_end_ticker() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -1106,7 +1108,7 @@ mod tests {
 
     #[test]
     fn end_to_end_list_trades() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -1124,7 +1126,7 @@ mod tests {
 
     #[test]
     fn end_to_end_sub_orderbook() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let mut response = client
@@ -1133,9 +1135,9 @@ mod tests {
                 })
                 .await
                 .unwrap();
-            let next_item = response.next().await.unwrap().unwrap();
+            let next_item = response.recv().await.unwrap().unwrap();
             println!("{:?}", next_item);
-            let next_item = response.next().await.unwrap().unwrap();
+            let next_item = response.recv().await.unwrap().unwrap();
             println!("{:?}", next_item);
         };
         runtime.block_on(async_block);
@@ -1143,7 +1145,7 @@ mod tests {
 
     #[test]
     fn end_to_end_sub_trades() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let mut response = client
@@ -1152,9 +1154,9 @@ mod tests {
                 })
                 .await
                 .unwrap();
-            let next_item = response.next().await.unwrap().unwrap();
+            let next_item = response.recv().await.unwrap().unwrap();
             println!("{:?}", next_item);
-            let next_item = response.next().await.unwrap().unwrap();
+            let next_item = response.recv().await.unwrap().unwrap();
             println!("{:?}", next_item);
         };
         runtime.block_on(async_block);
@@ -1162,7 +1164,7 @@ mod tests {
 
     #[test]
     fn end_to_end_buy_eth_btc() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -1191,7 +1193,7 @@ mod tests {
 
     #[test]
     fn sub_orderbook_via_client_stream() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let mut response = client
@@ -1200,8 +1202,8 @@ mod tests {
                 })
                 .await
                 .unwrap();
-            for _ in 0..10 {
-                let item = response.next().await;
+            for _ in 0..10_u8 {
+                let item = response.recv().await;
                 println!("{:?}", item.unwrap().unwrap());
             }
         };
@@ -1211,7 +1213,7 @@ mod tests {
 
     #[test]
     fn limit_order_nonce_recovery() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let lor = LimitOrderRequest {
@@ -1271,7 +1273,7 @@ mod tests {
 
     #[test]
     fn end_to_end_market_order() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client.run(MarketOrderRequest {
@@ -1285,7 +1287,7 @@ mod tests {
 
     #[test]
     fn end_to_end_sell_limit_order() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client
@@ -1314,7 +1316,7 @@ mod tests {
 
     #[test]
     fn list_markets_test() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
             let response = client.run(ListMarketsRequest).await.unwrap();

@@ -3,5 +3,6 @@ target/
 Cargo.lock
 .DS_Store
 nash-native-client/test_data/*
+nash-protocol/scripts/node_modules
 .idea
 .env

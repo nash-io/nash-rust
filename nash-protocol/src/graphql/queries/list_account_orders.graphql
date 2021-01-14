@@ -25,6 +25,7 @@ query ListAccountOrders($payload: ListAccountOrdersParams!){
       cancellationPolicy,
       cancellationReason,
       id,
+      clientOrderId,
       limitPrice {
         amount,
         currencyA,

@@ -62,6 +62,7 @@ impl TryFromState<get_account_order::ResponseData> for GetAccountOrderResponse {
         Ok(GetAccountOrderResponse {
             order: Order {
                 id: order_data.id.clone(),
+                client_order_id: order_data.client_order_id.clone(),
                 market,
                 amount_placed,
                 amount_remaining,

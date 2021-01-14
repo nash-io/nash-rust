@@ -24,6 +24,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct LimitOrderRequest {
     pub market: String,
+    pub client_order_id: Option<String>,
     pub buy_or_sell: BuyOrSell,
     pub amount: String,
     pub price: String,
@@ -33,6 +34,7 @@ pub struct LimitOrderRequest {
 
 #[derive(Clone, Debug)]
 pub struct MarketOrderRequest {
+    pub client_order_id: Option<String>,
     pub market: String,
     pub amount: String
 }
@@ -45,6 +47,7 @@ impl LimitOrderRequest {
         price_b: &str,
         cancellation_policy: OrderCancellationPolicy,
         allow_taker: bool,
+        client_order_id: Option<String>
     ) -> Result<Self> {
         Ok(Self {
             market,
@@ -53,6 +56,7 @@ impl LimitOrderRequest {
             price: price_b.to_string(),
             cancellation_policy,
             allow_taker,
+            client_order_id
         })
     }
 }
@@ -63,10 +67,12 @@ impl MarketOrderRequest {
     pub fn new(
         market: String,
         amount_a: &str,
+        client_order_id: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
             market,
             amount: amount_a.to_string(),
+            client_order_id
         })
     }
 }
@@ -75,6 +81,7 @@ impl MarketOrderRequest {
 pub struct LimitOrderConstructor {
     // These fields are for GraphQL
     pub buy_or_sell: BuyOrSell,
+    pub client_order_id: Option<String>,
     pub market: Market,
     pub me_amount: AssetAmount,
     pub me_rate: Rate,
@@ -89,6 +96,7 @@ pub struct LimitOrderConstructor {
 pub struct MarketOrderConstructor {
     // These fields are for GraphQL
     pub market: Market,
+    pub client_order_id: Option<String>,
     pub me_amount: AssetAmount,
     // These fields are for the smart contracts
     pub source: AssetAmount,

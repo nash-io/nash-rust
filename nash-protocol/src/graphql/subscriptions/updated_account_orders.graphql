@@ -1,0 +1,44 @@
+subscription UpdatedAccountOrders($payload: UpdatedAccountOrdersParams!) {
+    updatedAccountOrders(payload: $payload) {
+        amount {
+            amount,
+            currency
+        },
+        amountExecuted {
+            amount,
+            currency
+        },
+        amountRemaining {
+            amount,
+            currency
+        },
+        avgExecutedPrice {
+            amount,
+            currencyA,
+            currencyB
+        },
+        buyOrSell,
+        placedAt,
+        cancelAt,
+        cancellationPolicy,
+        cancellationReason,
+        id,
+        clientOrderId,
+        limitPrice {
+            amount,
+            currencyA,
+            currencyB
+        },
+        stopPrice {
+            amount,
+            currencyA,
+            currencyB
+        },
+        market{
+            name,
+            id
+        },
+        status,
+        type,
+    }
+}

@@ -580,6 +580,7 @@ pub enum OrderCancellationReason {
 #[derive(Clone, Debug)]
 pub struct Order {
     pub id: String,
+    pub client_order_id: Option<String>,
     // Amount the order was placed for
     pub amount_placed: BigDecimal,
     // Amount remaining in order

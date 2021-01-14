@@ -59,6 +59,31 @@ pub struct SubscribeTrades;
 )]
 pub struct UpdatedOrderbook;
 
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/graphql/schema.json",
+    query_path = "src/graphql/subscriptions/new_account_trades.graphql",
+    response_derives = "Debug"
+)]
+pub struct NewAccountTrades;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/graphql/schema.json",
+    query_path = "src/graphql/subscriptions/updated_account_orders.graphql",
+    response_derives = "Debug"
+)]
+pub struct UpdatedAccountOrders;
+
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "src/graphql/schema.json",
+    query_path = "src/graphql/subscriptions/updated_account_balances.graphql",
+    response_derives = "Debug"
+)]
+pub struct UpdatedAccountBalances;
+
 /// Rust type for CancelAllOrders query constructor
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -173,3 +198,4 @@ pub struct ListCandles;
     response_derives = "Debug"
 )]
 pub struct ListTrades;
+

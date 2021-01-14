@@ -2,7 +2,7 @@ use crate::graphql;
 use graphql::updated_account_orders;
 use graphql_client::GraphQLQuery;
 
-/// Initiate subscription to get new trades
+/// Initiate subscription to get new orders for an account
 #[derive(Clone, Debug)]
 pub struct SubscribeAccountOrders {
     pub market: Option<String>,

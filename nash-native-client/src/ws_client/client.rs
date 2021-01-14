@@ -613,6 +613,13 @@ impl Client {
         Self::setup(state, affiliate_code, client_id, env, timeout, sign_states_loop_interval).await
     }
 
+    // can be used by market makers to turn off state signing
+    pub async fn turn_off_sign_states(&self) {
+        let client = self.inner.lock().await;
+        let mut state = client.state.lock().await;
+        state.dont_sign_states = true;
+    }
+
     async fn setup(
         state: State,
         affiliate_code: Option<String>,
@@ -1283,6 +1290,32 @@ mod tests {
         runtime.block_on(async_block);
     }
 
+    #[tokio::test]
+    async fn place_order_no_sign_states_flat() {
+        let client = init_client().await;
+        client.turn_off_sign_states().await;
+        let response = client
+            .run(LimitOrderRequest {
+                market: "eth_usdc".to_string(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "0.004".to_string(),
+                price: "1500".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            })
+            .await
+            .unwrap();
+        println!("{:?}", response);
+        let response = client
+            .run(CancelAllOrders {
+                market: "eth_usdc".to_string(),
+            })
+            .await
+            .unwrap();
+        println!("{:?}", response);
+        assert_eq!(response.response().unwrap().accepted, true);
+    }
+
     #[test]
     fn end_to_end_sell_limit_order() {
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
@@ -1292,8 +1325,8 @@ mod tests {
                 .run(LimitOrderRequest {
                     market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Sell,
-                    amount: "0.02".to_string(),
-                    price: "900".to_string(),
+                    amount: "0.004".to_string(),
+                    price: "1500".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,
                 })

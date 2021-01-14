@@ -31,7 +31,8 @@ pub struct State {
     // optional affiliate code, will recieve a share of fees generated
     pub affiliate_code: Option<String>, // FIXME: move r-pool from global indexmap here
     pub assets_nonces_refresh: bool,
-    pub state_sign_refresh: bool // TODO, not 100% we need this
+    pub state_sign_refresh: bool, // TODO, not 100% we need this
+    pub dont_sign_states: bool // flag only for market maker users
 }
 
 impl State {
@@ -48,7 +49,8 @@ impl State {
             assets: None,
             asset_nonces: None,
             assets_nonces_refresh: false,
-            state_sign_refresh: false
+            state_sign_refresh: false,
+            dont_sign_states: false
         })
     }
 
@@ -62,7 +64,8 @@ impl State {
             assets: None,
             asset_nonces: None,
             assets_nonces_refresh: false,
-            state_sign_refresh: false
+            state_sign_refresh: false,
+            dont_sign_states: false
         })
     }
 

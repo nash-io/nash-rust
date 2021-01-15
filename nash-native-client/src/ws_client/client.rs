@@ -99,6 +99,9 @@ pub fn spawn_sender_loop(
                 }
             };
         }
+        let error =
+            ProtocolError("Disconnected.");
+        message_broker_link.send(BrokerAction::Message(Err(error))).ok();
     });
 }
 

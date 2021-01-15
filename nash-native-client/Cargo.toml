@@ -24,6 +24,8 @@ nash-protocol = { version = "^0.1.21", path = "../nash-protocol", default-featur
 tokio = { version = "0.3", features = ["full"] }
 tokio-native-tls = { version = "0.2" }
 tokio-tungstenite = { version = "0.12", features = ["tls"] }
+tracing = "0.1"
+tracing-futures = "0.2"
 serde = "1.0"
 serde_json = "1.0"
 futures = "0.3"

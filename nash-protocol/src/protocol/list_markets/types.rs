@@ -36,11 +36,7 @@ impl NashProtocol for ListMarketsRequest {
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        use rand::Rng;
-        let this_task = rand::thread_rng().gen::<u16>();
-        println!("({}) Trying to lock (short)", this_task);
         let mut state = state.write().await;
-        println!("({}) Locked mutex (short)", this_task);
         let markets: Vec<Market> = response.markets.iter().map(|(_k, v)| v.clone()).collect();
         let mut assets = HashSet::new();
         let mut market_map = HashMap::new();

@@ -1,5 +1,6 @@
 //! Client implementation of Nash API over websockets using channels and message brokers
 
+use std::any::type_name;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use tokio::{net::TcpStream, sync::mpsc, sync::oneshot, sync::RwLock, time::Durat
 use tokio_native_tls::TlsStream;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{connect_async, stream::Stream, WebSocketStream};
+use tracing::{error, trace, warn, Instrument};
 
 use nash_protocol::errors::{ProtocolError, Result};
 use nash_protocol::protocol::subscriptions::SubscriptionResponse;
@@ -65,47 +67,63 @@ pub fn spawn_sender_loop(
             let next_outgoing = ws_outgoing_receiver.recv().boxed();
             let next_incoming = tokio::time::timeout(timeout_duration, websocket.next());
             match select(next_outgoing, next_incoming).await {
-                Either::Left((out_msg, _)) => {
-                    if let Some(Ok(m_text)) = out_msg.map(|x| serde_json::to_string(&x.0)) {
-                        // If sending fails, pass error through broker and global channel
-                        println!("SENDING {}", m_text);
-                        match websocket.send(Message::Text(m_text)).await {
-                            Ok(_) => {}
-                            Err(_) => {
-                                let error = ProtocolError(
-                                    "failed to send message on WS connection, likely disconnected",
-                                );
-                                let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
-                                break;
+                Either::Left((outgoing, _)) => {
+                    if let Some((request, _ready_rx)) = outgoing {
+                        if let Ok(request_raw) = serde_json::to_string(&request) {
+                            // If sending fails, pass error through broker and global channel
+                            match websocket.send(Message::Text(request_raw)).await {
+                                Ok(_) => {
+                                    trace!(id = ?request.message_id(), "WS-SEND success");
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "WS-SEND channel error");
+                                    let error = ProtocolError("failed to send message on WS connection, likely disconnected");
+                                    let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
+                                    break;
+                                }
                             }
+                        } else {
+                            error!(request = ?request, "WS-SEND invalid request");
                         }
                     } else {
-                        let error =
-                            ProtocolError("outgoing channel died or errored, likely disconnected");
+                        error!("WS-SEND channel errored");
+                        let error = ProtocolError("outgoing channel died or errored, likely disconnected");
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
                 }
-                Either::Right((in_msg, _)) => {
-                    if let Some(Ok(Ok(resp))) = in_msg
-                        .ok()
-                        .and_then(|in_msg| in_msg.map(|x| x.map(|x| x.into_text())))
-                    {
-                        println!("RECEIVED {}", resp);
-                        if let Ok(resp_copy1) = serde_json::from_str(&resp) {
-                            // Similarly, let the client timeout on incoming response if this fails and handle that
-                            // todo: this is a hack since the graphql library has not implemented clone() for responses
-                            // but we need another copy of the response to send to the broker
-                            // this could actually be more efficient and have broker handle all messages?
-                            let _ignore =
-                                message_broker_link.send(BrokerAction::Message(Ok(resp_copy1)));
+                Either::Right((incoming, _)) => {
+                    if let Ok(incoming) = incoming {
+                        if let Some(Ok(message)) = incoming {
+                            let raw_response = message
+                                .into_text()
+                                .map_err(|e| {
+                                    ProtocolError::coerce_static_from_str(e.to_string().as_str())
+                                });
+                            let response: Result<AbsintheWSResponse> = raw_response
+                                .and_then(|r| serde_json::from_str(&r).map_err(|e| {
+                                    ProtocolError::coerce_static_from_str(e.to_string().as_str())
+                                }));
+                            match response {
+                                Ok(response) => {
+                                    trace!(id = ?response.message_id(), "WS-RECV success");
+                                    let _ = message_broker_link.send(BrokerAction::Message(Ok(response)));
+                                },
+                                Err(e) => {
+                                    error!(error = %e, "WS-RECV invalid response message");
+                                    let _ = message_broker_link.send(BrokerAction::Message(Err(e)));
+                                    break;
+                                }
+                            }
                         } else {
-                            // if response fails to destructure, ignore and continue broker loop
+                            error!("WS-RECV channel errored");
+                            let error = ProtocolError("incoming channel died or errored, likely disconnected");
+                            let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
+                            break;
                         }
                     } else {
-                        println!("RECEIVED ERR");
-                        let error =
-                            ProtocolError("incoming WS channel failed, likely disconnected");
+                        error!("WS-RECV timed out");
+                        let error = ProtocolError("incoming WS timed out, likely disconnected");
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
                     }
@@ -143,11 +161,13 @@ impl MessageBroker {
                 if let Some(next_incoming) = internal_receiver.next().await {
                     match next_incoming {
                         // Register a channel to send messages to with given id
-                        BrokerAction::RegisterRequest(id, channel, ready_tx) => {
+                        BrokerAction::RegisterRequest(id, channel, _ready_tx) => {
+                            trace!(%id, "BROKER registering request");
                             request_map.insert(id, channel);
-                            ready_tx.send(true);
+                            //ready_tx.send(true);
                         }
                         BrokerAction::RegisterSubscription(id, channel) => {
+                            trace!(%id, "BROKER registering subscription");
                             subscription_map.insert(id, channel);
                         }
                         // When message comes in, if id is registered with channel, send there
@@ -165,25 +185,27 @@ impl MessageBroker {
                             }
                             // otherwise check if it is a response to a registered request
                             else if let Some(id) = response.message_id() {
-                                println!("BROKER RECEIVED {}", id);
                                 if let Some(channel) = request_map.remove(&id) {
-                                    if let Err(_ignore) = channel.send(Ok(response)) {
+                                    if channel.send(Ok(response)).is_ok() {
+                                        trace!(id, "BROKER dispatched response");
+                                    } else {
                                         // Kill process on error
                                         break;
                                     }
                                 } else {
-                                    println!("---------------------- GOT MESSAGE WITH ID {} BUT IT IS NOT REGISTERED ---------------------- ", id);
+                                    warn!(id, ?response, "BROKER response without return channel");
                                 }
                             } else {
-                                println!("---------------------- GOT MESSAGE WITHOUT ID ---------------------- ");
+                                warn!(?response, "BROKER response without id");
                             }
                         }
                         BrokerAction::Message(Err(e)) => {
+                            error!(error = %e, "BROKER propagating channel error");
                             // iterate over all subscription and request channels and propagate error
-                            for (_id, channel) in request_map.drain() {
+                            for (_id, channel) in subscription_map.drain() {
                                 let _ = channel.send(Err(e.clone()));
                             }
-                            for (_id, channel) in subscription_map.iter_mut() {
+                            for (_id, channel) in request_map.drain() {
                                 let _ = channel.send(Err(e.clone()));
                             }
                             // kill broker process if WS connection closed
@@ -438,13 +460,11 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<T::Response>> {
-        println!("Preparing query for request {:?}", request);
         let query = request.graphql(self.state.clone()).await?;
-        println!("Executing request {:?}", request);
         let ws_response = tokio::time::timeout(self.timeout, self.request(query).await?)
             .await
             .map_err(|_| ProtocolError("Request timeout"))?
-            .map_err(|_| ProtocolError("Failed to receive message"))??;
+            .map_err(|_| ProtocolError("Failed to receive response from return channel"))??;
         let json_payload = ws_response.json_payload()?;
         let protocol_response = request
             .response_from_json(json_payload, self.state.clone())
@@ -465,21 +485,17 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        println!("Entry for {:?}", request);
         // First run any dependencies of the request/pipeline
         let before_actions = request.run_before(self.state.clone()).await?;
 
         if let Some(actions) = before_actions {
             for action in actions {
                 self.run_helper(action).await?;
-                println!("Finished before hook for {:?}", request);
             }
         }
 
         // Now run the pipeline
-        println!("Running Pipeline.main {:?}", request);
         let out = self.run_helper(request.clone()).await;
-        println!("Finished running Pipeline.main {:?}", request);
 
         // Get things to run after the request/pipeline
         let after_actions = request.run_after(self.state.clone()).await?;
@@ -487,9 +503,7 @@ impl InnerClient {
         // Now run anything specified for after the pipeline
         if let Some(actions) = after_actions {
             for action in actions {
-                println!("Running after hook {:?}", action);
                 self.run_helper(action).await?;
-                println!("Finished after hook for {:?}", request);
             }
         }
 
@@ -501,6 +515,10 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
+        let mut permit = None;
+        if let Some(semaphore) = request.get_semaphore(self.inner.state.clone()).await {
+            permit = Some(semaphore.acquire().await);
+        }
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline contains more actions for client to take, execute them
         loop {
@@ -603,7 +621,6 @@ impl InnerClient {
         let (ready_tx, ready_rx) = oneshot::channel();
         let broker_link = self.message_broker.link.clone();
         // register that channel in the broker with our message id
-        println!("BROKER REGISTER {} {:?}", message_id, graphql_msg.payload);
         broker_link
             .send(BrokerAction::RegisterRequest(
                 message_id, for_broker, ready_tx,
@@ -715,12 +732,18 @@ impl Client {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        if let Some(semaphore) = request.get_semaphore(self.inner.state.clone()).await {
-            let _permit = semaphore.acquire().await;
-            self.inner.run(request).await
-        } else {
-            self.inner.run(request).await
+        async {
+            let result = self.inner.run(request).await;
+            if let Err(ref e) = result {
+                error!(error = %e, "request errored");
+            }
+            result
         }
+        .instrument(tracing::info_span!(
+            "CLIENT RUN",
+            request = type_name::<T>()
+        ))
+        .await
     }
 
     /// Entry point for running Nash protocol subscriptions

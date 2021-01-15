@@ -35,6 +35,7 @@ pub struct State {
     pub state_sign_refresh: bool, // TODO, not 100% we need this
     pub dont_sign_states: bool // flag only for market maker users
 
+    pub place_order_semaphore: Arc<tokio::sync::Semaphore>,
     pub sign_all_states_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
@@ -50,8 +51,9 @@ impl State {
             assets_nonces_refresh: false,
             state_sign_refresh: false,
             dont_sign_states: false,
-            // Initializing it here is not so nice but least amount of trouble
-            // We allow one SignAllStates at a time
+            // Set these here for now
+            // One LimitOrder
+            // One SignAllStates at a time
             sign_all_states_semaphore: Arc::new(tokio::sync::Semaphore::new(1000)),
         }
     }

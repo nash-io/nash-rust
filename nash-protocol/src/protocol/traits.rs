@@ -18,6 +18,10 @@ use std::sync::Arc;
 #[async_trait]
 pub trait NashProtocol: Debug + Sync {
     type Response: Send + Sync;
+    /// If you want limit the amount of concurrency of a protocol return a Semaphore here
+    async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        None
+    }
     /// Convert the protocol request to GraphQL from communication with Nash server
     // Note: state is declared as mutable
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value>;
@@ -59,7 +63,7 @@ pub trait NashProtocolPipeline: Debug {
     type PipelineState;
     /// Wrapper type for all actions this pipeline can take
     type ActionType: NashProtocol;
-    /// If you want limit the amount of concurrency of the pipeline return a Semaphore here
+    /// If you want limit the amount of concurrency of a pipeline return a Semaphore here
     async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
         None
     }

@@ -15,6 +15,7 @@ use std::fmt::Debug;
 
 // TODO: generalize shared fields between request/response
 
+#[derive(Debug)]
 pub struct AbsintheWSRequest {
     // Not 100% what this is, but think in relation to id of joined client
     ref_join_id: Option<AbsintheInt>,
@@ -25,7 +26,7 @@ pub struct AbsintheWSRequest {
     // Events are things that can happen on a topic
     event: AbsintheEvent,
     // Payload contains optional serialized JSON data
-    pub(crate) payload: Option<serde_json::Value>,
+    payload: Option<serde_json::Value>,
 }
 
 impl AbsintheWSRequest {
@@ -53,6 +54,9 @@ impl AbsintheWSRequest {
             event: AbsintheEvent::Join,
             payload: None,
         }
+    }
+    pub fn message_id(&self) -> Option<u64> {
+        self.ref_id.as_ref().map(|x| x.value as u64)
     }
 }
 

@@ -92,11 +92,7 @@ impl NashProtocolPipeline for SignAllStates {
     }
     // If have run out of r values, get more before running this pipeline
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        use rand::Rng;
-        let this_task = rand::thread_rng().gen::<u16>();
-        println!("({}) Trying to lock mutex (long)", this_task);
         let state = state.read().await;
-        println!("({}) Locked mutex (long)", this_task);
         let mut hooks = Vec::new();
 
         // If the client doesn't currently have a list of assets, run a list markets query to

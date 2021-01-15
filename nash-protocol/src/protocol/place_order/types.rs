@@ -16,7 +16,7 @@ use crate::types::{
 use crate::utils::current_time_as_i64;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// Request to place limit orders on Nash exchange. On an A/B market
@@ -120,18 +120,18 @@ pub struct PlaceOrderResponse {
 impl NashProtocol for LimitOrderRequest {
     type Response = PlaceOrderResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         // TODO: move this to process response, and incorporate error into process response
         // would be much cleaner
         if state.remaining_orders > 0 {
             state.remaining_orders -= 1;
         }
         let affiliate = state.affiliate_code.clone();
-        let signer = state.signer()?;
+        let signer = state.signer_mut()?;
         let query = builder.signed_graphql_request(nonces, time, affiliate, signer)?;
         serializable_to_json(&query)
     }
@@ -139,7 +139,7 @@ impl NashProtocol for LimitOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_limit_order::ResponseData>(response)
     }
@@ -147,15 +147,15 @@ impl NashProtocol for LimitOrderRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         state.remaining_orders = response.remaining_orders;
         Ok(())
     }
     /// Potentially get more r values or sign states before placing an order
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let mut state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
         let mut hooks = Vec::new();
 
         // If we need assets or markets list, pull them
@@ -208,18 +208,18 @@ impl NashProtocol for LimitOrderRequest {
 impl NashProtocol for MarketOrderRequest {
     type Response = PlaceOrderResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         // TODO: move this to process response, and incorporate error into process response
         // would be much cleaner
         if state.remaining_orders > 0 {
             state.remaining_orders -= 1;
         }
         let affiliate = state.affiliate_code.clone();
-        let signer = state.signer()?;
+        let signer = state.signer_mut()?;
         let query = builder.signed_graphql_request(nonces, time, affiliate, signer)?;
         serializable_to_json(&query)
     }
@@ -227,7 +227,7 @@ impl NashProtocol for MarketOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_market_order::ResponseData>(response)
     }
@@ -235,15 +235,15 @@ impl NashProtocol for MarketOrderRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         state.remaining_orders = response.remaining_orders;
         Ok(())
     }
     /// Potentially get more r values or sign states before placing an order
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let mut state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
         let mut hooks = Vec::new();
 
         // If we need assets or markets list, pull them

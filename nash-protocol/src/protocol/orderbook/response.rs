@@ -5,7 +5,7 @@ use crate::graphql::get_orderbook;
 use crate::types::OrderbookOrder;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
 
@@ -13,7 +13,7 @@ use std::str::FromStr;
 impl OrderbookRequest {
     pub async fn response_from_graphql(
         &self,
-        response: ResponseOrError<get_orderbook::ResponseData>, _state: Arc<Mutex<State>>
+        response: ResponseOrError<get_orderbook::ResponseData>, _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<OrderbookResponse>> {
         match response {
             ResponseOrError::Response(data) => {

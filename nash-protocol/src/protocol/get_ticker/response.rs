@@ -3,7 +3,7 @@ use super::types::{TickerRequest, TickerResponse};
 use crate::errors::Result;
 use crate::graphql::get_ticker;
 use crate::protocol::state::State;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
@@ -12,7 +12,7 @@ impl TickerRequest {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<get_ticker::ResponseData>,
-        _state: Arc<Mutex<State>>,
+        _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<TickerResponse>> {
         // These unwraps are safe. ME_FIXME
         match response {

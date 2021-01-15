@@ -6,6 +6,7 @@ use crate::types::{Asset, Market};
 use std::collections::HashMap;
 
 use super::signer::Signer;
+use std::sync::Arc;
 
 //****************************************//
 //  Protocol state representation         //
@@ -33,43 +34,48 @@ pub struct State {
     pub assets_nonces_refresh: bool,
     pub state_sign_refresh: bool, // TODO, not 100% we need this
     pub dont_sign_states: bool // flag only for market maker users
+
+    pub sign_all_states_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 impl State {
-    pub fn new(keys_path: Option<&str>) -> Result<Self> {
+    pub fn new(signer: Option<Signer>) -> Self {
+        Self {
+            signer,
+            remaining_orders: 0,
+            affiliate_code: None,
+            markets: None,
+            assets: None,
+            asset_nonces: None,
+            assets_nonces_refresh: false,
+            state_sign_refresh: false,
+            dont_sign_states: false,
+            // Initializing it here is not so nice but least amount of trouble
+            // We allow one SignAllStates at a time
+            sign_all_states_semaphore: Arc::new(tokio::sync::Semaphore::new(1000)),
+        }
+    }
+
+    pub fn from_keys_path(keys_path: Option<&str>) -> Result<Self> {
         let signer = match keys_path {
             Some(path) => Some(Signer::new(path)?),
             None => None,
         };
-        Ok(Self {
-            signer,
-            remaining_orders: 0,
-            affiliate_code: None,
-            markets: None,
-            assets: None,
-            asset_nonces: None,
-            assets_nonces_refresh: false,
-            state_sign_refresh: false,
-            dont_sign_states: false
-        })
+        Ok(Self::new(signer))
     }
 
-    pub fn from_key_data(secret: &str, session: &str) -> Result<Self> {
+    pub fn from_keys(secret: &str, session: &str) -> Result<Self> {
         let signer = Some(Signer::from_data(secret, session)?);
-        Ok(Self {
-            signer,
-            remaining_orders: 0,
-            affiliate_code: None,
-            markets: None,
-            assets: None,
-            asset_nonces: None,
-            assets_nonces_refresh: false,
-            state_sign_refresh: false,
-            dont_sign_states: false
-        })
+        Ok(Self::new(signer))
     }
 
-    pub fn signer(&mut self) -> Result<&mut Signer> {
+    pub fn signer(&self) -> Result<&Signer> {
+        self.signer
+            .as_ref()
+            .ok_or(ProtocolError("Signer not initiated"))
+    }
+
+    pub fn signer_mut(&mut self) -> Result<&mut Signer> {
         self.signer
             .as_mut()
             .ok_or(ProtocolError("Signer not initiated"))

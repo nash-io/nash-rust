@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 use crate::errors::Result;
@@ -36,7 +36,7 @@ pub struct TickerResponse {
 impl NashProtocol for TickerRequest {
     type Response = TickerResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }
@@ -44,7 +44,7 @@ impl NashProtocol for TickerRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
         self.response_from_graphql(as_graphql, state).await

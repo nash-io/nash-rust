@@ -5,7 +5,7 @@ use crate::errors::Result;
 use crate::graphql::cancel_order;
 
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// Request to cancel a single order in a given market. Note: to prove orders have been canceled,
@@ -27,8 +27,8 @@ pub struct CancelOrderResponse {
 impl NashProtocol for CancelOrderRequest {
     type Response = CancelOrderResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
-        let mut state = state.lock().await;
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
+        let state = state.read().await;
         let signer = state.signer()?;
         let query = self.make_query(signer);
         serializable_to_json(&query)
@@ -37,7 +37,7 @@ impl NashProtocol for CancelOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<CancelOrderResponse, cancel_order::ResponseData>(response)
     }

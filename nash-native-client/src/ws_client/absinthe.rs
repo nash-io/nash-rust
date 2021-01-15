@@ -25,7 +25,7 @@ pub struct AbsintheWSRequest {
     // Events are things that can happen on a topic
     event: AbsintheEvent,
     // Payload contains optional serialized JSON data
-    payload: Option<serde_json::Value>,
+    pub(crate) payload: Option<serde_json::Value>,
 }
 
 impl AbsintheWSRequest {

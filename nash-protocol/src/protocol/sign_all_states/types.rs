@@ -10,7 +10,7 @@ use crate::errors::{ProtocolError, Result};
 use crate::types::Blockchain;
 
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// Request to initiate pipeline for signing all states
@@ -34,18 +34,23 @@ pub struct SignAllPipelineState {
 impl NashProtocolPipeline for SignAllStates {
     type PipelineState = SignAllPipelineState;
     type ActionType = SignStatesRequest;
+
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        Some(state.read().await.sign_all_states_semaphore.clone())
+    }
+
     /// Initialize pipeline state to None
-    async fn init_state(&self, _state: Arc<Mutex<State>>) -> Self::PipelineState {
+    async fn init_state(&self, _state: Arc<RwLock<State>>) -> Self::PipelineState {
         SignAllPipelineState {
             num_requests: 0,
             previous_response: None,
         }
     }
-    // Get next step in the pipline
+    // Get next step in the pipeline
     async fn next_step(
         &self,
         pipeline_state: &Self::PipelineState,
-        _client_state: Arc<Mutex<State>>,
+        _client_state: Arc<RwLock<State>>,
     ) -> Result<Option<Self::ActionType>> {
         // If a previous response exists...
         if let Some(request_state) = &pipeline_state.previous_response {
@@ -86,13 +91,17 @@ impl NashProtocolPipeline for SignAllStates {
         }
     }
     // If have run out of r values, get more before running this pipeline
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let mut state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        use rand::Rng;
+        let this_task = rand::thread_rng().gen::<u16>();
+        println!("({}) Trying to lock mutex (long)", this_task);
+        let state = state.read().await;
+        println!("({}) Locked mutex (long)", this_task);
         let mut hooks = Vec::new();
 
         // If the client doesn't currently have a list of assets, run a list markets query to
         // get that. The assets will then be stored in client state
-        if let None = state.assets {
+        if state.assets.is_none() {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
                 ListMarketsRequest,
             )));
@@ -100,7 +109,7 @@ impl NashProtocolPipeline for SignAllStates {
 
         for chain in Blockchain::all() {
             if state.signer()?.remaining_r_vals(chain) <= 10 {
-                println!("Triggering FillPool (sign_all_states) for {:?}", chain);
+                println!("Triggering FillPool (sign_all_states) for {:?}, {} remaining R values", chain, state.signer()?.remaining_r_vals(chain));
                 hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
                     DhFillPoolRequest::new(chain)?,
                 )))
@@ -109,7 +118,7 @@ impl NashProtocolPipeline for SignAllStates {
         Ok(Some(hooks))
     }
     // After running this pipeline, update asset nonces
-    async fn run_after(&self, _state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_after(&self, _state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         Ok(Some(vec![ProtocolHook::Protocol(
             NashProtocolRequest::AssetNonces(AssetNoncesRequest::new()),
         )]))

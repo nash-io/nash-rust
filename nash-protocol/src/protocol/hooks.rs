@@ -16,7 +16,7 @@ use super::{ResponseOrError, State};
 use crate::errors::{ProtocolError, Result};
 use async_trait::async_trait;
 
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// An enum wrapping all the different protocol requests
@@ -49,7 +49,7 @@ pub enum NashProtocolResponse {
 impl NashProtocol for NashProtocolRequest {
     type Response = NashProtocolResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         match self {
             Self::AssetNonces(nonces) => nonces.graphql(state).await,
             Self::DhFill(dh_req) => dh_req.graphql(state).await,
@@ -64,7 +64,7 @@ impl NashProtocol for NashProtocolRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         match self {
             Self::AssetNonces(nonces) => Ok(nonces
@@ -94,7 +94,7 @@ impl NashProtocol for NashProtocolRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
         match (self, response) {
             (Self::AssetNonces(nonces), NashProtocolResponse::AssetNonces(response)) => {
@@ -126,7 +126,7 @@ impl NashProtocol for NashProtocolRequest {
         Ok(())
     }
 
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         match self {
             Self::AssetNonces(nonces) => NashProtocol::run_before(nonces, state).await,
             Self::DhFill(dh_req) => NashProtocol::run_before(dh_req, state).await,
@@ -138,7 +138,7 @@ impl NashProtocol for NashProtocolRequest {
         }
     }
 
-    async fn run_after(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_after(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         match self {
             Self::AssetNonces(nonces) => NashProtocol::run_after(nonces, state).await,
             Self::DhFill(dh_req) => NashProtocol::run_after(dh_req, state).await,
@@ -171,7 +171,7 @@ impl NashProtocolPipeline for ProtocolHook {
     type PipelineState = ProtocolHookState;
     type ActionType = NashProtocolRequest;
 
-    async fn init_state(&self, state: Arc<Mutex<State>>) -> Self::PipelineState {
+    async fn init_state(&self, state: Arc<RwLock<State>>) -> Self::PipelineState {
         match self {
             Self::SignAllState(sign_all) => {
                 ProtocolHookState::SignAllStates(sign_all.init_state(state).await)
@@ -185,7 +185,7 @@ impl NashProtocolPipeline for ProtocolHook {
     async fn next_step(
         &self,
         pipeline_state: &Self::PipelineState,
-        client_state: Arc<Mutex<State>>,
+        client_state: Arc<RwLock<State>>,
     ) -> Result<Option<Self::ActionType>> {
         match (self, pipeline_state) {
             (Self::SignAllState(sign_all), ProtocolHookState::SignAllStates(sign_all_state)) => {
@@ -235,14 +235,14 @@ impl NashProtocolPipeline for ProtocolHook {
         }
     }
 
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         match self {
             Self::Protocol(protocol) => NashProtocol::run_before(protocol, state).await,
             Self::SignAllState(sign_all) => NashProtocolPipeline::run_before(sign_all, state).await,
         }
     }
 
-    async fn run_after(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_after(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         match self {
             Self::Protocol(protocol) => NashProtocol::run_after(protocol, state).await,
             Self::SignAllState(sign_all) => NashProtocolPipeline::run_after(sign_all, state).await,

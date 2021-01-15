@@ -4,7 +4,7 @@ use crate::errors::Result;
 use crate::graphql::updated_ticker;
 use crate::protocol::state::State;
 use bigdecimal::BigDecimal;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -31,7 +31,7 @@ impl SubscribeTicker {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<updated_ticker::ResponseData>,
-        _state: Arc<Mutex<State>>,
+        _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<SubscribeTickerResponse>> {
         match response {
             ResponseOrError::Response(data) => {

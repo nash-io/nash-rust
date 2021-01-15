@@ -5,7 +5,7 @@ use super::{ProtocolHook, ResponseOrError, State};
 use crate::errors::ProtocolError;
 use crate::errors::Result;
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -16,32 +16,32 @@ use std::sync::Arc;
 /// Trait that all Nash protocol elements implement. Enforces transformation to GraphQL as well
 /// as state changes on response processing.
 #[async_trait]
-pub trait NashProtocol: Sync {
+pub trait NashProtocol: Debug + Sync {
     type Response: Send + Sync;
     /// Convert the protocol request to GraphQL from communication with Nash server
     // Note: state is declared as mutable
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value>;
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value>;
     /// Convert JSON response to request to the protocol's associated type
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>>;
     /// Any state changes that result from execution of the protocol request
     /// The default implementation does nothing to state
     async fn process_response(
         &self,
         _response: &Self::Response,
-        _state: Arc<Mutex<State>>,
+        _state: Arc<RwLock<State>>,
     ) -> Result<()> {
         Ok(())
     }
     // Any dependencies for the pipeline (e.g., if it needs r values or asset nonces)
-    async fn run_before(&self, _state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_before(&self, _state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         Ok(None)
     }
     // Any requests to run after the pipeline (e.g., update asset nonces after state signing)
-    async fn run_after(&self, _state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_after(&self, _state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         Ok(None)
     }
 }
@@ -59,15 +59,19 @@ pub trait NashProtocolPipeline: Debug {
     type PipelineState;
     /// Wrapper type for all actions this pipeline can take
     type ActionType: NashProtocol;
+    /// If you want limit the amount of concurrency of the pipeline return a Semaphore here
+    async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        None
+    }
     /// Create initial state for the pipeline
-    async fn init_state(&self, state: Arc<Mutex<State>>) -> Self::PipelineState;
+    async fn init_state(&self, state: Arc<RwLock<State>>) -> Self::PipelineState;
     /// Give next action to take or return `None` if pipeline is finished. `&State` needs
     /// to be mutable as client may modify itself when producing the next step (e.g., removing
     /// and r value generate a signature)
     async fn next_step(
         &self,
         pipeline_state: &Self::PipelineState,
-        client_state: Arc<Mutex<State>>,
+        client_state: Arc<RwLock<State>>,
     ) -> Result<Option<Self::ActionType>>;
     /// Process the results of a pipeline step
     async fn process_step(
@@ -81,11 +85,11 @@ pub trait NashProtocolPipeline: Debug {
         pipeline_state: Self::PipelineState,
     ) -> Result<ResponseOrError<<Self::ActionType as NashProtocol>::Response>>;
     // Any dependencies for the pipeline (e.g., if it needs r values or asset nonces)
-    async fn run_before(&self, _state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_before(&self, _state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         Ok(None)
     }
     // Any requests to run after the pipeline (e.g., update asset nonces after state signing)
-    async fn run_after(&self, _state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_after(&self, _state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         Ok(None)
     }
 }
@@ -97,19 +101,20 @@ pub trait NashProtocolPipeline: Debug {
 #[async_trait]
 impl<T> NashProtocolPipeline for T
 where
-    T: NashProtocol + Clone + Debug + Sync + Send,
+    T: NashProtocol + Clone + Sync + Send,
 {
     type PipelineState = Option<ResponseOrError<T::Response>>;
     type ActionType = T;
+
     // This begins as `None` but will be set to a wrapped T::Response
-    async fn init_state(&self, _state: Arc<Mutex<State>>) -> Self::PipelineState {
+    async fn init_state(&self, _state: Arc<RwLock<State>>) -> Self::PipelineState {
         None
     }
     // This will only return a next step once assuming state is set by client in `process_step`
     async fn next_step(
         &self,
         pipeline_state: &Self::PipelineState,
-        _client_state: Arc<Mutex<State>>,
+        _client_state: Arc<RwLock<State>>,
     ) -> Result<Option<Self::ActionType>> {
         // If we have a response already, things are done
         if let Some(_) = pipeline_state {
@@ -140,12 +145,12 @@ where
     }
     // Any other requests or piplelines to run before this one. Here we just
     // delegate this to underlying protocol request
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         self.run_before(state).await
     }
     // Any other requests or piplelines to run afer this one. Here we just
     // delegate this to underlying protocol request
-    async fn run_after(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_after(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         self.run_after(state).await
     }
 }
@@ -159,25 +164,25 @@ where
 pub trait NashProtocolSubscription: Clone {
     type SubscriptionResponse: Send + Sync;
     /// Convert the protocol request to GraphQL from communication with Nash server
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value>;
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value>;
     /// Convert JSON response from incoming subscription data into protocol's associated type
     async fn subscription_response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::SubscriptionResponse>>;
     /// Update state based on data from incoming subscription response
     async fn process_subscription_response(
         &self,
         _response: &Self::SubscriptionResponse,
-        _state: Arc<Mutex<State>>,
+        _state: Arc<RwLock<State>>,
     ) -> Result<()> {
         Ok(())
     }
     async fn wrap_response_as_any_subscription(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<SubscriptionResponse>>;
 }
 
@@ -185,5 +190,5 @@ pub trait NashProtocolSubscription: Clone {
 /// that is necessary to perform the conversion
 #[async_trait]
 pub trait TryFromState<T>: Sized {
-    async fn from(source: T, state: Arc<Mutex<State>>) -> Result<Self>;
+    async fn from(source: T, state: Arc<RwLock<State>>) -> Result<Self>;
 }

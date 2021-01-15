@@ -353,7 +353,7 @@ pub fn fill_rpool_secp256k1(
     }
     println!("- fill_pool_paillier");
     fill_pool_paillier(own_dh_secrets.len(), paillier_pk);
-    println!("Begin fill_rpool_secp256k1");
+    println!("End fill_rpool_secp256k1");
     Ok(())
 }
 

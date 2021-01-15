@@ -7,7 +7,7 @@ use crate::types::{Candle, CandleInterval, DateTimeRange};
 use super::super::list_markets::ListMarketsRequest;
 use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// Get candles associated with market, filtering on several optional fields.
@@ -36,7 +36,7 @@ pub struct ListCandlesResponse {
 impl NashProtocol for ListCandlesRequest {
     type Response = ListCandlesResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         let mut serde_value = serializable_to_json(&query)?;
         if self.interval == None {
@@ -54,13 +54,13 @@ impl NashProtocol for ListCandlesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_with_state_from_json::<ListCandlesResponse, list_candles::ResponseData>(response, state).await
     }
 
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
         let mut hooks = Vec::new();
         if let None = state.markets {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(

@@ -3,7 +3,7 @@ use crate::types::OrderbookOrder;
 use super::super::list_markets::ListMarketsRequest;
 use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 use super::super::{
@@ -29,7 +29,7 @@ pub struct OrderbookResponse {
 impl NashProtocol for OrderbookRequest {
     type Response = OrderbookResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }
@@ -37,14 +37,14 @@ impl NashProtocol for OrderbookRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         let as_graphql = json_to_type_or_error(response)?;
         self.response_from_graphql(as_graphql, state).await
     }
 
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
         let mut hooks = Vec::new();
         if let None = state.markets {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(

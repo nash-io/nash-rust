@@ -8,13 +8,13 @@ use std::str::FromStr;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use async_trait::async_trait;
 
 
 #[async_trait]
 impl TryFromState<list_candles::ResponseData> for ListCandlesResponse {
-    async fn from(response: list_candles::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListCandlesResponse> {
+    async fn from(response: list_candles::ResponseData, _state: Arc<RwLock<State>>) -> Result<ListCandlesResponse> {
         let mut candles = Vec::new();
         for candle_data in response.list_candles.candles {
             let a_volume = BigDecimal::from_str(&candle_data.a_volume.amount)?;

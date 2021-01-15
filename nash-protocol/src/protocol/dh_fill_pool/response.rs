@@ -10,7 +10,7 @@ use nash_mpc::curves::secp256_k1_rust::Secp256k1Point;
 use nash_mpc::curves::secp256_r1::Secp256r1Point;
 use nash_mpc::curves::traits::ECPoint;
 
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 impl ServerPublics {
@@ -84,9 +84,9 @@ impl From<dh_fill_pool::ResponseData> for DhFillPoolResponse {
 pub async fn fill_pool(
     request: &DhFillPoolRequest,
     server_publics: ServerPublics,
-    state: Arc<Mutex<State>>,
+    state: Arc<RwLock<State>>,
 ) -> Result<()> {
-    let mut state = state.lock().await;
+    let state = state.write().await;
     let paillier_pk = state.signer()?.paillier_pk().clone();
     // FIXME: State should manage the pools
     match request {

@@ -8,7 +8,7 @@ use crate::errors::Result;
 use crate::graphql::sign_states;
 use crate::types::Blockchain;
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use nash_mpc::rust_bigint::BigInt;
 use std::sync::Arc;
 
@@ -111,9 +111,9 @@ impl ClientSignedState {
 impl NashProtocol for SignStatesRequest {
     type Response = SignStatesResponse;
     /// Serialize a SignStates protocol request to a GraphQL string
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
-        let mut state = state.lock().await;
-        let signer = state.signer()?;
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
+        let mut state = state.write().await;
+        let signer = state.signer_mut()?;
         let query = self.make_query(signer)?;
         serializable_to_json(&query)
     }
@@ -121,7 +121,7 @@ impl NashProtocol for SignStatesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<SignStatesResponse, sign_states::ResponseData>(response)
     }

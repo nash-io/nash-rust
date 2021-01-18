@@ -49,6 +49,18 @@ pub enum NashProtocolResponse {
 impl NashProtocol for NashProtocolRequest {
     type Response = NashProtocolResponse;
 
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        match self {
+            Self::AssetNonces(nonces) => NashProtocol::get_semaphore(nonces, state).await,
+            Self::DhFill(dh_req) => NashProtocol::get_semaphore(dh_req, state).await,
+            Self::LimitOrder(limit_order) => NashProtocol::get_semaphore(limit_order, state).await,
+            Self::Orderbook(orderbook) => NashProtocol::get_semaphore(orderbook, state).await,
+            Self::SignState(sign_state) => NashProtocol::get_semaphore(sign_state, state).await,
+            Self::CancelOrders(cancel_all) => NashProtocol::get_semaphore(cancel_all, state).await,
+            Self::ListMarkets(list_markets) => NashProtocol::get_semaphore(list_markets, state).await,
+        }
+    }
+
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         match self {
             Self::AssetNonces(nonces) => nonces.graphql(state).await,
@@ -170,6 +182,13 @@ pub enum ProtocolHookState {
 impl NashProtocolPipeline for ProtocolHook {
     type PipelineState = ProtocolHookState;
     type ActionType = NashProtocolRequest;
+
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        match self {
+            Self::SignAllState(sign_all) => NashProtocolPipeline::get_semaphore(sign_all, state).await,
+            Self::Protocol(protocol) => NashProtocol::get_semaphore(protocol, state).await,
+        }
+    }
 
     async fn init_state(&self, state: Arc<RwLock<State>>) -> Self::PipelineState {
         match self {

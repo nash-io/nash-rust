@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use async_recursion::async_recursion;
 use futures::{FutureExt, SinkExt, StreamExt};
 use futures_util::future::{select, Either};
 use tokio::{net::TcpStream, sync::mpsc, sync::oneshot, sync::RwLock, time::Duration};
@@ -456,7 +457,7 @@ impl InnerClient {
     /// Execute a NashProtocol request. Query will be created, executed over network, response will
     /// be passed to the protocol's state update hook, and response will be returned. Used by the even
     /// more generic `run(..)`.
-    async fn execute_protocol<T: NashProtocol + Sync>(
+    async fn execute_protocol<T: NashProtocol>(
         &self,
         request: T,
     ) -> Result<ResponseOrError<T::Response>> {
@@ -481,44 +482,19 @@ impl InnerClient {
     /// All `NashProtocol` requests automatically do. Other more complex multi-stage interactions like `SignAllStates`
     /// implement the trait manually. This will optionally run before and after hooks if those are defined for the pipeline
     /// or request (e.g., get asset nonces if they don't exist)
-    pub async fn run<T: NashProtocolPipeline + Clone + Sync>(
+    #[async_recursion]
+    pub async fn run<T: NashProtocolPipeline + Clone + Sync + Send>(
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
         // First run any dependencies of the request/pipeline
         let before_actions = request.run_before(self.state.clone()).await?;
-
         if let Some(actions) = before_actions {
             for action in actions {
-                self.run_helper(action).await?;
+                self.run(action).await?;
             }
         }
-
         // Now run the pipeline
-        let out = self.run_helper(request.clone()).await;
-
-        // Get things to run after the request/pipeline
-        let after_actions = request.run_after(self.state.clone()).await?;
-
-        // Now run anything specified for after the pipeline
-        if let Some(actions) = after_actions {
-            for action in actions {
-                self.run_helper(action).await?;
-            }
-        }
-
-        out
-    }
-
-    /// Does the main work of running a pipeline
-    async fn run_helper<T: NashProtocolPipeline>(
-        &self,
-        request: T,
-    ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        let mut permit = None;
-        if let Some(semaphore) = request.get_semaphore(self.inner.state.clone()).await {
-            permit = Some(semaphore.acquire().await);
-        }
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline contains more actions for client to take, execute them
         loop {
@@ -552,8 +528,18 @@ impl InnerClient {
             }
         }
         // Get pipeline output
-        let output = request.output(protocol_state)?;
-        Ok(output)
+        let out = request.output(protocol_state);
+
+        // Get things to run after the request/pipeline
+        let after_actions = request.run_after(self.state.clone()).await?;
+        // Now run anything specified for after the pipeline
+        if let Some(actions) = after_actions {
+            for action in actions {
+                self.run(action).await?;
+            }
+        }
+
+        out
     }
 
     /// Entry point for running Nash protocol subscriptions
@@ -728,7 +714,7 @@ impl Client {
     }
 
     /// Entry point for Nash protocol requests
-    pub async fn run<T: NashProtocolPipeline + Clone + Sync>(
+    pub async fn run<T: NashProtocolPipeline + Clone + Sync + Send>(
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {

@@ -52,9 +52,10 @@ impl State {
             state_sign_refresh: false,
             dont_sign_states: false,
             // Set these here for now
-            // One LimitOrder
-            // One SignAllStates at a time
-            sign_all_states_semaphore: Arc::new(tokio::sync::Semaphore::new(1000)),
+            // 1 place_order pipeline at a time
+            place_order_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
+            // 1 sign_all_states pipeline at a time
+            sign_all_states_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
         }
     }
 

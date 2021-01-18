@@ -57,8 +57,6 @@ impl LimitOrderRequest {
     }
 }
 
-
-
 impl MarketOrderRequest {
     pub fn new(
         market: String,
@@ -116,9 +114,55 @@ pub struct PlaceOrderResponse {
     pub market_name: String,
 }
 
+fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
+    let mut hooks = Vec::new();
+    // If we need assets or markets list, pull them
+    match (&state.assets, &state.markets) {
+        (None, _) | (_, None) => {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                ListMarketsRequest,
+            )));
+        }
+        _ => {}
+    }
+    // If have run out of r values, get more before running this pipeline
+    for chain in Blockchain::all() {
+        // 10 here is too much, but we can use multiple r-values in a single request
+        if state.signer()?.remaining_r_vals(chain) <= 10 {
+            println!("Triggering FillPool (place_order) for {:?}", chain);
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
+                DhFillPoolRequest::new(chain)?,
+            )));
+        }
+    }
+    // Retrieve asset nonces if we don't have them or an error triggered need to refresh
+    match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
+        (None, _) | (_, true) => {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
+                AssetNoncesRequest::new(),
+            )));
+        }
+        _ => {}
+    }
+    // If we are about to run out of orders...
+    if !state.dont_sign_states && state.remaining_orders < 20 {
+        // Need to sign states
+        hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
+        // After signing states, need to update nonces again
+        hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
+            AssetNoncesRequest::new(),
+        )));
+    }
+    Ok(hooks)
+}
+
 #[async_trait]
 impl NashProtocol for LimitOrderRequest {
     type Response = PlaceOrderResponse;
+
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        Some(state.read().await.place_order_semaphore.clone())
+    }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
@@ -156,50 +200,7 @@ impl NashProtocol for LimitOrderRequest {
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.read().await;
-        let mut hooks = Vec::new();
-
-        // If we need assets or markets list, pull them
-        match (&state.assets, &state.markets) {
-            (None, _) | (_, None) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
-                    ListMarketsRequest,
-                )));
-            }
-            _ => {}
-        }
-
-        // If have run out of r values, get more before running this pipeline
-        for chain in Blockchain::all() {
-            // 10 here is too much, but we can use multiple r-values in a single request
-            if state.signer()?.remaining_r_vals(chain) <= 10 {
-                println!("Triggering FillPool (place_order) for {:?}", chain);
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
-                    DhFillPoolRequest::new(chain)?,
-                )));
-            }
-        }
-
-        // Retrieve asset nonces if we don't have them or an error triggered need to refresh
-        match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
-            (None, _) | (_, true) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                    AssetNoncesRequest::new(),
-                )));
-            }
-            _ => {}
-        }
-
-        // If we are about to out of orders...
-        if !state.dont_sign_states && state.remaining_orders < 20 {
-            // Need to sign states
-            hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
-            // After signing states, need to update nonces again
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                AssetNoncesRequest::new(),
-            )));
-        }
-
-        Ok(Some(hooks))
+        get_required_hooks(&state).map(Some)
     }
 }
 
@@ -207,6 +208,10 @@ impl NashProtocol for LimitOrderRequest {
 #[async_trait]
 impl NashProtocol for MarketOrderRequest {
     type Response = PlaceOrderResponse;
+
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        Some(state.read().await.place_order_semaphore.clone())
+    }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
@@ -244,50 +249,6 @@ impl NashProtocol for MarketOrderRequest {
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.read().await;
-        let mut hooks = Vec::new();
-
-        // If we need assets or markets list, pull them
-        match (&state.assets, &state.markets) {
-            (None, _) | (_, None) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
-                    ListMarketsRequest,
-                )));
-            }
-            _ => {}
-        }
-
-        // If have run out of r values, get more before running this pipeline
-        for chain in Blockchain::all() {
-            // 10 here is too much, but we can use multiple r-values in a single request
-            if state.signer()?.remaining_r_vals(chain) <= 10 {
-                println!("Triggering FillPool (place_order) for {:?}", chain);
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
-                    DhFillPoolRequest::new(chain)?,
-                )));
-            }
-        }
-
-        // Retrieve asset nonces if we don't have them or an error triggered need to refresh
-        match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
-            (None, _) | (_, true) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                    AssetNoncesRequest::new(),
-                )));
-            }
-            _ => {}
-        }
-
-        // If have run out of orders... (temp setting conservatively)
-        if !state.dont_sign_states && state.remaining_orders == 20 {
-            println!("Triggering SignAllStates");
-            // Need to sign states
-            hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
-            // After signing states, need to update nonces again
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                AssetNoncesRequest::new(),
-            )));
-        }
-
-        Ok(Some(hooks))
+        get_required_hooks(&state).map(Some)
     }
 }

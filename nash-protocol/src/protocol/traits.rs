@@ -16,9 +16,9 @@ use std::sync::Arc;
 /// Trait that all Nash protocol elements implement. Enforces transformation to GraphQL as well
 /// as state changes on response processing.
 #[async_trait]
-pub trait NashProtocol: Debug + Sync {
+pub trait NashProtocol: Debug + Send + Sync {
     type Response: Send + Sync;
-    /// If you want limit the amount of concurrency of a protocol return a Semaphore here
+    /// If you want to limit the amount of concurrency of a protocol return a Semaphore here
     async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
         None
     }
@@ -57,13 +57,13 @@ pub trait NashProtocol: Debug + Sync {
 /// Trait to abstract over a series of linked protocol requests. For example we use this
 /// to abstract over repeated calls to sign_state until there are no more states to sign.
 #[async_trait]
-pub trait NashProtocolPipeline: Debug {
+pub trait NashProtocolPipeline: Debug + Send {
     /// State managed by pipeline and used to hold intermediate results and allow
     /// the implementer to decide whether the pipeline is over
-    type PipelineState;
+    type PipelineState: Send + Sync;
     /// Wrapper type for all actions this pipeline can take
     type ActionType: NashProtocol;
-    /// If you want limit the amount of concurrency of a pipeline return a Semaphore here
+    /// If you want to limit the amount of concurrency of a pipeline return a Semaphore here
     async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
         None
     }
@@ -109,7 +109,10 @@ where
 {
     type PipelineState = Option<ResponseOrError<T::Response>>;
     type ActionType = T;
-
+    // Here we just delegate this to underlying protocol request
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        self.get_semaphore(state).await
+    }
     // This begins as `None` but will be set to a wrapped T::Response
     async fn init_state(&self, _state: Arc<RwLock<State>>) -> Self::PipelineState {
         None
@@ -147,13 +150,13 @@ where
             ))
         }
     }
-    // Any other requests or piplelines to run before this one. Here we just
-    // delegate this to underlying protocol request
+    // Any other requests or pipelines to run before this one.
+    // Here we just delegate this to underlying protocol request
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         self.run_before(state).await
     }
-    // Any other requests or piplelines to run afer this one. Here we just
-    // delegate this to underlying protocol request
+    // Any other requests or pipelines to run after this one.
+    // Here we just delegate this to underlying protocol request
     async fn run_after(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         self.run_after(state).await
     }

@@ -20,6 +20,7 @@ rust_gmp = ["nash-protocol/rust_gmp"]
 num_bigint = ["nash-protocol/num_bigint"]
 
 [dependencies]
+async-recursion = "0.3"
 nash-protocol = { version = "^0.1.21", path = "../nash-protocol", default-features = false }
 tokio = { version = "0.3", features = ["full"] }
 tokio-native-tls = { version = "0.2" }

@@ -269,7 +269,7 @@ impl Environment {
 }
 
 // FIXME
-async fn manage_client_error(state: Arc<Mutex<State>>) {
+pub async fn manage_client_error(state: Arc<Mutex<State>>) {
     let mut state = state.lock().await;
     // quick fix, on any client error trigger an asset nonces refresh
     // in future, next step would be to destructure the error recieved from ME
@@ -284,8 +284,10 @@ pub struct InnerClient {
     last_message_id: Mutex<u64>,
     client_id: u64,
     message_broker: MessageBroker,
-    state: Arc<Mutex<State>>,
-    timeout: Duration,
+    pub(crate) state: Arc<Mutex<State>>,
+    pub(crate) timeout: Duration,
+    pub(crate) env: Environment,
+    pub(crate) session: Option<String>,
     global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
 }
 
@@ -374,6 +376,8 @@ impl InnerClient {
         // start a heartbeat loop
         spawn_heartbeat_loop(timeout, client_id, ws_outgoing_sender.clone());
 
+        let session = state.signer.as_ref().map(|signer| signer.api_keys.session_id.clone());
+
         let client = Self {
             ws_outgoing_sender: ws_outgoing_sender.clone(),
             ws_disconnect_sender,
@@ -382,7 +386,9 @@ impl InnerClient {
             message_broker,
             state: Arc::new(Mutex::new(state)),
             timeout,
-            global_subscription_sender
+            global_subscription_sender,
+            env,
+            session
         };
 
         // grab market data upon initial setup

@@ -16,7 +16,6 @@ impl InnerClient {
         // Do simple request/response...
         let http_client = reqwest::Client::new();
         let url = format!("https://{}/api/graphql", self.env.url());
-        println!("{:?}", url);
         let mut request = http_client.post(&url)
             .json(&request);
         if let Some(session) = self.session.as_ref() {
@@ -26,9 +25,6 @@ impl InnerClient {
         let response = request
             .send()
             .await;
-
-        println!("{:?}", response);
-
         response
             .map_err(|_| ProtocolError("Failed request"))?
             .json()
@@ -169,7 +165,7 @@ mod test {
         let share_client = Arc::new(client);
         async fn make_cancel_order(client: Arc<InnerClient>, i: u64) {
             println!("started loop {}", i);
-            let req = client.run(CancelAllOrders{market: "eth_usdc".to_string()}).await;
+            let req = client.run_http(CancelAllOrders{market: "eth_usdc".to_string()}).await;
             if !req.is_err() {
                 println!("finished cancel_order {}", i); 
             } else {

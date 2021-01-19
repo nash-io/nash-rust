@@ -33,7 +33,7 @@ pub struct State {
     pub affiliate_code: Option<String>, // FIXME: move r-pool from global indexmap here
     pub assets_nonces_refresh: bool,
     pub state_sign_refresh: bool, // TODO, not 100% we need this
-    pub dont_sign_states: bool // flag only for market maker users
+    pub dont_sign_states: bool, // flag only for market maker users
 
     pub place_order_semaphore: Arc<tokio::sync::Semaphore>,
     pub sign_all_states_semaphore: Arc<tokio::sync::Semaphore>,

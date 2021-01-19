@@ -1,6 +1,6 @@
 [package]
 name = "nash-native-client"
-version = "0.1.17-alpha.0"
+version = "0.1.16"
 authors = ["Ethan Fast <ethan@nash.io>", "Danilo Guanabara <danilo@nash.io"]
 edition = "2018"
 license = "MIT"
@@ -20,6 +20,7 @@ rust_gmp = ["nash-protocol/rust_gmp"]
 num_bigint = ["nash-protocol/num_bigint"]
 
 [dependencies]
+rand = "0.8"
 async-recursion = "0.3"
 nash-protocol = { version = "^0.1.21", path = "../nash-protocol", default-features = false }
 tokio = { version = "0.3", features = ["full"] }

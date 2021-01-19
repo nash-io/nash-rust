@@ -21,6 +21,7 @@ use nash_protocol::protocol::{
 };
 
 use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheWSResponse};
+use rand::Rng;
 
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
@@ -74,20 +75,20 @@ pub fn spawn_sender_loop(
                             // If sending fails, pass error through broker and global channel
                             match websocket.send(Message::Text(request_raw)).await {
                                 Ok(_) => {
-                                    trace!(id = ?request.message_id(), "WS-SEND success");
+                                    trace!(id = ?request.message_id(), "SEND");
                                 }
                                 Err(e) => {
-                                    error!(error = %e, "WS-SEND channel error");
+                                    error!(error = %e, "SEND channel error");
                                     let error = ProtocolError("failed to send message on WS connection, likely disconnected");
                                     let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                                     break;
                                 }
                             }
                         } else {
-                            error!(request = ?request, "WS-SEND invalid request");
+                            error!(request = ?request, "SEND invalid request");
                         }
                     } else {
-                        error!("WS-SEND channel errored");
+                        error!("SEND channel error");
                         let error = ProtocolError("outgoing channel died or errored, likely disconnected");
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
@@ -107,23 +108,23 @@ pub fn spawn_sender_loop(
                                 }));
                             match response {
                                 Ok(response) => {
-                                    trace!(id = ?response.message_id(), "WS-RECV success");
+                                    trace!(id = ?response.message_id(), "RECV success");
                                     let _ = message_broker_link.send(BrokerAction::Message(Ok(response)));
                                 },
                                 Err(e) => {
-                                    error!(error = %e, "WS-RECV invalid response message");
+                                    error!(error = %e, "RECV invalid response message");
                                     let _ = message_broker_link.send(BrokerAction::Message(Err(e)));
                                     break;
                                 }
                             }
                         } else {
-                            error!("WS-RECV channel errored");
+                            error!("RECV channel error");
                             let error = ProtocolError("incoming channel died or errored, likely disconnected");
                             let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                             break;
                         }
                     } else {
-                        error!("WS-RECV timed out");
+                        error!("RECV timed out");
                         let error = ProtocolError("incoming WS timed out, likely disconnected");
                         let _ = message_broker_link.send(BrokerAction::Message(Err(error)));
                         break;
@@ -131,8 +132,8 @@ pub fn spawn_sender_loop(
                 }
             };
         }
-        let error =
-            ProtocolError("Disconnected.");
+        error!("DISCONNECT");
+        let error = ProtocolError("Disconnected.");
         message_broker_link.send(BrokerAction::Message(Err(error))).ok();
     });
 }
@@ -163,12 +164,12 @@ impl MessageBroker {
                     match next_incoming {
                         // Register a channel to send messages to with given id
                         BrokerAction::RegisterRequest(id, channel, _ready_tx) => {
-                            trace!(%id, "BROKER registering request");
+                            trace!(%id, "BROKER request");
                             request_map.insert(id, channel);
                             //ready_tx.send(true);
                         }
                         BrokerAction::RegisterSubscription(id, channel) => {
-                            trace!(%id, "BROKER registering subscription");
+                            trace!(%id, "BROKER subscription");
                             subscription_map.insert(id, channel);
                         }
                         // When message comes in, if id is registered with channel, send there
@@ -188,7 +189,7 @@ impl MessageBroker {
                             else if let Some(id) = response.message_id() {
                                 if let Some(channel) = request_map.remove(&id) {
                                     if channel.send(Ok(response)).is_ok() {
-                                        trace!(id, "BROKER dispatched response");
+                                        trace!(id, "BROKER response");
                                     } else {
                                         // Kill process on error
                                         break;
@@ -201,7 +202,7 @@ impl MessageBroker {
                             }
                         }
                         BrokerAction::Message(Err(e)) => {
-                            error!(error = %e, "BROKER propagating channel error");
+                            error!(error = %e, "BROKER channel error");
                             // iterate over all subscription and request channels and propagate error
                             for (_id, channel) in subscription_map.drain() {
                                 let _ = channel.send(Err(e.clone()));
@@ -483,10 +484,34 @@ impl InnerClient {
     /// implement the trait manually. This will optionally run before and after hooks if those are defined for the pipeline
     /// or request (e.g., get asset nonces if they don't exist)
     #[async_recursion]
-    pub async fn run<T: NashProtocolPipeline + Clone + Sync + Send>(
+    pub async fn run<T: NashProtocolPipeline + Clone>(
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
+        async {
+            let response = {
+                if let Some(semaphore) = request.get_semaphore(self.state.clone()).await {
+                    let _permit = semaphore.acquire().await;
+                    self.run_helper(request).await
+                } else {
+                    self.run_helper(request).await
+                }
+            };
+            if let Err(ref e) = response {
+                error!(error = %e, "request error");
+            }
+            response
+        }
+            .instrument(tracing::info_span!("RUN", request = type_name::<T>(), id = %rand::thread_rng().gen::<u32>()))
+            .await
+    }
+
+    /// Does the main work of running a pipeline
+    pub async fn run_helper<T: NashProtocolPipeline + Clone>(
+        &self,
+        request: T,
+    ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
+        trace!("running pre-hooks");
         // First run any dependencies of the request/pipeline
         let before_actions = request.run_before(self.state.clone()).await?;
         if let Some(actions) = before_actions {
@@ -494,6 +519,7 @@ impl InnerClient {
                 self.run(action).await?;
             }
         }
+        trace!("running main pipeline");
         // Now run the pipeline
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline contains more actions for client to take, execute them
@@ -527,9 +553,7 @@ impl InnerClient {
                 break;
             }
         }
-        // Get pipeline output
-        let out = request.output(protocol_state);
-
+        trace!("running post-hooks");
         // Get things to run after the request/pipeline
         let after_actions = request.run_after(self.state.clone()).await?;
         // Now run anything specified for after the pipeline
@@ -538,8 +562,8 @@ impl InnerClient {
                 self.run(action).await?;
             }
         }
-
-        out
+        // Return the pipeline output
+        request.output(protocol_state)
     }
 
     /// Entry point for running Nash protocol subscriptions
@@ -607,9 +631,10 @@ impl InnerClient {
         let (ready_tx, ready_rx) = oneshot::channel();
         let broker_link = self.message_broker.link.clone();
         // register that channel in the broker with our message id
+        trace!(id = %message_id, "attached id");
         broker_link
             .send(BrokerAction::RegisterRequest(
-                message_id, for_broker, ready_tx,
+                message_id, for_broker, ready_tx
             ))
             .map_err(|_| ProtocolError("Could not register request with broker"))?;
         // send the query
@@ -680,8 +705,7 @@ impl Client {
 
     // can be used by market makers to turn off state signing
     pub async fn turn_off_sign_states(&self) {
-        let client = self.inner.lock().await;
-        let mut state = client.state.lock().await;
+        let mut state = self.inner.state.write().await;
         state.dont_sign_states = true;
     }
 
@@ -714,22 +738,11 @@ impl Client {
     }
 
     /// Entry point for Nash protocol requests
-    pub async fn run<T: NashProtocolPipeline + Clone + Sync + Send>(
+    pub async fn run<T: NashProtocolPipeline + Clone>(
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        async {
-            let result = self.inner.run(request).await;
-            if let Err(ref e) = result {
-                error!(error = %e, "request errored");
-            }
-            result
-        }
-        .instrument(tracing::info_span!(
-            "CLIENT RUN",
-            request = type_name::<T>()
-        ))
-        .await
+        self.inner.run(request).await
     }
 
     /// Entry point for running Nash protocol subscriptions

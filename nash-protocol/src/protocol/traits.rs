@@ -57,7 +57,7 @@ pub trait NashProtocol: Debug + Send + Sync {
 /// Trait to abstract over a series of linked protocol requests. For example we use this
 /// to abstract over repeated calls to sign_state until there are no more states to sign.
 #[async_trait]
-pub trait NashProtocolPipeline: Debug + Send {
+pub trait NashProtocolPipeline: Debug + Send + Sync {
     /// State managed by pipeline and used to hold intermediate results and allow
     /// the implementer to decide whether the pipeline is over
     type PipelineState: Send + Sync;

@@ -5,3 +5,4 @@ Cargo.lock
 nash-native-client/test_data/*
 .idea
 .env
+nash-native-client/.env*

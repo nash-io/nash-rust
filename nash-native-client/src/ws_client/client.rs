@@ -323,7 +323,7 @@ impl Environment {
 }
 
 // FIXME
-async fn manage_client_error(state: Arc<RwLock<State>>) {
+pub async fn manage_client_error(state: Arc<RwLock<State>>) {
     let mut state = state.write().await;
     // quick fix, on any client error trigger an asset nonces refresh
     // in future, next step would be to destructure the error recieved from ME
@@ -335,13 +335,14 @@ async fn manage_client_error(state: Arc<RwLock<State>>) {
 pub struct InnerClient {
     ws_outgoing_sender: mpsc::UnboundedSender<(AbsintheWSRequest, Option<oneshot::Receiver<bool>>)>,
     ws_disconnect_sender: mpsc::UnboundedSender<()>,
-    next_message_id: Arc<AtomicU64>,
+    global_subscription_sender: UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
     client_id: u64,
+    next_message_id: Arc<AtomicU64>,
     message_broker: MessageBroker,
-    state: Arc<RwLock<State>>,
-    timeout: Duration,
-    global_subscription_sender:
-        mpsc::UnboundedSender<Result<ResponseOrError<SubscriptionResponse>>>,
+    pub(crate) state: Arc<RwLock<State>>,
+    pub(crate) timeout: Duration,
+    pub(crate) env: Environment,
+    pub(crate) session: Option<String>,
 }
 
 impl InnerClient {
@@ -436,15 +437,19 @@ impl InnerClient {
         // start a heartbeat loop
         spawn_heartbeat_loop(timeout, client_id, ws_outgoing_sender.clone());
 
+        let session = state.signer.as_ref().map(|signer| signer.api_keys.session_id.clone());
+
         let client = Self {
             ws_outgoing_sender,
             ws_disconnect_sender,
-            next_message_id: Arc::new(AtomicU64::new(message_id + 1)),
+            global_subscription_sender,
             client_id,
+            next_message_id: Arc::new(AtomicU64::new(message_id + 1)),
             message_broker,
             state: Arc::new(RwLock::new(state)),
             timeout,
-            global_subscription_sender,
+            env,
+            session
         };
 
         // grab market data upon initial setup

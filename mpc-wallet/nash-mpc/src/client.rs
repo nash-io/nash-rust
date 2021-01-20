@@ -283,7 +283,6 @@ pub fn fill_rpool_secp256r1(
     other_dh_publics: &[Secp256r1Point],
     paillier_pk: &EncryptionKey,
 ) -> Result<(), ()> {
-    println!("Begin fill_rpool_secp256r1");
     if own_dh_secrets.len() != other_dh_publics.len() {
         return Err(());
     }
@@ -311,9 +310,7 @@ pub fn fill_rpool_secp256r1(
     for i in &mut own_dh_secrets {
         i.zeroize();
     }
-    println!("- fill_pool_paillier");
     fill_pool_paillier(own_dh_secrets.len(), paillier_pk);
-    println!("End fill_rpool_secp256r1");
     Ok(())
 }
 
@@ -323,7 +320,6 @@ pub fn fill_rpool_secp256k1(
     other_dh_publics: &[Secp256k1Point],
     paillier_pk: &EncryptionKey,
 ) -> Result<(), ()> {
-    println!("Begin fill_rpool_secp256k1");
     if own_dh_secrets.len() != other_dh_publics.len() {
         return Err(());
     }
@@ -351,9 +347,7 @@ pub fn fill_rpool_secp256k1(
     for i in &mut own_dh_secrets {
         i.zeroize();
     }
-    println!("- fill_pool_paillier");
     fill_pool_paillier(own_dh_secrets.len(), paillier_pk);
-    println!("End fill_rpool_secp256k1");
     Ok(())
 }
 

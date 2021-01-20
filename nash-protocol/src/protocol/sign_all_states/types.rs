@@ -12,6 +12,7 @@ use crate::types::Blockchain;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 use std::sync::Arc;
+use tracing::trace;
 
 /// Request to initiate pipeline for signing all states
 #[derive(Clone, Debug)]
@@ -105,7 +106,7 @@ impl NashProtocolPipeline for SignAllStates {
 
         for chain in Blockchain::all() {
             if state.signer()?.remaining_r_vals(chain) <= 10 {
-                println!("Triggering FillPool (sign_all_states) for {:?}, {} remaining R values", chain, state.signer()?.remaining_r_vals(chain));
+                trace!("Triggering FillPool (sign_all_states) for {:?}, {} remaining R values", chain, state.signer()?.remaining_r_vals(chain));
                 hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
                     DhFillPoolRequest::new(chain)?,
                 )))

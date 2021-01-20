@@ -18,6 +18,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
 use std::sync::Arc;
+use tracing::trace;
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
@@ -129,7 +130,7 @@ fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
     for chain in Blockchain::all() {
         // 10 here is too much, but we can use multiple r-values in a single request
         if state.signer()?.remaining_r_vals(chain) <= 10 {
-            println!("Triggering FillPool (place_order) for {:?}", chain);
+            trace!("Triggering FillPool (place_order) for {:?}", chain);
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
                 DhFillPoolRequest::new(chain)?,
             )));

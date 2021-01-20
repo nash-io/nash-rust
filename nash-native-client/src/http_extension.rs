@@ -102,7 +102,7 @@ impl InnerClient {
             response
         }
         .instrument(tracing::info_span!(
-                "RUN (ws)",
+                "RUN (http)",
                 request = type_name::<T>(),
                 id = %rand::thread_rng().gen::<u32>()))
         .await
@@ -180,38 +180,5 @@ impl Client {
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
         self.inner.run_http(request).await
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::sync::Arc;
-
-    use dotenv::dotenv;
-    use tokio::time::Duration;
-
-    use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
-    use nash_protocol::protocol::list_markets::ListMarketsRequest;
-    use nash_protocol::protocol::sign_all_states::SignAllStates;
-
-    use crate::Environment;
-
-    use super::super::ws_client::client::{Environment, InnerClient};
-
-    async fn init_client() -> InnerClient {
-        dotenv().ok();
-        let secret = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
-        let session = std::env::var("NASH_API_KEY").expect("Couldn't get environment variable.");
-        let (client, _) = InnerClient::from_key_data(
-            &secret,
-            &session,
-            None,
-            0,
-            Environment::Production,
-            Duration::from_secs_f32(2.0),
-        )
-        .await
-        .unwrap();
-        client
     }
 }

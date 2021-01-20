@@ -22,6 +22,7 @@ num_bigint = ["nash-protocol/num_bigint"]
 [dependencies]
 rand = "0.8"
 async-recursion = "0.3"
+async-trait = "0.1"
 nash-protocol = { version = "^0.1.21", path = "../nash-protocol", default-features = false }
 tokio = { version = "0.3", features = ["full"] }
 tokio-native-tls = { version = "0.2" }

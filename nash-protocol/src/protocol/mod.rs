@@ -31,5 +31,6 @@ mod traits;
 pub use canonical_string::general_canonical_string;
 pub use graphql::*;
 pub use hooks::{NashProtocolRequest, ProtocolHook};
+pub use signer::Signer;
 pub use state::*;
 pub use traits::*;

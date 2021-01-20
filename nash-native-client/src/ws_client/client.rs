@@ -743,7 +743,7 @@ mod tests {
             &session,
             None,
             0,
-            Environment::Production,
+            Environment::Sandbox,
             Duration::from_secs_f32(2.0),
             Some(10)
         )
@@ -1174,14 +1174,27 @@ mod tests {
     #[tokio::test(core_threads = 2)]
     async fn sub_account_balance() {
         let client = init_client().await;
+
         let mut response = client
             .subscribe_protocol(SubscribeAccountBalances {
                 symbol: Some("eth".to_string())
             })
             .await
             .unwrap();
-        let next_item = response.next().await.unwrap().unwrap();
-        println!("{:?}", next_item);
+
+        client
+            .run(LimitOrderRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.01".to_string(),
+                price: "0.001".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            })
+            .await
+            .unwrap();
+
         let next_item = response.next().await.unwrap().unwrap();
         println!("{:?}", next_item);
     }
@@ -1189,26 +1202,62 @@ mod tests {
     #[tokio::test(core_threads = 2)]
     async fn sub_account_orders() {
         let client = init_client().await;
-        let mut response = client
+
+        let mut stream = client
             .subscribe_protocol(SubscribeAccountOrders {
-                market: Some("eth_usdc".to_string())
+                market: Some("eth_btc".to_string())
             })
             .await
             .unwrap();
-        let next_item = response.next().await.unwrap().unwrap();
+
+        client
+            .run(LimitOrderRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.1".to_string(),
+                price: "0.001".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            })
+            .await
+            .unwrap();
+
+        client
+            .run(CancelAllOrders {
+                market: "eth_btc".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let next_item = stream.next().await.unwrap().unwrap();
         println!("{:?}", next_item);
     }
 
     #[tokio::test(core_threads = 2)]
     async fn sub_account_trades() {
         let client = init_client().await;
-        let mut response = client
+        let mut stream = client
             .subscribe_protocol(SubscribeAccountTrades {
-                market_name: "eth_usdc".to_string()
+                market_name: "eth_btc".to_string()
             })
             .await
             .unwrap();
-        let next_item = response.next().await.unwrap().unwrap();
+
+        client
+            .run(LimitOrderRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.1".to_string(),
+                price: "0.001".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            })
+            .await
+            .unwrap();
+
+        let next_item = stream.next().await.unwrap().unwrap();
         println!("{:?}", next_item);
     }
 

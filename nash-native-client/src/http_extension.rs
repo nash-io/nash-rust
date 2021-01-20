@@ -214,42 +214,4 @@ mod test {
         .unwrap();
         client
     }
-
-    #[tokio::test(core_threads = 2)]
-    async fn cancel_all_http() {
-        let client = init_client().await;
-        let response = client
-            .run_http(CancelAllOrders {
-                market: "eth_usdc".to_string(),
-            })
-            .await;
-        // let response = client.run_http(ListMarketsRequest).await;
-        println!("{:?}", response);
-    }
-
-    #[tokio::test(core_threads = 2)]
-    async fn multiple_concurrent_requests() {
-        let client = init_client().await;
-        let share_client = Arc::new(client);
-        async fn make_cancel_order(client: Arc<InnerClient>, i: u64) {
-            println!("started loop {}", i);
-            let req = client
-                .run_http(CancelAllOrders {
-                    market: "eth_usdc".to_string(),
-                })
-                .await;
-            if !req.is_err() {
-                println!("finished cancel_order {}", i);
-            } else {
-                println!("error cancel_order {}", i);
-            }
-        }
-        let mut handles = Vec::new();
-        let mut count = 0;
-        for _ in 0..10 {
-            handles.push(tokio::spawn(make_cancel_order(share_client.clone(), count)));
-            count += 1;
-        }
-        futures::future::join_all(handles).await;
-    }
 }

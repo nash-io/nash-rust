@@ -36,30 +36,66 @@ async fn init_client() -> Client {
     dotenv().ok();
     let secret = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
     let session = std::env::var("NASH_API_KEY").expect("Couldn't get environment variable.");
-    Client::from_key_data(
+    Client::from_keys(
         &secret,
         &session,
         None,
         0,
         Environment::Production,
-        Duration::from_secs_f32(60.0),
-        None,
+        Duration::from_secs_f32(5.0),
     )
         .await
         .unwrap()
 }
 
 async fn init_sandbox_client() -> Client {
-    Client::new(
+    Client::from_keys_path(
         None,
         0,
         None,
         Environment::Sandbox,
         Duration::from_secs_f32(5.0),
-        None,
     )
         .await
         .unwrap()
+}
+
+#[tokio::test(core_threads = 2)]
+async fn cancel_all_http() {
+    let client = init_client().await;
+    let response = client
+        .run_http(CancelAllOrders {
+            market: "eth_usdc".to_string(),
+        })
+        .await;
+    // let response = client.run_http(ListMarketsRequest).await;
+    println!("{:?}", response);
+}
+
+#[tokio::test(core_threads = 2)]
+async fn multiple_concurrent_requests_http() {
+    let client = init_client().await;
+    let share_client = Arc::new(client);
+    async fn make_cancel_order(client: Arc<InnerClient>, i: u64) {
+        println!("started loop {}", i);
+        let req = client
+            .run_http(CancelAllOrders {
+                market: "eth_usdc".to_string(),
+            })
+            .await;
+        if !req.is_err() {
+            println!("finished cancel_order {}", i);
+        } else {
+            println!("error cancel_order {}", i);
+        }
+    }
+    let mut handles = Vec::new();
+    let mut count = 0;
+    for _ in 0..10 {
+        handles.push(tokio::spawn(make_cancel_order(share_client.clone(), count)));
+        count += 1;
+    }
+    futures::future::join_all(handles).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

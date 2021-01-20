@@ -197,7 +197,7 @@ impl NashProtocol for LimitOrderRequest {
         }
 
         // If we are about to out of orders...
-        if state.remaining_orders < 20 {
+        if !state.dont_sign_states && state.remaining_orders < 20 {
             // Need to sign states
             hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
             // After signing states, need to update nonces again
@@ -284,7 +284,7 @@ impl NashProtocol for MarketOrderRequest {
         }
 
         // If have run out of orders... (temp setting conservatively)
-        if state.remaining_orders == 20 {
+        if !state.dont_sign_states && state.remaining_orders == 20 {
             // Need to sign states
             hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
             // After signing states, need to update nonces again

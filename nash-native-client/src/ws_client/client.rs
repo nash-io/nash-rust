@@ -67,10 +67,12 @@ pub fn spawn_sender_loop(
     tokio::spawn(async move {
         // The idea is that try_recv will only work when it receives a disconnect signal
         // This is a bit ugly imo and we should probably change in the future
-        while ws_disconnect_receiver.try_recv().is_err() {
+        while ws_disconnect_receiver.recv().now_or_never().is_none() {
             // let ready_map = HashMap::new();
-            let next_outgoing = ws_outgoing_receiver.recv().boxed();
+            let next_outgoing = ws_outgoing_receiver.recv();
+            tokio::pin!(next_outgoing);
             let next_incoming = tokio::time::timeout(timeout_duration, websocket.next());
+            tokio::pin!(next_incoming);
             match select(next_outgoing, next_incoming).await {
                 Either::Left((outgoing, _)) => {
                     if let Some((request, _ready_rx)) = outgoing {
@@ -160,7 +162,7 @@ fn global_subscription_loop<T: NashProtocolSubscription + Send + Sync + 'static>
 ) {
     tokio::spawn(async move {
         loop {
-            let response = callback_channel.next().await;
+            let response = callback_channel.recv().await;
             // is there a valid incoming payload?
             match response {
                 Some(Ok(response)) => {
@@ -252,7 +254,7 @@ impl MessageBroker {
             let mut request_map = HashMap::new();
             let mut subscription_map = HashMap::new();
             loop {
-                if let Some(next_incoming) = internal_receiver.next().await {
+                if let Some(next_incoming) = internal_receiver.recv().await {
                     match next_incoming {
                         // Register a channel to send messages to with given id
                         BrokerAction::RegisterRequest(id, channel, _ready_tx) => {

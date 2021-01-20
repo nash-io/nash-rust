@@ -1,6 +1,6 @@
 use std::{pin::Pin, task::Context, task::Poll};
 
-use futures::{stream::Stream, StreamExt};
+use futures::stream::Stream;
 
 use nash_protocol::errors::Result;
 use nash_protocol::protocol::subscriptions::SubscriptionResponse;
@@ -12,6 +12,6 @@ impl Stream for Client {
     type Item = Result<ResponseOrError<SubscriptionResponse>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.global_subscription_receiver.poll_next_unpin(cx)
+        self.global_subscription_receiver.poll_recv(cx)
     }
 }

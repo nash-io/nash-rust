@@ -70,8 +70,8 @@ pub fn spawn_sender_loop(
         while ws_disconnect_receiver.recv().now_or_never().is_none() {
             // let ready_map = HashMap::new();
             let next_outgoing = ws_outgoing_receiver.recv();
-            tokio::pin!(next_outgoing);
             let next_incoming = tokio::time::timeout(timeout_duration, websocket.next());
+            tokio::pin!(next_outgoing);
             tokio::pin!(next_incoming);
             match select(next_outgoing, next_incoming).await {
                 Either::Left((outgoing, _)) => {
@@ -338,7 +338,7 @@ impl WsClientState {
 pub struct InnerClient {
     pub(crate) ws_state: WsClientState,
     pub(crate) http_state: HttpClientState,
-    pub(crate) state: Arc<RwLock<State>>,
+    pub state: Arc<RwLock<State>>,
 }
 
 impl InnerClient {
@@ -628,7 +628,7 @@ impl InnerClient {
 }
 
 pub struct Client {
-    pub(crate) inner: Arc<InnerClient>,
+    pub inner: Arc<InnerClient>,
     pub(crate) global_subscription_receiver:
         mpsc::UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
 }

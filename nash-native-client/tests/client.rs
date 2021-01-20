@@ -1,10 +1,13 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::offset::TimeZone;
 use chrono::Utc;
 use dotenv::dotenv;
-use futures_util::StreamExt;
 use tokio::time::Duration;
 
+use nash_native_client::{Client, Environment};
 use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
 use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
 use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -25,12 +28,6 @@ use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderboo
 use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
-
-use super::{Arc, Client, Environment, HashMap};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use nash_native_client::{Client, Environment, WsPipelineExecutor};
-use std::sync::Arc;
-use std::collections::HashMap;
 
 async fn init_client() -> Client {
     dotenv().ok();
@@ -60,7 +57,7 @@ async fn init_sandbox_client() -> Client {
         .unwrap()
 }
 
-#[tokio::test(core_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cancel_all_http() {
     let client = init_client().await;
     let response = client
@@ -72,11 +69,10 @@ async fn cancel_all_http() {
     println!("{:?}", response);
 }
 
-#[tokio::test(core_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multiple_concurrent_requests_http() {
-    let client = init_client().await;
-    let share_client = Arc::new(client);
-    async fn make_cancel_order(client: Arc<InnerClient>, i: u64) {
+    let client = Arc::new(init_client().await);
+    async fn make_cancel_order(client: Arc<Client>, i: u64) {
         println!("started loop {}", i);
         let req = client
             .run_http(CancelAllOrders {
@@ -92,7 +88,7 @@ async fn multiple_concurrent_requests_http() {
     let mut handles = Vec::new();
     let mut count = 0;
     for _ in 0..10 {
-        handles.push(tokio::spawn(make_cancel_order(share_client.clone(), count)));
+        handles.push(tokio::spawn(make_cancel_order(client.clone(), count)));
         count += 1;
     }
     futures::future::join_all(handles).await;
@@ -111,7 +107,7 @@ async fn two_loops_concurrent_request() {
     let mut handles = Vec::new();
     for i in 0..100 {
         let client_1 = client.clone();
-        let mut counter_1 = counter.clone();
+        let counter_1 = counter.clone();
         handles.push(tokio::spawn(async move {
             let req = client_1
                 .run(ListAccountOrdersRequest {
@@ -136,7 +132,7 @@ async fn two_loops_concurrent_request() {
             }
         }));
         let client_2 = client.clone();
-        let mut counter_2 = counter.clone();
+        let counter_2 = counter.clone();
         handles.push(tokio::spawn(async move {
             let req = client_2
                 .run(ListAccountTradesRequest {
@@ -534,9 +530,9 @@ fn end_to_end_sub_orderbook() {
             })
             .await
             .unwrap();
-        let next_item = response.next().await.unwrap().unwrap();
+        let next_item = response.recv().await.unwrap().unwrap();
         println!("{:?}", next_item);
-        let next_item = response.next().await.unwrap().unwrap();
+        let next_item = response.recv().await.unwrap().unwrap();
         println!("{:?}", next_item);
     };
     runtime.block_on(async_block);
@@ -553,9 +549,9 @@ fn end_to_end_sub_trades() {
             })
             .await
             .unwrap();
-        let next_item = response.next().await.unwrap().unwrap();
+        let next_item = response.recv().await.unwrap().unwrap();
         println!("{:?}", next_item);
-        let next_item = response.next().await.unwrap().unwrap();
+        let next_item = response.recv().await.unwrap().unwrap();
         println!("{:?}", next_item);
     };
     runtime.block_on(async_block);
@@ -602,7 +598,7 @@ fn sub_orderbook_via_client_stream() {
             .await
             .unwrap();
         for _ in 0..10 {
-            let item = response.next().await;
+            let item = response.recv().await;
             println!("{:?}", item.unwrap().unwrap());
         }
     };

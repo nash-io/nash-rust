@@ -10,8 +10,9 @@ use nash_mpc::curves::secp256_k1_rust::Secp256k1Point;
 use nash_mpc::curves::secp256_r1::Secp256r1Point;
 use nash_mpc::curves::traits::ECPoint;
 
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
+use tracing::trace;
 
 impl ServerPublics {
     /// Transform a list of strings provided by Nash server into points on the required
@@ -84,31 +85,37 @@ impl From<dh_fill_pool::ResponseData> for DhFillPoolResponse {
 pub async fn fill_pool(
     request: &DhFillPoolRequest,
     server_publics: ServerPublics,
-    state: Arc<Mutex<State>>,
+    state: Arc<RwLock<State>>,
 ) -> Result<()> {
-    let mut state = state.lock().await;
-    let paillier_pk = state.signer()?.paillier_pk();
+    let state = state.write().await;
+    let paillier_pk = state.signer()?.paillier_pk().clone();
     // FIXME: State should manage the pools
     match request {
         DhFillPoolRequest::Bitcoin(request) | DhFillPoolRequest::Ethereum(request) => {
             let k1_secrets = request.secrets.clone();
             let k1_server_publics = server_publics.publics_for_k1()?;
-            nash_mpc::client::fill_rpool_secp256k1(
-                k1_secrets,
-                &k1_server_publics,
-                paillier_pk,
-            )
-            .map_err(|_| ProtocolError("Error filling k1 pool"))?;
+            trace!("Begin fill_rpool_secp256k1");
+            tokio::task::spawn_blocking(move || {
+
+                nash_mpc::client::fill_rpool_secp256k1(k1_secrets, &k1_server_publics, &paillier_pk)
+                    .map_err(|_| ProtocolError("Error filling k1 pool"))
+
+            })
+            .await
+            .map_err(|_| ProtocolError("Error filling k1 pool"))??;
+            trace!("End fill_rpool_secp256k1");
         }
         DhFillPoolRequest::NEO(request) => {
             let r1_secrets = request.secrets.clone();
             let r1_server_publics = server_publics.publics_for_r1()?;
-            nash_mpc::client::fill_rpool_secp256r1(
-                r1_secrets,
-                &r1_server_publics,
-                paillier_pk,
-            )
-            .map_err(|_| ProtocolError("Error filling r1 pool"))?;
+            trace!("Begin fill_rpool_secp256r1");
+            tokio::task::spawn_blocking(move || {
+                nash_mpc::client::fill_rpool_secp256r1(r1_secrets, &r1_server_publics, &paillier_pk)
+                    .map_err(|_| ProtocolError("Error filling r1 pool"))
+            })
+            .await
+            .map_err(|_| ProtocolError("Error filling r1 pool"))??;
+            trace!("End fill_rpool_secp256r1");
         }
     }
     Ok(())

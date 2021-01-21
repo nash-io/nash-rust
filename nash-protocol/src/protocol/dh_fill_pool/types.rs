@@ -12,7 +12,7 @@ use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// DhFillPool requests coordinate between the user's client and the Nash server to
@@ -100,7 +100,7 @@ pub enum ServerPublics {
 impl NashProtocol for DhFillPoolRequest {
     type Response = DhFillPoolResponse;
     /// Serialize a SignStates protocol request to a GraphQL string
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }
@@ -108,7 +108,7 @@ impl NashProtocol for DhFillPoolRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<DhFillPoolResponse, dh_fill_pool::ResponseData>(response)
     }
@@ -116,13 +116,15 @@ impl NashProtocol for DhFillPoolRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
         let server_publics = ServerPublics::from_hexstrings(self.blockchain(), response)?;
+        println!("trace pool for {:?}", self.blockchain());
         response::fill_pool(self, server_publics, state.clone()).await?;
-        let mut state = state.lock().await;
+        println!("trace pool for {:?}", self.blockchain());
+        let mut state = state.write().await;
         // Update state to indicate we now have 100 new r values
-        state.signer()?.fill_r_vals(self.blockchain(), 100);
+        state.signer_mut()?.fill_r_vals(self.blockchain(), 100);
         Ok(())
     }
 }
@@ -132,13 +134,13 @@ mod tests {
     use super::{Blockchain, DhFillPoolRequest, NashProtocol};
     use crate::protocol::State;
     use futures::executor;
-    use futures::lock::Mutex;
+    use tokio::sync::RwLock;
     use std::sync::Arc;
 
     #[test]
     fn serialize_dh_fill_pool() {
         let state = Arc::new(Mutex::new(
-            State::new(Some("../nash-native-client/test_data/keyfile.json")).unwrap(),
+            State::from_keys_path(Some("../nash-native-client/test_data/keyfile.json")).unwrap(),
         ));
         let async_block = async {
             println!(

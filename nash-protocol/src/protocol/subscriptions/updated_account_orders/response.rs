@@ -8,7 +8,7 @@ use crate::types::{
 use crate::graphql::updated_account_orders;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
@@ -25,7 +25,7 @@ impl SubscribeAccountOrders {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<updated_account_orders::ResponseData>,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<AccountOrdersResponse>> {
         match response {
             ResponseOrError::Response(data) => {

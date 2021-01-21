@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use async_trait::async_trait;
 
 /// List of new incoming trades for a market via subscription.
@@ -21,7 +21,7 @@ pub struct AccountBalancesResponse {
 
 #[async_trait]
 impl TryFromState<updated_account_balances::ResponseData> for HashMap<Asset, BigDecimal> {
-    async fn from(response: updated_account_balances::ResponseData, _state: Arc<Mutex<State>>) -> Result<HashMap<Asset, BigDecimal>> {
+    async fn from(response: updated_account_balances::ResponseData, _state: Arc<RwLock<State>>) -> Result<HashMap<Asset, BigDecimal>> {
         let mut balances = HashMap::new();
         for balance in response.updated_account_balances {
             let symbol = balance.asset.unwrap().symbol;
@@ -39,7 +39,7 @@ impl SubscribeAccountBalances {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<updated_account_balances::ResponseData>,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<AccountBalancesResponse>> {
         Ok(match response {
             ResponseOrError::Response(data) => {

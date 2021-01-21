@@ -6,7 +6,7 @@ use crate::graphql::list_account_balances;
 use crate::types::{Asset};
 use bigdecimal::BigDecimal;
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ pub struct ListAccountBalancesResponse {
 impl NashProtocol for ListAccountBalancesRequest {
     type Response = ListAccountBalancesResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }
@@ -42,7 +42,7 @@ impl NashProtocol for ListAccountBalancesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<ListAccountBalancesResponse, list_account_balances::ResponseData>(
             response,

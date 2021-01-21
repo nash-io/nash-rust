@@ -11,12 +11,12 @@ use std::str::FromStr;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use async_trait::async_trait;
 
 #[async_trait]
 impl TryFromState<list_account_orders::ResponseData> for ListAccountOrdersResponse {
-    async fn from(response: list_account_orders::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListAccountOrdersResponse> {
+    async fn from(response: list_account_orders::ResponseData, _state: Arc<RwLock<State>>) -> Result<ListAccountOrdersResponse> {
         // FIXME (if possible): there is significant duplication of code between here and the response handles for list_account_trades
         // and get_account_order. unfortunately, given the way the graphql_client library works, it is not obvious how to make this
         // response processing generic

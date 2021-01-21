@@ -1,5 +1,8 @@
 //! A client that supports the Nash protocol over websockets
 
-pub mod absinthe;
-pub mod client;
+mod absinthe;
+mod client;
 pub mod stream;
+
+pub use client::Client;
+pub(crate) use client::InnerClient;

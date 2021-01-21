@@ -15,6 +15,7 @@ use std::fmt::Debug;
 
 // TODO: generalize shared fields between request/response
 
+#[derive(Debug)]
 pub struct AbsintheWSRequest {
     // Not 100% what this is, but think in relation to id of joined client
     ref_join_id: Option<AbsintheInt>,
@@ -54,6 +55,9 @@ impl AbsintheWSRequest {
             payload: None,
         }
     }
+    pub fn message_id(&self) -> Option<u64> {
+        self.ref_id.as_ref().map(|x| x.value as u64)
+    }
 }
 
 /// Response has a very similar structure to request. We split them
@@ -81,7 +85,7 @@ impl AbsintheWSResponse {
     }
     pub fn subscription_setup_id(&self) -> Option<String> {
         match &self.payload {
-            Some(ResponsePayload::SubSetup(data)) => Some(data.response.subscription_id.clone()),
+            Some(ResponsePayload::SubscriptionSetup(data)) => Some(data.response.subscription_id.clone()),
             _ => None,
         }
     }
@@ -137,15 +141,16 @@ impl AbsintheInt {
 #[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ResponsePayload {
-    SubSetup(SubscriptionSetupResponse), // for subscription setup
+    SubscriptionSetup(SubscriptionSetupResponse), // for subscription setup
     GraphQL(QueryResponse),
     Subscription(SubscriptionResponse),
 }
 
 impl ResponsePayload {
-    pub fn sub_setup(self) -> ProtocolResult<SubscriptionSetupResponse> {
+    #[allow(dead_code)]
+    pub fn subscription_setup(self) -> ProtocolResult<SubscriptionSetupResponse> {
         match self {
-            Self::SubSetup(data) => Ok(data),
+            Self::SubscriptionSetup(data) => Ok(data),
             _ => Err(ProtocolError("Not a subscription setup response")),
         }
     }

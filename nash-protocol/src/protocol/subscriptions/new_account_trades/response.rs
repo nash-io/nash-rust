@@ -10,7 +10,7 @@ use std::str::FromStr;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use async_trait::async_trait;
 
 /// List of new incoming trades for a market via subscription.
@@ -20,7 +20,7 @@ pub struct AccountTradesResponse {
 }
 #[async_trait]
 impl TryFromState<new_account_trades::ResponseData> for Vec<Trade> {
-    async fn from(response: new_account_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<Vec<Trade>> {
+    async fn from(response: new_account_trades::ResponseData, _state: Arc<RwLock<State>>) -> Result<Vec<Trade>> {
         let mut trades = Vec::new();
         for trade_data in response.new_account_trades {
             let market = trade_data.market.name.clone();
@@ -55,7 +55,7 @@ impl SubscribeAccountTrades {
     pub async fn response_from_graphql(
         &self,
         response: ResponseOrError<new_account_trades::ResponseData>,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<AccountTradesResponse>> {
         Ok(match response {
             ResponseOrError::Response(data) => {

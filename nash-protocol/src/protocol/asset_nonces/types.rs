@@ -8,7 +8,7 @@ use crate::graphql::get_assets_nonces;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// Retrieve asset nonces from Nash server. Asset nonces increment over time with
@@ -30,14 +30,14 @@ pub struct AssetNoncesResponse {
     pub nonces: HashMap<String, Vec<u32>>,
 }
 
-/// Implement protocol bindings for SignStatesRequest
+/// Implement protocol bindings for AssetNoncesRequest
 #[async_trait]
 impl NashProtocol for AssetNoncesRequest {
     type Response = AssetNoncesResponse;
     /// Serialize a SignStates protocol request to a GraphQL string
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
-        let mut state = state.lock().await;
-        // A bit of a hack, but if the client has a list of known assets aquired from
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
+        let state = state.read().await;
+        // A bit of a hack, but if the client has a list of known assets acquired from
         // doing a ListMarkets request, we will extract that and use it in the query.
         // If not, request generation will fail
         let assets = state.assets.clone();
@@ -49,7 +49,7 @@ impl NashProtocol for AssetNoncesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<AssetNoncesResponse, get_assets_nonces::ResponseData>(response)
     }
@@ -57,20 +57,20 @@ impl NashProtocol for AssetNoncesRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
         let mut nonces_map = HashMap::new();
         for (key, value) in &response.nonces {
             nonces_map.insert(key.clone(), value.clone());
         }
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         state.asset_nonces = Some(nonces_map);
         state.assets_nonces_refresh = false; // set to false as we just grabbed nonces
         Ok(())
     }
 
     /// If doing an AssetNonces request, insert a ListMarketsRequest before that to store asset list in client
-    async fn run_before(&self, _state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+    async fn run_before(&self, _state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         Ok(Some(vec![ProtocolHook::Protocol(
             NashProtocolRequest::ListMarkets(ListMarketsRequest),
         )]))

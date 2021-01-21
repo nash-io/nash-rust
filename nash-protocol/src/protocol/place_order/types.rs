@@ -16,8 +16,9 @@ use crate::types::{
 use crate::utils::current_time_as_i64;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
+use tracing::trace;
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
@@ -60,8 +61,6 @@ impl LimitOrderRequest {
         })
     }
 }
-
-
 
 impl MarketOrderRequest {
     pub fn new(
@@ -124,22 +123,68 @@ pub struct PlaceOrderResponse {
     pub market_name: String,
 }
 
+fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
+    let mut hooks = Vec::new();
+    // If we need assets or markets list, pull them
+    match (&state.assets, &state.markets) {
+        (None, _) | (_, None) => {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
+                ListMarketsRequest,
+            )));
+        }
+        _ => {}
+    }
+    // If have run out of r values, get more before running this pipeline
+    for chain in Blockchain::all() {
+        // 10 here is too much, but we can use multiple r-values in a single request
+        if state.signer()?.remaining_r_vals(chain) <= 10 {
+            trace!("Triggering FillPool (place_order) for {:?}", chain);
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
+                DhFillPoolRequest::new(chain)?,
+            )));
+        }
+    }
+    // Retrieve asset nonces if we don't have them or an error triggered need to refresh
+    match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
+        (None, _) | (_, true) => {
+            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
+                AssetNoncesRequest::new(),
+            )));
+        }
+        _ => {}
+    }
+    // If we are about to run out of orders...
+    if !state.dont_sign_states && state.remaining_orders < 20 {
+        // Need to sign states
+        hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
+        // After signing states, need to update nonces again
+        hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
+            AssetNoncesRequest::new(),
+        )));
+    }
+    Ok(hooks)
+}
+
 #[async_trait]
 impl NashProtocol for LimitOrderRequest {
     type Response = PlaceOrderResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        Some(state.read().await.place_order_semaphore.clone())
+    }
+
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         // TODO: move this to process response, and incorporate error into process response
         // would be much cleaner
         if state.remaining_orders > 0 {
             state.remaining_orders -= 1;
         }
         let affiliate = state.affiliate_code.clone();
-        let signer = state.signer()?;
+        let signer = state.signer_mut()?;
         let query = builder.signed_graphql_request(nonces, time, affiliate, signer)?;
         serializable_to_json(&query)
     }
@@ -147,7 +192,7 @@ impl NashProtocol for LimitOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_limit_order::ResponseData>(response)
     }
@@ -155,58 +200,16 @@ impl NashProtocol for LimitOrderRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         state.remaining_orders = response.remaining_orders;
         Ok(())
     }
     /// Potentially get more r values or sign states before placing an order
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let mut state = state.lock().await;
-        let mut hooks = Vec::new();
-
-        // If we need assets or markets list, pull them
-        match (&state.assets, &state.markets) {
-            (None, _) | (_, None) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
-                    ListMarketsRequest,
-                )));
-            }
-            _ => {}
-        }
-
-        // If have run out of r values, get more before running this pipeline
-        for chain in Blockchain::all() {
-            // 10 here is too much, but we can use multiple r-values in a single request
-            if state.signer()?.remaining_r_vals(chain) <= 10 {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
-                    DhFillPoolRequest::new(chain)?,
-                )));
-            }
-        }
-
-        // Retrieve asset nonces if we don't have them or an error triggered need to refresh
-        match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
-            (None, _) | (_, true) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                    AssetNoncesRequest::new(),
-                )));
-            }
-            _ => {}
-        }
-
-        // If we are about to out of orders...
-        if !state.dont_sign_states && state.remaining_orders < 20 {
-            // Need to sign states
-            hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
-            // After signing states, need to update nonces again
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                AssetNoncesRequest::new(),
-            )));
-        }
-
-        Ok(Some(hooks))
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
+        get_required_hooks(&state).map(Some)
     }
 }
 
@@ -215,18 +218,22 @@ impl NashProtocol for LimitOrderRequest {
 impl NashProtocol for MarketOrderRequest {
     type Response = PlaceOrderResponse;
 
-    async fn graphql(&self, state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+        Some(state.read().await.place_order_semaphore.clone())
+    }
+
+    async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         // TODO: move this to process response, and incorporate error into process response
         // would be much cleaner
         if state.remaining_orders > 0 {
             state.remaining_orders -= 1;
         }
         let affiliate = state.affiliate_code.clone();
-        let signer = state.signer()?;
+        let signer = state.signer_mut()?;
         let query = builder.signed_graphql_request(nonces, time, affiliate, signer)?;
         serializable_to_json(&query)
     }
@@ -234,7 +241,7 @@ impl NashProtocol for MarketOrderRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_market_order::ResponseData>(response)
     }
@@ -242,57 +249,15 @@ impl NashProtocol for MarketOrderRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         state.remaining_orders = response.remaining_orders;
         Ok(())
     }
     /// Potentially get more r values or sign states before placing an order
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let mut state = state.lock().await;
-        let mut hooks = Vec::new();
-
-        // If we need assets or markets list, pull them
-        match (&state.assets, &state.markets) {
-            (None, _) | (_, None) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
-                    ListMarketsRequest,
-                )));
-            }
-            _ => {}
-        }
-
-        // If have run out of r values, get more before running this pipeline
-        for chain in Blockchain::all() {
-            // 10 here is too much, but we can use multiple r-values in a single request
-            if state.signer()?.remaining_r_vals(chain) <= 10 {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
-                    DhFillPoolRequest::new(chain)?,
-                )));
-            }
-        }
-
-        // Retrieve asset nonces if we don't have them or an error triggered need to refresh
-        match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
-            (None, _) | (_, true) => {
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                    AssetNoncesRequest::new(),
-                )));
-            }
-            _ => {}
-        }
-
-        // If have run out of orders... (temp setting conservatively)
-        if !state.dont_sign_states && state.remaining_orders == 20 {
-            // Need to sign states
-            hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
-            // After signing states, need to update nonces again
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::AssetNonces(
-                AssetNoncesRequest::new(),
-            )));
-        }
-
-        Ok(Some(hooks))
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
+        get_required_hooks(&state).map(Some)
     }
 }

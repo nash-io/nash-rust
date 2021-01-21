@@ -10,12 +10,12 @@ use chrono::{DateTime, Utc};
 use std::str::FromStr;
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use async_trait::async_trait;
 
 #[async_trait]
 impl TryFromState<get_account_order::ResponseData> for GetAccountOrderResponse {
-    async fn from(response: get_account_order::ResponseData, _state: Arc<Mutex<State>>) -> Result<GetAccountOrderResponse> {
+    async fn from(response: get_account_order::ResponseData, _state: Arc<RwLock<State>>) -> Result<GetAccountOrderResponse> {
         let order_data = response.get_account_order;
         let market = order_data.market.name.clone();
         let amount_placed = BigDecimal::from_str(&order_data.amount.amount)?;

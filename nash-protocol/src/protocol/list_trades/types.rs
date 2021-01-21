@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use crate::errors::Result;
 use crate::graphql::list_trades;
 use crate::types::Trade;
@@ -31,7 +31,7 @@ pub struct ListTradesResponse {
 impl NashProtocol for ListTradesRequest {
     type Response = ListTradesResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }
@@ -39,13 +39,13 @@ impl NashProtocol for ListTradesRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_with_state_from_json::<ListTradesResponse, list_trades::ResponseData>(response, state).await
     }
 
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
         let mut hooks = Vec::new();
         if let None = state.markets {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(

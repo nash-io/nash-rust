@@ -8,12 +8,12 @@ use bigdecimal::BigDecimal;
 use crate::protocol::traits::TryFromState;
 use crate::protocol::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use async_trait::async_trait;
 
 #[async_trait]
 impl TryFromState<list_account_trades::ResponseData> for ListAccountTradesResponse {
-    async fn from(response: list_account_trades::ResponseData, _state: Arc<Mutex<State>>) -> Result<ListAccountTradesResponse> {
+    async fn from(response: list_account_trades::ResponseData, _state: Arc<RwLock<State>>) -> Result<ListAccountTradesResponse> {
         let mut trades = Vec::new();
         for trade_data in response.list_account_trades.trades {
             let market = trade_data.market.name.clone();

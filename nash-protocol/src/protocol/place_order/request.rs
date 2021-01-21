@@ -20,7 +20,7 @@ use super::types::{
     PayloadNonces
 };
 
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 type LimitOrderMutation = graphql_client::QueryBody<place_limit_order::Variables>;
@@ -31,9 +31,8 @@ type MarketBlockchainSignatures = Vec<Option<place_market_order::BlockchainSigna
 impl LimitOrderRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
     // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<LimitOrderConstructor> {
-
-        let state = state.lock().await;
+    pub async fn make_constructor(&self, state: Arc<RwLock<State>>) -> Result<LimitOrderConstructor> {
+        let state = state.read().await;
         let market = state.get_market(&self.market)?;
 
         // Amount of order always in asset A in ME. This will handle precision conversion also...
@@ -77,11 +76,8 @@ impl LimitOrderRequest {
 impl MarketOrderRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
     // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub async fn make_constructor(&self, state: Arc<Mutex<State>>) -> Result<MarketOrderConstructor> {
-
-        let state = state.lock().await;
-
-        
+    pub async fn make_constructor(&self, state: Arc<RwLock<State>>) -> Result<MarketOrderConstructor> {
+        let state = state.read().await;
 
         let market = match state.get_market(&self.market) {
             Ok(market) => market,
@@ -257,10 +253,10 @@ impl LimitOrderConstructor {
     // `to` asset name. Nonces will be retrieved from current values in `State`
     pub async fn make_payload_nonces(
         &self,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
         current_time: i64,
     ) -> Result<Vec<PayloadNonces>> {
-        let state = state.lock().await;
+        let state = state.read().await;
         let asset_nonces = state.asset_nonces.as_ref()
             .ok_or(ProtocolError("Asset nonce map does not exist"))?;
         let (from, to) = match self.buy_or_sell {
@@ -423,10 +419,10 @@ impl MarketOrderConstructor {
     // `to` asset name. Nonces will be retrieved from current values in `State`
     pub async fn make_payload_nonces(
         &self,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
         current_time: i64,
     ) -> Result<Vec<PayloadNonces>> {
-        let state = state.lock().await;
+        let state = state.read().await;
         let asset_nonces = state.asset_nonces.as_ref()
             .ok_or(ProtocolError("Asset nonce map does not exist"))?;
         let (from, to) = (

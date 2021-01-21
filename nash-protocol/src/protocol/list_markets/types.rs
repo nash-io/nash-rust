@@ -5,7 +5,7 @@ use crate::errors::Result;
 use crate::graphql::list_markets;
 use crate::types::Market;
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ pub struct ListMarketsResponse {
 impl NashProtocol for ListMarketsRequest {
     type Response = ListMarketsResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         let mut out = serializable_to_json(&query)?;
         // override null with an empty object because ME is weird
@@ -34,9 +34,9 @@ impl NashProtocol for ListMarketsRequest {
     async fn process_response(
         &self,
         response: &Self::Response,
-        state: Arc<Mutex<State>>,
+        state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         let markets: Vec<Market> = response.markets.iter().map(|(_k, v)| v.clone()).collect();
         let mut assets = HashSet::new();
         let mut market_map = HashMap::new();
@@ -54,7 +54,7 @@ impl NashProtocol for ListMarketsRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<Mutex<State>>
+        _state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<ListMarketsResponse, list_markets::ResponseData>(response)
     }

@@ -7,7 +7,7 @@ use crate::types::{BuyOrSell, DateTimeRange, Order, OrderStatus, OrderType};
 use super::super::list_markets::ListMarketsRequest;
 use super::super::hooks::{ProtocolHook, NashProtocolRequest};
 use async_trait::async_trait;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// List orders associated with current account session filtered by several optional fields.
@@ -53,7 +53,7 @@ pub struct ListAccountOrdersResponse {
 impl NashProtocol for ListAccountOrdersRequest {
     type Response = ListAccountOrdersResponse;
 
-    async fn graphql(&self, _state: Arc<Mutex<State>>) -> Result<serde_json::Value> {
+    async fn graphql(&self, _state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let query = self.make_query();
         serializable_to_json(&query)
     }
@@ -61,15 +61,15 @@ impl NashProtocol for ListAccountOrdersRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<Mutex<State>>
+        state: Arc<RwLock<State>>
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_with_state_from_json::<ListAccountOrdersResponse, list_account_orders::ResponseData>(
             response, state
         ).await
     }
 
-    async fn run_before(&self, state: Arc<Mutex<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let state = state.lock().await;
+    async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
+        let state = state.read().await;
         let mut hooks = Vec::new();
         if let None = state.markets {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(

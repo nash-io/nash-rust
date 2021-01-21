@@ -8,7 +8,7 @@ use std::fmt::Display;
 use super::traits::TryFromState;
 use super::state::State;
 use std::sync::Arc;
-use futures::lock::Mutex;
+use tokio::sync::RwLock;
 
 //****************************************//
 //  GraphQL response parsing              //
@@ -56,7 +56,7 @@ where
 /// nicer library managed types A when failure is possible
 pub async fn try_response_with_state_from_json<A, B>(
     response: serde_json::Value,
-    state: Arc<Mutex<State>>
+    state: Arc<RwLock<State>>
 ) -> Result<ResponseOrError<A>>
 where
     A: TryFromState<B>,

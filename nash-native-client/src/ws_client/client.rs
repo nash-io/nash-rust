@@ -1241,7 +1241,11 @@ mod tests {
 
         let mut stream = client
             .subscribe_protocol(SubscribeAccountOrders {
-                market: Some("eth_btc".to_string())
+                market: Some("eth_btc".to_string()),
+                status: None,
+                buy_or_sell: None,
+                order_type: None,
+                range: None
             })
             .await
             .unwrap();

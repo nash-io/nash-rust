@@ -1,4 +1,7 @@
 pub mod trades;
+pub mod new_account_trades;
+pub mod updated_account_orders;
+pub mod updated_account_balances;
 pub mod updated_orderbook;
 pub mod updated_ticker;
 use super::graphql::ResponseOrError;
@@ -15,6 +18,9 @@ pub enum SubscriptionRequest {
     Trades(trades::SubscribeTrades),
     Ticker(updated_ticker::SubscribeTicker),
     Orderbook(updated_orderbook::SubscribeOrderbook),
+    AccountTrades(new_account_trades::SubscribeAccountTrades),
+    AccountOrders(updated_account_orders::SubscribeAccountOrders),
+    AccountBalances(updated_account_balances::SubscribeAccountBalances),
 }
 
 /// Wrapper for incoming subscription data supported on Nash. Required only for current version
@@ -24,6 +30,9 @@ pub enum SubscriptionResponse {
     Orderbook(updated_orderbook::SubscribeOrderbookResponse),
     Ticker(updated_ticker::SubscribeTickerResponse),
     Trades(trades::TradesResponse),
+    AccountTrades(new_account_trades::AccountTradesResponse),
+    AccountOrders(updated_account_orders::AccountOrdersResponse),
+    AccountBalances(updated_account_balances::AccountBalancesResponse),
 }
 
 #[async_trait]
@@ -34,6 +43,9 @@ impl NashProtocolSubscription for SubscriptionRequest {
             Self::Trades(trades_req) => trades_req.graphql(state).await,
             Self::Ticker(ticker_req) => ticker_req.graphql(state).await,
             Self::Orderbook(orderbook_req) => orderbook_req.graphql(state).await,
+            Self::AccountTrades(account_trades_req) => account_trades_req.graphql(state).await,
+            Self::AccountOrders(account_orders_req) => account_orders_req.graphql(state).await,
+            Self::AccountBalances(account_balance_req) => account_balance_req.graphql(state).await
         }
     }
     async fn subscription_response_from_json(
@@ -46,6 +58,18 @@ impl NashProtocolSubscription for SubscriptionRequest {
                 .subscription_response_from_json(response, state)
                 .await?
                 .map(Box::new(|res| SubscriptionResponse::Trades(res)))),
+            Self::AccountTrades(account_trades_req) => Ok(account_trades_req
+                .subscription_response_from_json(response, state)
+                .await?
+                .map(Box::new(|res| SubscriptionResponse::AccountTrades(res)))),
+            Self::AccountOrders(account_orders_req) => Ok(account_orders_req
+                .subscription_response_from_json(response, state)
+                .await?
+                .map(Box::new(|res| SubscriptionResponse::AccountOrders(res)))),
+            Self::AccountBalances(account_balances_req) => Ok(account_balances_req
+                .subscription_response_from_json(response, state)
+                .await?
+                .map(Box::new(|res| SubscriptionResponse::AccountBalances(res)))),
             Self::Ticker(ticker_req) => Ok(ticker_req
                 .subscription_response_from_json(response, state)
                 .await?

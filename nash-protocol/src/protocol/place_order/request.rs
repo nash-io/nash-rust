@@ -59,6 +59,7 @@ impl LimitOrderRequest {
         };
 
         Ok(LimitOrderConstructor {
+            client_order_id: self.client_order_id.clone(),
             me_amount: amount_of_a,
             me_rate: b_per_a,
             market: market.clone(),
@@ -95,6 +96,7 @@ impl MarketOrderRequest {
         let destination =  market.asset_b;
 
         Ok(MarketOrderConstructor {
+            client_order_id: self.client_order_id.clone(),
             me_amount: source.clone(),
             market: market.clone(),
             source,
@@ -202,6 +204,7 @@ impl LimitOrderConstructor {
         };
         let order_args = place_limit_order::Variables {
             payload: place_limit_order::PlaceLimitOrderParams {
+                client_order_id: self.client_order_id.clone(),
                 allow_taker: self.allow_taker,
                 buy_or_sell: self.buy_or_sell.into(),
                 cancel_at: cancel_at,
@@ -379,6 +382,7 @@ impl MarketOrderConstructor {
         let order_args = place_market_order::Variables {
             payload: place_market_order::PlaceMarketOrderParams {
                 buy_or_sell: BuyOrSell::Sell.into(),
+                client_order_id: self.client_order_id.clone(),
                 market_name: self.market.market_name(),
                 amount: self.me_amount.clone().try_into()?,
                 // These two nonces are deprecated...

@@ -1,5 +1,6 @@
 query GetAccountOrder($payload: GetAccountOrderParams!){
   getAccountOrder(payload: $payload){
+    clientOrderId
     amount {
       amount,
       currency

@@ -25,6 +25,9 @@ use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest
 use nash_protocol::protocol::sign_all_states::SignAllStates;
 use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
 use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
+use nash_protocol::protocol::subscriptions::new_account_trades::SubscribeAccountTrades;
+use nash_protocol::protocol::subscriptions::updated_account_balances::SubscribeAccountBalances;
+use nash_protocol::protocol::subscriptions::updated_account_orders::SubscribeAccountOrders;
 use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
@@ -373,6 +376,7 @@ fn test_account_order_lookup_then_cancel() {
         let client = init_client().await;
         let mut requests = Vec::new();
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Buy,
             amount: "10".to_string(),
@@ -381,6 +385,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Sell,
             amount: "1".to_string(),
@@ -389,6 +394,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Buy,
             amount: "10".to_string(),
@@ -397,6 +403,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Sell,
             amount: "1".to_string(),
@@ -405,6 +412,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Buy,
             amount: "10".to_string(),
@@ -413,6 +421,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Buy,
             amount: "0.451".to_string(),
@@ -421,6 +430,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Sell,
             amount: "1.24".to_string(),
@@ -429,6 +439,7 @@ fn test_account_order_lookup_then_cancel() {
             allow_taker: true,
         });
         requests.push(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Sell,
             amount: "1.24".to_string(),
@@ -557,6 +568,49 @@ fn end_to_end_sub_trades() {
     runtime.block_on(async_block);
 }
 
+#[tokio::test]
+async fn end_to_end_sub_account_trades() {
+    let client = init_client().await;
+    let mut response = client
+        .subscribe_protocol(SubscribeAccountTrades {
+            market_name: "btc_usdc".to_string(),
+        })
+        .await
+        .unwrap();
+    let next_item = response.recv().await.unwrap().unwrap();
+    println!("{:?}", next_item);
+}
+
+#[tokio::test]
+async fn end_to_end_sub_account_orders() {
+    let client = init_client().await;
+    let mut response = client
+        .subscribe_protocol(SubscribeAccountOrders {
+            market: None,
+            status: None,
+            buy_or_sell: None,
+            order_type: None,
+            range: None
+        })
+        .await
+        .unwrap();
+    let next_item = response.recv().await.unwrap().unwrap();
+    println!("{:?}", next_item);
+}
+
+#[tokio::test]
+async fn end_to_end_sub_account_balance() {
+    let client = init_client().await;
+    let mut response = client
+        .subscribe_protocol(SubscribeAccountBalances {
+            symbol: "usdc".to_string(), // this does not work with None
+        })
+        .await
+        .unwrap();
+    let next_item = response.recv().await.unwrap().unwrap();
+    println!("{:?}", next_item);
+}
+
 #[test]
 fn end_to_end_buy_eth_btc() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -564,6 +618,7 @@ fn end_to_end_buy_eth_btc() {
         let client = init_client().await;
         let response = client
             .run(LimitOrderRequest {
+                client_order_id: None,
                 market: "eth_btc".to_string(),
                 buy_or_sell: BuyOrSell::Buy,
                 amount: "0.1".to_string(),
@@ -611,6 +666,7 @@ fn limit_order_nonce_recovery() {
     let async_block = async {
         let client = init_client().await;
         let lor = LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Sell,
             amount: "0.02".to_string(),
@@ -665,6 +721,7 @@ fn end_to_end_market_order() {
         let client = init_client().await;
         let response = client
             .run(MarketOrderRequest {
+                client_order_id: None,
                 market: "usdc_eth".to_string(),
                 amount: "10".to_string(),
             })
@@ -680,6 +737,7 @@ async fn place_order_no_sign_states_flat() {
     client.turn_off_sign_states().await;
     let response = client
         .run(LimitOrderRequest {
+            client_order_id: None,
             market: "eth_usdc".to_string(),
             buy_or_sell: BuyOrSell::Sell,
             amount: "0.004".to_string(),
@@ -707,6 +765,7 @@ fn end_to_end_sell_limit_order() {
         let client = init_client().await;
         let response = client
             .run(LimitOrderRequest {
+                client_order_id: None,
                 market: "eth_usdc".to_string(),
                 buy_or_sell: BuyOrSell::Sell,
                 amount: "0.004".to_string(),

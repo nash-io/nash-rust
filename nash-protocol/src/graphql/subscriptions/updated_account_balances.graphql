@@ -1,0 +1,20 @@
+subscription UpdatedAccountBalances($payload: UpdatedAccountBalancesParams!) {
+    updatedAccountBalances(payload: $payload) {
+        asset {
+            name
+            symbol
+        }
+        available {
+            amount
+        }
+        inOrders{
+            amount
+        }
+        pending {
+            amount
+        }
+        personal {
+            amount
+        }
+    }
+}

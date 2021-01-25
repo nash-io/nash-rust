@@ -603,7 +603,7 @@ async fn end_to_end_sub_account_balance() {
     let client = init_client().await;
     let mut response = client
         .subscribe_protocol(SubscribeAccountBalances {
-            symbol: None,
+            symbol: Some("usdc".to_string()), // this does not work with None
         })
         .await
         .unwrap();

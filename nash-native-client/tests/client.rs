@@ -587,6 +587,10 @@ async fn end_to_end_sub_account_orders() {
     let mut response = client
         .subscribe_protocol(SubscribeAccountOrders {
             market: None,
+            status: None,
+            buy_or_sell: None,
+            order_type: None,
+            range: None
         })
         .await
         .unwrap();

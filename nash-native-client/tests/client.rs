@@ -25,6 +25,9 @@ use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest
 use nash_protocol::protocol::sign_all_states::SignAllStates;
 use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
 use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
+use nash_protocol::protocol::subscriptions::new_account_trades::SubscribeAccountTrades;
+use nash_protocol::protocol::subscriptions::updated_account_balances::SubscribeAccountBalances;
+use nash_protocol::protocol::subscriptions::updated_account_orders::SubscribeAccountOrders;
 use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
@@ -563,6 +566,45 @@ fn end_to_end_sub_trades() {
         println!("{:?}", next_item);
     };
     runtime.block_on(async_block);
+}
+
+#[tokio::test]
+async fn end_to_end_sub_account_trades() {
+    let client = init_client().await;
+    let mut response = client
+        .subscribe_protocol(SubscribeAccountTrades {
+            market_name: "btc_usdc".to_string(),
+        })
+        .await
+        .unwrap();
+    let next_item = response.recv().await.unwrap().unwrap();
+    println!("{:?}", next_item);
+}
+
+#[tokio::test]
+async fn end_to_end_sub_account_orders() {
+    let client = init_client().await;
+    let mut response = client
+        .subscribe_protocol(SubscribeAccountOrders {
+            market: None,
+        })
+        .await
+        .unwrap();
+    let next_item = response.recv().await.unwrap().unwrap();
+    println!("{:?}", next_item);
+}
+
+#[tokio::test]
+async fn end_to_end_sub_account_balance() {
+    let client = init_client().await;
+    let mut response = client
+        .subscribe_protocol(SubscribeAccountBalances {
+            symbol: None,
+        })
+        .await
+        .unwrap();
+    let next_item = response.recv().await.unwrap().unwrap();
+    println!("{:?}", next_item);
 }
 
 #[test]

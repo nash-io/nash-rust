@@ -5,14 +5,15 @@ use graphql_client::GraphQLQuery;
 /// Initiate subscription to new account *trading* balances
 #[derive(Clone, Debug)]
 pub struct SubscribeAccountBalances {
-    pub symbol: Option<String>,
+    // FIXME: This should be an Option, but because of a bug, if the value is None, the request will fail.
+    pub symbol: String,
 }
 
 impl SubscribeAccountBalances {
     pub fn make_query(&self) -> graphql_client::QueryBody<updated_account_balances::Variables> {
         graphql::UpdatedAccountBalances::build_query(updated_account_balances::Variables {
             payload: updated_account_balances::UpdatedAccountBalancesParams {
-                currency: self.symbol.clone(),
+                currency: Some(self.symbol.clone()),
             }
         })
     }

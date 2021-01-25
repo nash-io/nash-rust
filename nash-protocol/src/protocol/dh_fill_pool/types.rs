@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn serialize_dh_fill_pool() {
-        let state = Arc::new(Mutex::new(
+        let state = Arc::new(RwLock::new(
             State::from_keys_path(Some("../nash-native-client/test_data/keyfile.json")).unwrap(),
         ));
         let async_block = async {

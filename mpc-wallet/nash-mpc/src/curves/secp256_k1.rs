@@ -548,7 +548,7 @@ mod tests {
             0, 0, 0, 1, 2, 3, 4, 5, 6,
         ];
         let result = Secp256k1Point::from_bytes(&test_vec);
-        assert!(result.is_ok() | result.is_err())
+        assert!(result.is_err())
     }
 
     #[test]
@@ -557,7 +557,7 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6,
         ];
         let result = Secp256k1Point::from_bytes(&test_vec);
-        assert!(result.is_ok() | result.is_err())
+        assert!(result.is_err())
     }
 
     #[test]
@@ -569,7 +569,7 @@ mod tests {
             4, 5, 6,
         ];
         let result = Secp256k1Point::from_bytes(&test_vec);
-        assert!(result.is_ok() | result.is_err())
+        assert!(result.is_err())
     }
 
     #[test]

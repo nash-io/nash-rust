@@ -13,6 +13,7 @@ use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
+use tracing::trace;
 use std::sync::Arc;
 
 /// DhFillPool requests coordinate between the user's client and the Nash server to
@@ -119,9 +120,9 @@ impl NashProtocol for DhFillPoolRequest {
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
         let server_publics = ServerPublics::from_hexstrings(self.blockchain(), response)?;
-        println!("trace pool for {:?}", self.blockchain());
+        trace!("filling pool for {:?}", self.blockchain());
         response::fill_pool(self, server_publics, state.clone()).await?;
-        println!("trace pool for {:?}", self.blockchain());
+        trace!("filling pool for {:?}", self.blockchain());
         let mut state = state.write().await;
         // Update state to indicate we now have 100 new r values
         state.signer_mut()?.fill_r_vals(self.blockchain(), 100);

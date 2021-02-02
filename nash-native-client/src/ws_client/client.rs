@@ -18,13 +18,15 @@ use tracing::{error, trace, warn, Instrument};
 use nash_protocol::errors::{ProtocolError, Result};
 use nash_protocol::protocol::subscriptions::SubscriptionResponse;
 use nash_protocol::protocol::{
-    NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError, State,
+    ErrorResponse, NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError,
+    State,
 };
 
 use crate::http_extension::HttpClientState;
 use crate::Environment;
 
 use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheWSResponse};
+use nash_protocol::types::Blockchain;
 
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
@@ -348,11 +350,13 @@ impl InnerClient {
         env: Environment,
         timeout: Duration,
         affiliate_code: Option<String>,
+        turn_off_sign_states: bool,
     ) -> Result<(
         Self,
         mpsc::UnboundedReceiver<Result<ResponseOrError<SubscriptionResponse>>>,
     )> {
         state.affiliate_code = affiliate_code;
+        state.dont_sign_states = turn_off_sign_states;
         let (ws_state, global_subscription_receiver) =
             Self::setup_ws(&mut state, client_id, env, timeout).await?;
         let http_state = Self::setup_http(&mut state, env, timeout).await?;
@@ -475,10 +479,17 @@ impl InnerClient {
         let protocol_response = request
             .response_from_json(json_payload, self.state.clone())
             .await?;
-        if let Some(response) = protocol_response.response() {
-            request
-                .process_response(response, self.state.clone())
-                .await?;
+        match protocol_response {
+            ResponseOrError::Response(ref response) => {
+                request
+                    .process_response(&response.data, self.state.clone())
+                    .await?;
+            }
+            ResponseOrError::Error(ref error_response) => {
+                request
+                    .process_error(error_response, self.state.clone())
+                    .await?;
+            }
         }
         Ok(protocol_response)
     }
@@ -488,10 +499,10 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
+        println!("running ws request with {:?}", request);
         async {
             let response = {
-                if let Some(semaphore) = request.get_semaphore(self.state.clone()).await {
-                    let _permit = semaphore.acquire().await;
+                if let Some(_permit) = request.acquire_permit(self.state.clone()).await {
                     self.run_helper(request).await
                 } else {
                     self.run_helper(request).await
@@ -514,7 +525,6 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        trace!("running pre-hooks");
         // First run any dependencies of the request/pipeline
         let before_actions = request.run_before(self.state.clone()).await?;
         if let Some(actions) = before_actions {
@@ -522,7 +532,6 @@ impl InnerClient {
                 self.run(action).await?;
             }
         }
-        trace!("running main pipeline");
         // Now run the pipeline
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline contains more actions for client to take, execute them
@@ -534,7 +543,11 @@ impl InnerClient {
                 let protocol_response = self.execute_protocol(protocol_request).await?;
                 // If error, end pipeline early and return GraphQL/network error data
                 if protocol_response.is_error() {
-                    Self::manage_client_error(self.state.clone()).await;
+                    Self::manage_client_error(
+                        self.state.clone(),
+                        protocol_response.error().unwrap(),
+                    )
+                    .await;
 
                     return Ok(ResponseOrError::Error(
                         protocol_response
@@ -556,7 +569,6 @@ impl InnerClient {
                 break;
             }
         }
-        trace!("running post-hooks");
         // Get things to run after the request/pipeline
         let after_actions = request.run_after(self.state.clone()).await?;
         // Now run anything specified for after the pipeline
@@ -617,13 +629,9 @@ impl InnerClient {
         self.ws_state.ws_disconnect_sender.send(()).ok();
     }
 
-    // FIXME
-    pub async fn manage_client_error(state: Arc<RwLock<State>>) {
-        let mut state = state.write().await;
-        // quick fix, on any client error trigger an asset nonces refresh
-        // in future, next step would be to destructure the error recieved from ME
-        // passed via an extra argument and act on client state appropriately
-        state.assets_nonces_refresh = true;
+    pub async fn manage_client_error(_state: Arc<RwLock<State>>, error_response: &ErrorResponse) {
+        error!(?error_response, "client error");
+        println!("error: {:?}", error_response);
     }
 }
 
@@ -638,13 +646,22 @@ impl Client {
     /// registered with the absinthe WS connection. It can possibly be removed.
     pub async fn from_keys_path(
         keys_path: Option<&str>,
-        client_id: u64,
         affiliate_code: Option<String>,
+        turn_off_sign_states: bool,
+        client_id: u64,
         env: Environment,
         timeout: Duration,
     ) -> Result<Self> {
         let state = State::from_keys_path(keys_path)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout).await
+        Self::setup(
+            state,
+            affiliate_code,
+            turn_off_sign_states,
+            client_id,
+            env,
+            timeout,
+        )
+        .await
     }
 
     /// Create a client using a base64 encoded keylist and session id (contents of Nash produced .json file)
@@ -652,23 +669,40 @@ impl Client {
         secret: &str,
         session: &str,
         affiliate_code: Option<String>,
+        turn_off_sign_states: bool,
         client_id: u64,
         env: Environment,
         timeout: Duration,
     ) -> Result<Self> {
         let state = State::from_keys(secret, session)?;
-        Self::setup(state, affiliate_code, client_id, env, timeout).await
+        Self::setup(
+            state,
+            affiliate_code,
+            turn_off_sign_states,
+            client_id,
+            env,
+            timeout,
+        )
+        .await
     }
 
     async fn setup(
         state: State,
         affiliate_code: Option<String>,
+        turn_off_sign_states: bool,
         client_id: u64,
         env: Environment,
         timeout: Duration,
     ) -> Result<Self> {
-        let (inner, global_subscription_receiver) =
-            InnerClient::setup(state, client_id, env, timeout, affiliate_code).await?;
+        let (inner, global_subscription_receiver) = InnerClient::setup(
+            state,
+            client_id,
+            env,
+            timeout,
+            affiliate_code,
+            turn_off_sign_states,
+        )
+        .await?;
         let client = Self {
             inner: Arc::new(inner),
             global_subscription_receiver,
@@ -711,18 +745,18 @@ impl Client {
         self.inner.disconnect().await;
     }
 
-    pub fn start_background_state_signing(&self, interval: Duration) {
+    pub fn start_background_sign_states_loop(&self, interval: Duration) {
         let weak_inner = Arc::downgrade(&self.inner);
         tokio::spawn(async move {
             while let Some(inner) = weak_inner.upgrade() {
                 let tick_start = tokio::time::Instant::now();
-                let remaining_orders = inner.state.read().await.remaining_orders;
+                let remaining_orders = inner.state.read().await.get_remaining_orders();
                 if remaining_orders < 10 {
                     trace!(%remaining_orders, "sign_all_states triggered");
                     let request = inner
                         .run(nash_protocol::protocol::sign_all_states::SignAllStates::new())
                         .await;
-                    if let Err(ref e) = request {
+                    if let Err(e) = request {
                         error!(error = %e, "sign_all_states errored");
                     }
                 }
@@ -731,17 +765,50 @@ impl Client {
         });
     }
 
-    /// Can be used by market makers to turn off state signing
-    pub async fn turn_off_sign_states(&self) {
-        let mut state = self.inner.state.write().await;
-        state.dont_sign_states = true;
+    pub fn start_background_fill_pool_loop(
+        &self,
+        interval: Duration,
+        chains: Option<Vec<Blockchain>>,
+    ) {
+        let weak_inner = Arc::downgrade(&self.inner);
+        tokio::spawn(async move {
+            while let Some(inner) = weak_inner.upgrade() {
+                let tick_start = tokio::time::Instant::now();
+                async {
+                    let fill_pool_schedules = inner
+                        .state
+                        .read()
+                        .await
+                        .get_fill_pool_schedules(chains.as_ref(), None);
+                    match fill_pool_schedules {
+                        Ok(fill_pool_schedules) => {
+                            for (request, permit) in fill_pool_schedules {
+                                let response = inner.run_http_with_permit(request, permit).await;
+                                if let Err(e) = response {
+                                    error!(error = %e, "request errored");
+                                }
+                            }
+                        }
+                        Err(e) => error!(%e, "getting fill pool schedules errored"),
+                    }
+                }
+                .instrument(tracing::info_span!(
+                    "FillPool",
+                    id = %rand::thread_rng().gen::<u32>()))
+                .await;
+                tokio::time::sleep_until(tick_start + interval).await;
+            }
+        });
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::{Client, Environment, HashMap, Arc};
+    use chrono::offset::TimeZone;
+    use chrono::Utc;
+    use dotenv::dotenv;
+    use tokio::time::Duration;
+
     use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
     use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
     use nash_protocol::protocol::cancel_order::CancelOrderRequest;
@@ -757,50 +824,77 @@ mod tests {
     use nash_protocol::protocol::orderbook::OrderbookRequest;
     use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest};
     use nash_protocol::protocol::sign_all_states::SignAllStates;
-    use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
-    use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
     use nash_protocol::protocol::subscriptions::new_account_trades::SubscribeAccountTrades;
+    use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
     use nash_protocol::protocol::subscriptions::updated_account_balances::SubscribeAccountBalances;
     use nash_protocol::protocol::subscriptions::updated_account_orders::SubscribeAccountOrders;
+    use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
     use nash_protocol::types::{
         Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
     };
 
-    use chrono::offset::TimeZone;
-    use chrono::Utc;
-    use dotenv::dotenv;
-    use tokio::time::Duration;
+    use super::{Arc, Client, Environment, HashMap};
 
     async fn init_client() -> Client {
         dotenv().ok();
-        let secret  = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
+        let secret = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
         let session = std::env::var("NASH_API_KEY").expect("Couldn't get environment variable.");
         Client::from_keys(
             &secret,
             &session,
             None,
+            false,
             0,
             Environment::Sandbox,
-            Duration::from_secs_f32(2.0)
+            Duration::from_secs_f32(2.0),
         )
         .await
         .unwrap()
     }
 
+    async fn init_client_fill_pool_loop() -> Client {
+        dotenv().ok();
+        let secret = std::env::var("NASH_API_SECRET").expect("Couldn't get environment variable.");
+        let session = std::env::var("NASH_API_KEY").expect("Couldn't get environment variable.");
+        let client = Client::from_keys(
+            &secret,
+            &session,
+            None,
+            true,
+            0,
+            Environment::Production,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        client.start_background_fill_pool_loop(
+            Duration::from_millis(1000),
+            Some(vec![Blockchain::Ethereum]),
+        );
+        client
+    }
+
     async fn init_sandbox_client() -> Client {
-        Client::from_keys_path(None, 0, None, Environment::Sandbox, Duration::from_secs_f32(5.0))
-            .await
-            .unwrap()
+        Client::from_keys_path(
+            None,
+            None,
+            false,
+            0,
+            Environment::Sandbox,
+            Duration::from_secs_f32(5.0),
+        )
+        .await
+        .unwrap()
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_autosigning(){
+    async fn test_autosigning() {
         let _client = init_client().await;
         std::thread::sleep(Duration::from_secs(100).into());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn multiple_concurrent_requests(){
+    async fn multiple_concurrent_requests() {
         let client = init_client().await;
         let share_client = Arc::new(client);
         async fn make_long_request(client: Arc<Client>, i: u64) {
@@ -826,7 +920,10 @@ mod tests {
         for _ in 0..10 {
             handles.push(tokio::spawn(make_long_request(share_client.clone(), count)));
             count += 1;
-            handles.push(tokio::spawn(make_short_request(share_client.clone(), count)));
+            handles.push(tokio::spawn(make_short_request(
+                share_client.clone(),
+                count,
+            )));
             count += 1;
         }
         futures::future::join_all(handles).await;
@@ -864,7 +961,7 @@ mod tests {
             let client = init_client().await;
             println!("Client ready!");
             let response = client
-                .run(DhFillPoolRequest::new(Blockchain::Ethereum).unwrap())
+                .run(DhFillPoolRequest::new(Blockchain::Ethereum, 100).unwrap())
                 .await
                 .unwrap();
             println!("{:?}", response);
@@ -1160,7 +1257,7 @@ mod tests {
                 .run(ListTradesRequest {
                     market: "eth_usdc".to_string(),
                     limit: None,
-                    before: None
+                    before: None,
                 })
                 .await
                 .unwrap();
@@ -1213,7 +1310,7 @@ mod tests {
 
         let mut response = client
             .subscribe_protocol(SubscribeAccountBalances {
-                symbol: Some("eth".to_string())
+                symbol: "eth".to_string(),
             })
             .await
             .unwrap();
@@ -1245,7 +1342,7 @@ mod tests {
                 status: None,
                 buy_or_sell: None,
                 order_type: None,
-                range: None
+                range: None,
             })
             .await
             .unwrap();
@@ -1279,7 +1376,7 @@ mod tests {
         let client = init_client().await;
         let mut stream = client
             .subscribe_protocol(SubscribeAccountTrades {
-                market_name: "eth_btc".to_string()
+                market_name: "eth_btc".to_string(),
             })
             .await
             .unwrap();
@@ -1350,7 +1447,6 @@ mod tests {
         runtime.block_on(async_block);
     }
 
-
     #[test]
     fn limit_order_nonce_recovery() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -1377,21 +1473,15 @@ mod tests {
             let mut bad_map = HashMap::new();
             bad_map.insert("eth".to_string(), vec![0 as u32]);
             bad_map.insert("usdc".to_string(), vec![0 as u32]);
-            state_lock.remaining_orders = 100;
+            state_lock.set_remaining_orders(100);
             state_lock.asset_nonces = Some(bad_map);
             drop(state_lock);
 
             // First attempt should fail with nonces complaint
-            let response = client
-                .run(lor.clone())
-                .await
-                .unwrap();
+            let response = client.run(lor.clone()).await.unwrap();
             println!("{:?}", response);
             // Second attempt should succeed because client state is set to refresh nonces
-            let response = client
-                .run(lor.clone())
-                .await
-                .unwrap();
+            let response = client.run(lor.clone()).await.unwrap();
             println!("{:?}", response);
             // Now cancel
             let order_id = response.response().unwrap().order_id.clone();
@@ -1417,41 +1507,44 @@ mod tests {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let async_block = async {
             let client = init_client().await;
-            let response = client.run(MarketOrderRequest {
-                client_order_id: None,
-                market: "usdc_eth".to_string(),
-                amount: "10".to_string()
-            }).await;
+            let response = client
+                .run(MarketOrderRequest {
+                    client_order_id: None,
+                    market: "usdc_eth".to_string(),
+                    amount: "10".to_string(),
+                })
+                .await;
             println!("{:?}", response);
         };
         runtime.block_on(async_block);
     }
 
-    #[tokio::test]
-    async fn place_order_no_sign_states_flat() {
-        let client = init_client().await;
-        client.turn_off_sign_states().await;
-        let response = client
-            .run(LimitOrderRequest {
-                client_order_id: None,
-                market: "eth_usdc".to_string(),
-                buy_or_sell: BuyOrSell::Sell,
-                amount: "0.004".to_string(),
-                price: "1500".to_string(),
-                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                allow_taker: true,
-            })
-            .await
-            .unwrap();
-        println!("{:?}", response);
-        let response = client
-            .run(CancelAllOrders {
-                market: "eth_usdc".to_string(),
-            })
-            .await
-            .unwrap();
-        println!("{:?}", response);
-        assert_eq!(response.response().unwrap().accepted, true);
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn place_order_fill_pool_loop() {
+        let client = init_client_fill_pool_loop().await;
+        for _ in 0..1000 {
+            let _response = client
+                .run_http(LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "0.09".to_string(),
+                    price: "0.047".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: false,
+                })
+                .await
+                .unwrap();
+            // println!("{:?}", response);
+            let response = client
+                .run_http(CancelAllOrders {
+                    market: "eth_btc".to_string(),
+                })
+                .await
+                .unwrap();
+            // println!("{:?}", response);
+            assert_eq!(response.response().unwrap().accepted, true);
+        }
     }
 
     #[test]
@@ -1464,7 +1557,7 @@ mod tests {
                     client_order_id: None,
                     market: "eth_usdc".to_string(),
                     buy_or_sell: BuyOrSell::Sell,
-                    amount: "0.004".to_string(),
+                    amount: "0.001".to_string(),
                     price: "1500".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,

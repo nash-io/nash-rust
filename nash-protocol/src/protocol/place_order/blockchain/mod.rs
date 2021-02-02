@@ -27,7 +27,7 @@ impl FillOrder {
 
     pub fn to_blockchain_signature(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<place_limit_order::BlockchainSignature> {
         match self {
             Self::Ethereum(fill_order) => fill_order.to_blockchain_signature(signer),
@@ -38,7 +38,7 @@ impl FillOrder {
 
     pub fn to_market_blockchain_signature(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<place_market_order::BlockchainSignature> {
         match self {
             Self::Ethereum(fill_order) => fill_order.to_market_blockchain_signature(signer),

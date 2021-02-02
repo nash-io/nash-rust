@@ -8,6 +8,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use super::blockchain::bigdecimal_to_nash_prec;
+use lazy_static::lazy_static;
 
 /// Representation of blockchains to help navigate encoding issues
 
@@ -18,9 +19,15 @@ pub enum Blockchain {
     Bitcoin,
 }
 
+lazy_static! {
+    static ref BLOCKCHAINS: Vec<Blockchain> = {
+        vec![Blockchain::Bitcoin, Blockchain::Ethereum, Blockchain::NEO]
+    };
+}
+
 impl Blockchain {
-    pub fn all() -> Vec<Blockchain> {
-        vec![Self::Bitcoin, Self::Ethereum, Self::NEO]
+    pub fn all() -> &'static Vec<Blockchain> {
+        &BLOCKCHAINS
     }
 }
 

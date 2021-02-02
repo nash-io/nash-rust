@@ -685,7 +685,7 @@ fn limit_order_nonce_recovery() {
         let mut bad_map = HashMap::new();
         bad_map.insert("eth".to_string(), vec![0 as u32]);
         bad_map.insert("usdc".to_string(), vec![0 as u32]);
-        state_lock.remaining_orders = 100;
+        state_lock.set_remaining_orders(100);
         state_lock.asset_nonces = Some(bad_map);
         drop(state_lock);
 

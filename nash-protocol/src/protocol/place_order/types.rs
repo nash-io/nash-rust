@@ -1,24 +1,26 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use tokio::sync::{Mutex, RwLock};
+
+use crate::errors::Result;
+use crate::graphql::place_limit_order;
+use crate::graphql::place_market_order;
+use crate::protocol::ErrorResponse;
+use crate::types::{
+    AssetAmount, AssetofPrecision, BuyOrSell, Market, Nonce, OrderCancellationPolicy, OrderStatus,
+    OrderType, Rate,
+};
+use crate::utils::current_time_as_i64;
+
 use super::super::asset_nonces::AssetNoncesRequest;
-use super::super::dh_fill_pool::DhFillPoolRequest;
 use super::super::list_markets::ListMarketsRequest;
 use super::super::sign_all_states::SignAllStates;
 use super::super::{
     serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
 };
 use super::super::{NashProtocolRequest, ProtocolHook};
-use crate::errors::Result;
-use crate::graphql::place_limit_order;
-use crate::graphql::place_market_order;
-use crate::types::{
-    AssetAmount, AssetofPrecision, Blockchain, BuyOrSell, Market, Nonce, OrderCancellationPolicy,
-    OrderStatus, OrderType, Rate,
-};
-use crate::utils::current_time_as_i64;
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use tokio::sync::RwLock;
-use std::sync::Arc;
-use tracing::trace;
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
@@ -37,7 +39,7 @@ pub struct LimitOrderRequest {
 pub struct MarketOrderRequest {
     pub client_order_id: Option<String>,
     pub market: String,
-    pub amount: String
+    pub amount: String,
 }
 
 impl LimitOrderRequest {
@@ -48,7 +50,7 @@ impl LimitOrderRequest {
         price_b: &str,
         cancellation_policy: OrderCancellationPolicy,
         allow_taker: bool,
-        client_order_id: Option<String>
+        client_order_id: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
             market,
@@ -57,21 +59,17 @@ impl LimitOrderRequest {
             price: price_b.to_string(),
             cancellation_policy,
             allow_taker,
-            client_order_id
+            client_order_id,
         })
     }
 }
 
 impl MarketOrderRequest {
-    pub fn new(
-        market: String,
-        amount_a: &str,
-        client_order_id: Option<String>,
-    ) -> Result<Self> {
+    pub fn new(market: String, amount_a: &str, client_order_id: Option<String>) -> Result<Self> {
         Ok(Self {
             market,
             amount: amount_a.to_string(),
-            client_order_id
+            client_order_id,
         })
     }
 }
@@ -123,7 +121,7 @@ pub struct PlaceOrderResponse {
     pub market_name: String,
 }
 
-fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
+fn get_required_hooks(state: &State, market: &str) -> Result<Vec<ProtocolHook>> {
     let mut hooks = Vec::new();
     // If we need assets or markets list, pull them
     match (&state.assets, &state.markets) {
@@ -135,14 +133,14 @@ fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
         _ => {}
     }
     // If have run out of r values, get more before running this pipeline
-    for chain in Blockchain::all() {
-        // 10 here is too much, but we can use multiple r-values in a single request
-        if state.signer()?.remaining_r_vals(chain) <= 10 {
-            trace!("Triggering FillPool (place_order) for {:?}", chain);
-            hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
-                DhFillPoolRequest::new(chain)?,
-            )));
-        }
+    let chains = state.get_market(market)?.blockchains();
+    let fill_pool_schedules = state.get_fill_pool_schedules(Some(&chains), Some(10))?;
+    for (request, permit) in fill_pool_schedules {
+        // A bit too complicated but we have to satisfy the compiler
+        let permit = Some(Arc::new(Mutex::new(Some(permit))));
+        hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
+            request, permit,
+        )));
     }
     // Retrieve asset nonces if we don't have them or an error triggered need to refresh
     match (state.asset_nonces.as_ref(), state.assets_nonces_refresh) {
@@ -154,7 +152,7 @@ fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
         _ => {}
     }
     // If we are about to run out of orders...
-    if !state.dont_sign_states && state.remaining_orders < 20 {
+    if !state.dont_sign_states && state.get_remaining_orders() < 10 {
         // Need to sign states
         hooks.push(ProtocolHook::SignAllState(SignAllStates::new()));
         // After signing states, need to update nonces again
@@ -169,95 +167,127 @@ fn get_required_hooks(state: &State) -> Result<Vec<ProtocolHook>> {
 impl NashProtocol for LimitOrderRequest {
     type Response = PlaceOrderResponse;
 
-    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
-        Some(state.read().await.place_order_semaphore.clone())
+    async fn acquire_permit(
+        &self,
+        state: Arc<RwLock<State>>,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        state
+            .read()
+            .await
+            .place_order_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .ok()
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let mut state = state.write().await;
-        // TODO: move this to process response, and incorporate error into process response
-        // would be much cleaner
-        if state.remaining_orders > 0 {
-            state.remaining_orders -= 1;
-        }
+        let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
-        let signer = state.signer_mut()?;
-        let query = builder.signed_graphql_request(nonces, time, affiliate, signer)?;
+        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
         serializable_to_json(&query)
     }
 
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<RwLock<State>>
+        _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_limit_order::ResponseData>(response)
     }
+
     /// Update the number of orders remaining before state sync
     async fn process_response(
         &self,
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.write().await;
-        state.remaining_orders = response.remaining_orders;
+        let state = state.read().await;
+        state.set_remaining_orders(response.remaining_orders);
         Ok(())
     }
+
+    async fn process_error(
+        &self,
+        _response: &ErrorResponse,
+        state: Arc<RwLock<State>>,
+    ) -> Result<()> {
+        // TODO: Do we need to decrement for errors?
+        state.read().await.decr_remaining_orders();
+        Ok(())
+    }
+
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.read().await;
-        get_required_hooks(&state).map(Some)
+        get_required_hooks(&state, &self.market).map(Some)
     }
 }
-
 
 #[async_trait]
 impl NashProtocol for MarketOrderRequest {
     type Response = PlaceOrderResponse;
 
-    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
-        Some(state.read().await.place_order_semaphore.clone())
+    async fn acquire_permit(
+        &self,
+        state: Arc<RwLock<State>>,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        state
+            .read()
+            .await
+            .place_order_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .ok()
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let mut state = state.write().await;
-        // TODO: move this to process response, and incorporate error into process response
-        // would be much cleaner
-        if state.remaining_orders > 0 {
-            state.remaining_orders -= 1;
-        }
+        let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
-        let signer = state.signer_mut()?;
-        let query = builder.signed_graphql_request(nonces, time, affiliate, signer)?;
+        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
         serializable_to_json(&query)
     }
 
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<RwLock<State>>
+        _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<PlaceOrderResponse, place_market_order::ResponseData>(response)
     }
+
     /// Update the number of orders remaining before state sync
     async fn process_response(
         &self,
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.write().await;
-        state.remaining_orders = response.remaining_orders;
+        let state = state.read().await;
+        // TODO: Incorporate error into process response
+        state.set_remaining_orders(response.remaining_orders);
         Ok(())
     }
+
+    async fn process_error(
+        &self,
+        _response: &ErrorResponse,
+        state: Arc<RwLock<State>>,
+    ) -> Result<()> {
+        // TODO: Do we need to decrement for errors?
+        state.read().await.decr_remaining_orders();
+        Ok(())
+    }
+
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.read().await;
-        get_required_hooks(&state).map(Some)
+        get_required_hooks(&state, &self.market).map(Some)
     }
 }

@@ -120,7 +120,7 @@ impl FillOrder {
     /// Construct GraphQL object corresponding to a blockchain signature on ETH fillorder data.
     pub fn to_blockchain_signature(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<place_limit_order::BlockchainSignature> {
         let payload_hash = self.hash()?;
         let (sig, r, pub_key) = signer.sign_child_key(payload_hash, Blockchain::Ethereum)?;
@@ -137,7 +137,7 @@ impl FillOrder {
 
     pub fn to_market_blockchain_signature(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<place_market_order::BlockchainSignature> {
         let payload_hash = self.hash()?;
         let (sig, r, pub_key) = signer.sign_child_key(payload_hash, Blockchain::Ethereum)?;

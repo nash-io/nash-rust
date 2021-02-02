@@ -10,8 +10,8 @@ use nash_mpc::curves::secp256_k1_rust::Secp256k1Point;
 use nash_mpc::curves::secp256_r1::Secp256r1Point;
 use nash_mpc::curves::traits::ECPoint;
 
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::trace;
 
 impl ServerPublics {
@@ -87,8 +87,7 @@ pub async fn fill_pool(
     server_publics: ServerPublics,
     state: Arc<RwLock<State>>,
 ) -> Result<()> {
-    let state = state.write().await;
-    let paillier_pk = state.signer()?.paillier_pk().clone();
+    let paillier_pk = state.read().await.signer()?.paillier_pk().clone();
     // FIXME: State should manage the pools
     match request {
         DhFillPoolRequest::Bitcoin(request) | DhFillPoolRequest::Ethereum(request) => {
@@ -96,10 +95,8 @@ pub async fn fill_pool(
             let k1_server_publics = server_publics.publics_for_k1()?;
             trace!("Begin fill_rpool_secp256k1");
             tokio::task::spawn_blocking(move || {
-
                 nash_mpc::client::fill_rpool_secp256k1(k1_secrets, &k1_server_publics, &paillier_pk)
                     .map_err(|_| ProtocolError("Error filling k1 pool"))
-
             })
             .await
             .map_err(|_| ProtocolError("Error filling k1 pool"))??;

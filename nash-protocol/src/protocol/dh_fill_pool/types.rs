@@ -1,20 +1,23 @@
-use super::super::{
-    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
-};
-use super::response;
-use crate::errors::{ProtocolError, Result};
-use crate::graphql::dh_fill_pool;
-use crate::types::Blockchain;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use tokio::sync::RwLock;
+
 #[cfg(feature = "secp256k1")]
 use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
 use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 
-use async_trait::async_trait;
-use tokio::sync::RwLock;
-use tracing::trace;
-use std::sync::Arc;
+use crate::errors::{ProtocolError, Result};
+use crate::graphql::dh_fill_pool;
+use crate::types::Blockchain;
+
+use super::super::{
+    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
+};
+use super::response;
+use std::time::Duration;
 
 /// DhFillPool requests coordinate between the user's client and the Nash server to
 /// gather a set of shared secret R values. The user sends a list of public ECDSA
@@ -23,8 +26,8 @@ use std::sync::Arc;
 /// same shared secret value (diffie-hellman). Bitcoin and Ethereum both use the
 /// Secp256k1 curve, while NEO users the Secp256r1 curve. While this request type
 /// holds both the secret and the public values, only the public values are used in
-/// creating the GraphQL request. The secrets are used to process a response. Pool 
-/// requests will always generate 100 new R values.
+/// creating the GraphQL request. The secrets are used to process a response. Pool
+/// requests will generate N new R values.
 #[derive(Clone, Debug)]
 pub enum DhFillPoolRequest {
     Bitcoin(K1FillPool),
@@ -34,14 +37,14 @@ pub enum DhFillPoolRequest {
 
 impl DhFillPoolRequest {
     /// Create a new DhFillPool request for a given blockchain
-    pub fn new(chain: Blockchain) -> Result<Self> {
+    pub fn new(chain: Blockchain, size: u32) -> Result<Self> {
         match chain {
-            Blockchain::Ethereum => Ok(Self::Ethereum(K1FillPool::new()?)),
-            Blockchain::Bitcoin => Ok(Self::Bitcoin(K1FillPool::new()?)),
-            Blockchain::NEO => Ok(Self::NEO(R1FillPool::new()?)),
+            Blockchain::Ethereum => Ok(Self::Ethereum(K1FillPool::new(size)?)),
+            Blockchain::Bitcoin => Ok(Self::Bitcoin(K1FillPool::new(size)?)),
+            Blockchain::NEO => Ok(Self::NEO(R1FillPool::new(size)?)),
         }
     }
-    /// Get blockchain assocaited with DH request
+    /// Get blockchain associated with DH request
     pub fn blockchain(&self) -> Blockchain {
         match self {
             Self::Bitcoin(_) => Blockchain::Bitcoin,
@@ -59,8 +62,8 @@ pub struct K1FillPool {
 }
 
 impl K1FillPool {
-    pub fn new() -> Result<Self> {
-        let (secrets, publics) = nash_mpc::common::dh_init_secp256k1(100)
+    pub fn new(size: u32) -> Result<Self> {
+        let (secrets, publics) = nash_mpc::common::dh_init_secp256k1(size)
             .map_err(|_| ProtocolError("Could not initialize k1 values"))?;
         Ok(Self { publics, secrets })
     }
@@ -74,8 +77,8 @@ pub struct R1FillPool {
 }
 
 impl R1FillPool {
-    pub fn new() -> Result<Self> {
-        let (secrets, publics) = nash_mpc::common::dh_init_secp256r1(100)
+    pub fn new(size: u32) -> Result<Self> {
+        let (secrets, publics) = nash_mpc::common::dh_init_secp256r1(size)
             .map_err(|_| ProtocolError("Could not initialize r1 values"))?;
         Ok(Self { publics, secrets })
     }
@@ -109,7 +112,7 @@ impl NashProtocol for DhFillPoolRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        _state: Arc<RwLock<State>>
+        _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         try_response_from_json::<DhFillPoolResponse, dh_fill_pool::ResponseData>(response)
     }
@@ -120,23 +123,29 @@ impl NashProtocol for DhFillPoolRequest {
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
         let server_publics = ServerPublics::from_hexstrings(self.blockchain(), response)?;
-        trace!("filling pool for {:?}", self.blockchain());
         response::fill_pool(self, server_publics, state.clone()).await?;
-        trace!("filling pool for {:?}", self.blockchain());
-        let mut state = state.write().await;
-        // Update state to indicate we now have 100 new r values
-        state.signer_mut()?.fill_r_vals(self.blockchain(), 100);
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        // Update state to indicate we now have N new r values
+        state
+            .read()
+            .await
+            .signer()?
+            .fill_r_vals(self.blockchain(), response.server_publics.len() as u32);
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Blockchain, DhFillPoolRequest, NashProtocol};
-    use crate::protocol::State;
+    use std::sync::Arc;
+
     use futures::executor;
     use tokio::sync::RwLock;
-    use std::sync::Arc;
+
+    use crate::protocol::signer::MAX_R_VAL_POOL_SIZE;
+    use crate::protocol::State;
+
+    use super::{Blockchain, DhFillPoolRequest, NashProtocol};
 
     #[test]
     fn serialize_dh_fill_pool() {
@@ -146,7 +155,7 @@ mod tests {
         let async_block = async {
             println!(
                 "{:?}",
-                DhFillPoolRequest::new(Blockchain::Ethereum)
+                DhFillPoolRequest::new(Blockchain::Ethereum, MAX_R_VAL_POOL_SIZE)
                     .unwrap()
                     .graphql(state)
                     .await

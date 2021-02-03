@@ -12,8 +12,7 @@ use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 use chrono::prelude::{DateTime, Utc};
-use chrono::Duration;
-use indexmap::{IndexMap, IndexSet};
+use crossbeam_queue::SegQueue;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
@@ -29,7 +28,6 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
 use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 use zeroize::Zeroize;
 use zeroize::Zeroizing;
 
@@ -172,7 +170,7 @@ pub fn compute_presig(
     let r: BigInt;
     if curve == Curve::Secp256k1 {
         // get and remove random value r and k from rpool
-        let mut pool_entry = match RPOOL_SECP256K1.lock().unwrap().pop() {
+        let mut pool_entry = match RPOOL_SECP256K1.pop() {
             Option::Some(val) => val,
             Option::None => return Err(()),
         };
@@ -187,7 +185,7 @@ pub fn compute_presig(
         rx = r_point.x_coor().mod_floor(&q);
     } else if curve == Curve::Secp256r1 {
         // get and remove random value r and k from rpool
-        let mut pool_entry = match RPOOL_SECP256R1.lock().unwrap().pop() {
+        let mut pool_entry = match RPOOL_SECP256R1.pop() {
             Option::Some(val) => val,
             Option::None => return Err(()),
         };
@@ -204,7 +202,7 @@ pub fn compute_presig(
         return Err(());
     }
     // get and remove random value for Paillier from pool
-    let mut rn = match POOL_PAILLIER.lock().unwrap().pop() {
+    let mut rn = match POOL_PAILLIER.pop() {
         Option::Some(val) => val,
         Option::None => return Err(()),
     };
@@ -251,11 +249,9 @@ fn compute_presig_curveindependent(
 // two pools of r-values (one for each curve) and one pool of random values for Paillier.
 // mutex is essential for security (helps us ensuring that no value is used twice).
 lazy_static! {
-    static ref RPOOL_SECP256R1: Mutex<IndexMap<BigInt, (DateTime<Utc>, BigInt)>> =
-        Mutex::new(IndexMap::new());
-    static ref RPOOL_SECP256K1: Mutex<IndexMap<BigInt, (DateTime<Utc>, BigInt)>> =
-        Mutex::new(IndexMap::new());
-    static ref POOL_PAILLIER: Mutex<IndexSet<BigInt>> = Mutex::new(IndexSet::new());
+    static ref RPOOL_SECP256R1: SegQueue<(BigInt, (DateTime<Utc>, BigInt))> = SegQueue::new();
+    static ref RPOOL_SECP256K1: SegQueue<(BigInt, (DateTime<Utc>, BigInt))> = SegQueue::new();
+    static ref POOL_PAILLIER: SegQueue<BigInt> = SegQueue::new();
 }
 
 /// fill pool of random values for Paillier
@@ -265,14 +261,14 @@ fn fill_pool_paillier(n: usize, paillier_pk: &EncryptionKey) {
     for _ in 0..n {
         let mut randomness =
             Paillier::precompute(paillier_pk, &Randomness::sample(paillier_pk).0).0;
-        POOL_PAILLIER.lock().unwrap().insert(randomness.clone());
+        POOL_PAILLIER.push(randomness.clone());
         randomness.zeroize_bn();
     }
     #[cfg(not(feature = "wasm"))]
     (0..n).into_par_iter().for_each(|_| {
         let mut randomness =
             Paillier::precompute(paillier_pk, &Randomness::sample(paillier_pk).0).0;
-        POOL_PAILLIER.lock().unwrap().insert(randomness.clone());
+        POOL_PAILLIER.push(randomness.clone());
         randomness.zeroize_bn();
     });
 }
@@ -289,23 +285,15 @@ pub fn fill_rpool_secp256r1(
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
-        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            Ok(r) => RPOOL_SECP256R1
-                .lock()
-                .unwrap()
-                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
-            Err(_) => None,
-        };
+        if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            RPOOL_SECP256R1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+        }
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            Ok(r) => RPOOL_SECP256R1
-                .lock()
-                .unwrap()
-                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
-            Err(_) => None,
-        };
+        if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            RPOOL_SECP256R1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+        }
     });
     for i in &mut own_dh_secrets {
         i.zeroize();
@@ -326,22 +314,14 @@ pub fn fill_rpool_secp256k1(
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
-        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            Ok(r) => RPOOL_SECP256K1
-                .lock()
-                .unwrap()
-                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
-            Err(_) => None,
-        };
+        if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            RPOOL_SECP256K1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+        }
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        match other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            Ok(r) => RPOOL_SECP256K1
-                .lock()
-                .unwrap()
-                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
-            Err(_) => None,
+        if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
+            RPOOL_SECP256K1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
         };
     });
     for i in &mut own_dh_secrets {
@@ -353,20 +333,23 @@ pub fn fill_rpool_secp256k1(
 
 /// get number of r-values in pool
 pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
+    // FIXME: Talk to Ethan about this
     if curve == Curve::Secp256k1 {
         // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
-        RPOOL_SECP256K1
+        /*RPOOL_SECP256K1
             .lock()
             .unwrap()
             .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
-        Ok(RPOOL_SECP256K1.lock().unwrap().len())
+        Ok(RPOOL_SECP256K1.lock().unwrap().len())*/
+        Ok(RPOOL_SECP256K1.len())
     } else if curve == Curve::Secp256r1 {
         // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
-        RPOOL_SECP256R1
+        /*RPOOL_SECP256R1
             .lock()
             .unwrap()
             .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
-        Ok(RPOOL_SECP256R1.lock().unwrap().len())
+        Ok(RPOOL_SECP256R1.len())*/
+        Ok(RPOOL_SECP256R1.len())
     } else {
         Err(())
     }
@@ -550,7 +533,7 @@ mod tests {
         let _shared = PAILLIER_POOL_LOCK.lock();
         let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129").unwrap()});
         assert_eq!(get_rpool_size(Curve::Secp256k1).unwrap(), 0);
-        assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
+        assert_eq!(POOL_PAILLIER.len(), 0);
         let dh_secret: Secp256k1Scalar = ECScalar::from(
             &BigInt::from_hex("8ea92bf3aa6f4ec4939b0888cd71dc6dc113f9cafe571c0bb501c8c9004bb47c")
                 .unwrap(),
@@ -564,7 +547,7 @@ mod tests {
         let dh_public_vec = vec![dh_public];
         fill_rpool_secp256k1(vec![dh_secret.clone()], &dh_public_vec, &paillier_pk).unwrap();
         assert_eq!(get_rpool_size(Curve::Secp256k1).unwrap(), 1);
-        assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 1);
+        assert_eq!(POOL_PAILLIER.len(), 1);
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
@@ -582,12 +565,12 @@ mod tests {
             BigInt::from_hex("3703d86c98836a6ef32371e1b91ed2ca64bd6d7a0774631f47ffebc49406c94ac")
                 .unwrap()
         );
-        assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
+        assert_eq!(POOL_PAILLIER.len(), 0);
         fill_rpool_secp256k1(vec![dh_secret], &dh_public_vec, &paillier_pk).unwrap();
-        assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 1);
+        assert_eq!(POOL_PAILLIER.len(), 1);
         let (presig2, _) = compute_presig(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
         assert_ne!(presig1, presig2);
-        assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
+        assert_eq!(POOL_PAILLIER.len(), 0);
     }
 
     #[test]

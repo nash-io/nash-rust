@@ -40,6 +40,7 @@ async fn init_client() -> Client {
         &secret,
         &session,
         None,
+        false,
         0,
         Environment::Production,
         Duration::from_secs_f32(5.0),
@@ -51,13 +52,48 @@ async fn init_client() -> Client {
 async fn init_sandbox_client() -> Client {
     Client::from_keys_path(
         None,
-        0,
         None,
+        false,
+        0,
         Environment::Sandbox,
         Duration::from_secs_f32(5.0),
     )
         .await
         .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn place_order_fill_pool_loop() {
+    let client = init_client().await;
+    client.start_background_fill_pool_loop(
+        Duration::from_millis(1000),
+        Some(vec![Blockchain::Ethereum]),
+    );
+    for _ in 0..100 {
+        for _ in 0..3 {
+            let response = client
+                .run_http(LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Sell,
+                    amount: "0.03".to_string(),
+                    price: "0.047".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: false,
+                })
+                .await
+                .unwrap();
+            println!("{:?}", response);
+        }
+        let response = client
+            .run_http(CancelAllOrders {
+                market: "eth_btc".to_string(),
+            })
+            .await
+            .unwrap();
+        println!("{:?}", response);
+        assert_eq!(response.response().unwrap().accepted, true);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -225,7 +261,7 @@ fn end_to_end_dh_fill_pool() {
         let client = init_client().await;
         println!("Client ready!");
         let response = client
-            .run(DhFillPoolRequest::new(Blockchain::Ethereum).unwrap())
+            .run(DhFillPoolRequest::new(Blockchain::Ethereum, 100).unwrap())
             .await
             .unwrap();
         println!("{:?}", response);

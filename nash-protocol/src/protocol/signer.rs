@@ -175,7 +175,7 @@ impl Signer {
             Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining.fetch_add(n, Ordering::Release),
             Blockchain::NEO => self.r1_remaining.fetch_add(n, Ordering::Release),
         };
-        println!("filled {:?}: +{}", chain, n);
+        tracing::info!("filled {:?}: +{}", chain, n);
     }
 
     fn decr_r_vals(&self, chain: Blockchain) {

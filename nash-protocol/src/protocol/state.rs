@@ -1,17 +1,17 @@
 //! The `State` struct captures all mutable state within protocol, such as asset nonces
 //! r-values, blockchain keys, and so on.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use tracing::trace;
+use async_recursion::async_recursion;
+use tracing::{info, trace};
 
+use super::signer::Signer;
 use crate::errors::{ProtocolError, Result};
 use crate::protocol::dh_fill_pool::DhFillPoolRequest;
 use crate::types::{Asset, Blockchain, Market};
-
-use super::signer::Signer;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 //****************************************//
 //  Protocol state representation         //
@@ -108,31 +108,55 @@ impl State {
     }
 
     /// Check if pools need a refill
-    pub fn get_fill_pool_schedules(
+    #[async_recursion]
+    pub async fn acquire_fill_pool_schedules(
         &self,
-        chains: Option<&Vec<Blockchain>>,
+        chains: Option<&'async_recursion Vec<Blockchain>>,
         r_val_fill_pool_threshold: Option<u32>,
     ) -> Result<Vec<(DhFillPoolRequest, tokio::sync::OwnedSemaphorePermit)>> {
-        let mut result = Vec::new();
+        let mut schedules = Vec::new();
+        let mut schedules_pool_types = HashSet::new();
         let threshold = r_val_fill_pool_threshold.unwrap_or(R_VAL_FILL_POOL_THRESHOLD);
         for chain in chains.unwrap_or(Blockchain::all().as_ref()) {
             let remaining = self.signer()?.get_remaining_r_vals(chain);
-            println!("{:?}: {}", chain, remaining);
+            info!("{:?}: {}", chain, remaining);
             if remaining < threshold {
-                let semaphore = match chain {
-                    Blockchain::Bitcoin => &self.k1_fill_pool_semaphore,
-                    Blockchain::Ethereum => &self.k1_fill_pool_semaphore,
-                    Blockchain::NEO => &self.r1_fill_pool_semaphore,
+                let (semaphore, pool_type) = match chain {
+                    Blockchain::Bitcoin => (&self.k1_fill_pool_semaphore, RValPoolTypes::K1),
+                    Blockchain::Ethereum => (&self.k1_fill_pool_semaphore, RValPoolTypes::K1),
+                    Blockchain::NEO => (&self.r1_fill_pool_semaphore, RValPoolTypes::R1),
                 };
-                if let Ok(permit) = semaphore.clone().try_acquire_owned() {
-                    let fill_size = MAX_R_VAL_POOL_SIZE - remaining;
-                    trace!(?chain, %remaining ,%fill_size, "created fill pool request");
-                    result.push((DhFillPoolRequest::new(chain.clone(), fill_size)?, permit));
+                // Don't schedule for the same pool twice
+                if !schedules_pool_types.contains(&pool_type) {
+                    if let Ok(permit) = semaphore.clone().try_acquire_owned() {
+                        let fill_size = MAX_R_VAL_POOL_SIZE - remaining;
+                        schedules.push((DhFillPoolRequest::new(chain.clone(), fill_size)?, permit));
+                        schedules_pool_types.insert(pool_type);
+                        trace!(?chain, %remaining ,%fill_size, "created fill pool request");
+                    } else {
+                        // A bit hacky but we usually only run into this when we try to place
+                        // orders immediately after starting the fill-loop. If the fill-loop
+                        // is running the fill-request and we are in the place-order protocol
+                        // we have to wait here for the keys to arrive.
+                        let _ = semaphore
+                            .acquire()
+                            .await
+                            .expect("Who closed the semaphore?");
+                        return self
+                            .acquire_fill_pool_schedules(chains, r_val_fill_pool_threshold)
+                            .await;
+                    }
                 }
             }
         }
-        Ok(result)
+        Ok(schedules)
     }
+}
+
+#[derive(Hash, PartialEq, Eq)]
+enum RValPoolTypes {
+    R1,
+    K1,
 }
 
 pub const MAX_R_VAL_POOL_SIZE: u32 = 100;

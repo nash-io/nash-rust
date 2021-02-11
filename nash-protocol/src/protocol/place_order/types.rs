@@ -3,24 +3,22 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, RwLock};
+use tracing::error;
 
 use crate::errors::Result;
 use crate::graphql::place_limit_order;
 use crate::graphql::place_market_order;
 use crate::protocol::ErrorResponse;
+use crate::protocol::{
+    asset_nonces::AssetNoncesRequest, list_markets::ListMarketsRequest, serializable_to_json,
+    sign_all_states::SignAllStates, try_response_from_json, NashProtocol, NashProtocolRequest,
+    ProtocolHook, ResponseOrError, State,
+};
 use crate::types::{
     AssetAmount, AssetofPrecision, BuyOrSell, Market, Nonce, OrderCancellationPolicy, OrderStatus,
     OrderType, Rate,
 };
 use crate::utils::current_time_as_i64;
-
-use super::super::asset_nonces::AssetNoncesRequest;
-use super::super::list_markets::ListMarketsRequest;
-use super::super::sign_all_states::SignAllStates;
-use super::super::{
-    serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
-};
-use super::super::{NashProtocolRequest, ProtocolHook};
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
@@ -121,7 +119,9 @@ pub struct PlaceOrderResponse {
     pub market_name: String,
 }
 
-fn get_required_hooks(state: &State, market: &str) -> Result<Vec<ProtocolHook>> {
+async fn get_required_hooks(state: Arc<RwLock<State>>, market: &str) -> Result<Vec<ProtocolHook>> {
+    let state = state.read().await;
+
     let mut hooks = Vec::new();
     // If we need assets or markets list, pull them
     match (&state.assets, &state.markets) {
@@ -134,7 +134,9 @@ fn get_required_hooks(state: &State, market: &str) -> Result<Vec<ProtocolHook>> 
     }
     // If have run out of r values, get more before running this pipeline
     let chains = state.get_market(market)?.blockchains();
-    let fill_pool_schedules = state.get_fill_pool_schedules(Some(&chains), Some(10))?;
+    let fill_pool_schedules = state
+        .acquire_fill_pool_schedules(Some(&chains), Some(10))
+        .await?;
     for (request, permit) in fill_pool_schedules {
         // A bit too complicated but we have to satisfy the compiler
         let permit = Some(Arc::new(Mutex::new(Some(permit))));
@@ -212,18 +214,22 @@ impl NashProtocol for LimitOrderRequest {
 
     async fn process_error(
         &self,
-        _response: &ErrorResponse,
+        response: &ErrorResponse,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
         // TODO: Do we need to decrement for errors?
         state.read().await.decr_remaining_orders();
+        for err in &response.errors {
+            if err.message.find("invalid blockchain signature").is_some() {
+                error!(err = %err.message, request = ?self, "invalid blockchain signature");
+            }
+        }
         Ok(())
     }
 
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let state = state.read().await;
-        get_required_hooks(&state, &self.market).map(Some)
+        get_required_hooks(state, &self.market).await.map(Some)
     }
 }
 
@@ -287,7 +293,6 @@ impl NashProtocol for MarketOrderRequest {
 
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        let state = state.read().await;
-        get_required_hooks(&state, &self.market).map(Some)
+        get_required_hooks(state, &self.market).await.map(Some)
     }
 }

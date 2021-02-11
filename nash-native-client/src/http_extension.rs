@@ -6,7 +6,7 @@ use std::time::Duration;
 use async_recursion::async_recursion;
 use rand::Rng;
 use reqwest::header::AUTHORIZATION;
-use tracing::{error, Instrument};
+use tracing::{error, trace_span, Instrument};
 
 use nash_protocol::errors::{ProtocolError, Result};
 use nash_protocol::protocol::{NashProtocol, NashProtocolPipeline, ResponseOrError, State};
@@ -105,7 +105,6 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        println!("running http request {:?}", request);
         async {
             let response = {
                 if let Some(_permit) = request.acquire_permit(self.state.clone()).await {
@@ -119,7 +118,7 @@ impl InnerClient {
             }
             response
         }
-        .instrument(tracing::info_span!(
+        .instrument(trace_span!(
                 "RUN (http)",
                 request = type_name::<T>(),
                 id = %rand::thread_rng().gen::<u32>()))
@@ -131,7 +130,6 @@ impl InnerClient {
         request: T,
         _permit: tokio::sync::OwnedSemaphorePermit,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        println!("running http with permit request {:?}", request);
         async {
             let response = self.run_helper_http(request).await;
             if let Err(ref e) = response {
@@ -139,7 +137,7 @@ impl InnerClient {
             }
             response
         }
-        .instrument(tracing::info_span!(
+        .instrument(trace_span!(
                 "RUN (http)",
                 request = type_name::<T>(),
                 id = %rand::thread_rng().gen::<u32>()))

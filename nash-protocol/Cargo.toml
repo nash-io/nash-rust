@@ -21,6 +21,7 @@ name = "nash_protocol"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+async-recursion = "0.3"
 rand = "0.8"
 bigdecimal = {version = "0.1", features = ["serde"]}
 base64 = "0.13"

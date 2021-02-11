@@ -13,7 +13,7 @@ use tokio::{net::TcpStream, sync::mpsc, sync::oneshot, sync::RwLock, time::Durat
 use tokio_native_tls::TlsStream;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{connect_async, stream::Stream, WebSocketStream};
-use tracing::{error, trace, warn, Instrument};
+use tracing::{error, trace, trace_span, warn, Instrument};
 
 use nash_protocol::errors::{ProtocolError, Result};
 use nash_protocol::protocol::subscriptions::SubscriptionResponse;
@@ -21,15 +21,16 @@ use nash_protocol::protocol::{
     ErrorResponse, NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError,
     State,
 };
+use nash_protocol::types::Blockchain;
 
 use crate::http_extension::HttpClientState;
 use crate::Environment;
 
 use super::absinthe::{AbsintheEvent, AbsintheTopic, AbsintheWSRequest, AbsintheWSResponse};
-use nash_protocol::types::Blockchain;
 
 type WebSocket = WebSocketStream<Stream<TcpStream, TlsStream<TcpStream>>>;
 
+const HEARTBEAT_MESSAGE_ID: u64 = 0;
 // this will add heartbeat (keep alive) messages to the channel for ws to send out every 15s
 pub fn spawn_heartbeat_loop(
     period: Duration,
@@ -40,7 +41,7 @@ pub fn spawn_heartbeat_loop(
         loop {
             let heartbeat = AbsintheWSRequest::new(
                 client_id,
-                0, // todo: this needs to increment but not overlap with other message ids
+                HEARTBEAT_MESSAGE_ID, // todo: this needs to increment but not overlap with other message ids
                 AbsintheTopic::Phoenix,
                 AbsintheEvent::Heartbeat,
                 None,
@@ -291,7 +292,9 @@ impl MessageBroker {
                                         break;
                                     }
                                 } else {
-                                    warn!(id, ?response, "BROKER response without return channel");
+                                    if id != HEARTBEAT_MESSAGE_ID {
+                                        warn!(id, ?response, "BROKER response without return channel");
+                                    }
                                 }
                             } else {
                                 warn!(?response, "BROKER response without id");
@@ -499,7 +502,6 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        println!("running ws request with {:?}", request);
         async {
             let response = {
                 if let Some(_permit) = request.acquire_permit(self.state.clone()).await {
@@ -513,7 +515,7 @@ impl InnerClient {
             }
             response
         }
-        .instrument(tracing::info_span!(
+        .instrument(trace_span!(
                 "RUN (ws)",
                 request = type_name::<T>(),
                 id = %rand::thread_rng().gen::<u32>()))
@@ -629,9 +631,8 @@ impl InnerClient {
         self.ws_state.ws_disconnect_sender.send(()).ok();
     }
 
-    pub async fn manage_client_error(_state: Arc<RwLock<State>>, error_response: &ErrorResponse) {
-        error!(?error_response, "client error");
-        println!("error: {:?}", error_response);
+    pub async fn manage_client_error(_state: Arc<RwLock<State>>, response: &ErrorResponse) {
+        error!(?response, "client error response");
     }
 }
 
@@ -774,28 +775,23 @@ impl Client {
         tokio::spawn(async move {
             while let Some(inner) = weak_inner.upgrade() {
                 let tick_start = tokio::time::Instant::now();
-                async {
-                    let fill_pool_schedules = inner
-                        .state
-                        .read()
-                        .await
-                        .get_fill_pool_schedules(chains.as_ref(), None);
-                    match fill_pool_schedules {
-                        Ok(fill_pool_schedules) => {
-                            for (request, permit) in fill_pool_schedules {
-                                let response = inner.run_http_with_permit(request, permit).await;
-                                if let Err(e) = response {
-                                    error!(error = %e, "request errored");
-                                }
+                let fill_pool_schedules = inner
+                    .state
+                    .read()
+                    .await
+                    .acquire_fill_pool_schedules(chains.as_ref(), None)
+                    .await;
+                match fill_pool_schedules {
+                    Ok(fill_pool_schedules) => {
+                        for (request, permit) in fill_pool_schedules {
+                            let response = inner.run_http_with_permit(request, permit).await;
+                            if let Err(e) = response {
+                                error!(error = %e, "request errored");
                             }
                         }
-                        Err(e) => error!(%e, "getting fill pool schedules errored"),
                     }
+                    Err(e) => error!(%e, "getting fill pool schedules errored"),
                 }
-                .instrument(tracing::info_span!(
-                    "FillPool",
-                    id = %rand::thread_rng().gen::<u32>()))
-                .await;
                 tokio::time::sleep_until(tick_start + interval).await;
             }
         });
@@ -1521,6 +1517,18 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn place_order_fill_pool_loop() {
+        println!(
+            "request: {:?}",
+            LimitOrderRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Sell,
+                amount: "0.09".to_string(),
+                price: "0.047".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: false,
+            }
+        );
         let client = init_client_fill_pool_loop().await;
         for _ in 0..1000 {
             let _response = client

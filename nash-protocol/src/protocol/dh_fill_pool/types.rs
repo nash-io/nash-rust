@@ -17,7 +17,6 @@ use super::super::{
     serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
 };
 use super::response;
-use std::time::Duration;
 
 /// DhFillPool requests coordinate between the user's client and the Nash server to
 /// gather a set of shared secret R values. The user sends a list of public ECDSA
@@ -124,7 +123,6 @@ impl NashProtocol for DhFillPoolRequest {
     ) -> Result<()> {
         let server_publics = ServerPublics::from_hexstrings(self.blockchain(), response)?;
         response::fill_pool(self, server_publics, state.clone()).await?;
-        tokio::time::sleep(Duration::from_secs(5)).await;
         // Update state to indicate we now have N new r values
         state
             .read()
@@ -143,7 +141,7 @@ mod tests {
     use tokio::sync::RwLock;
 
     use crate::protocol::signer::MAX_R_VAL_POOL_SIZE;
-    use crate::protocol::State;
+    use crate::protocol::{State, MAX_R_VAL_POOL_SIZE};
 
     use super::{Blockchain, DhFillPoolRequest, NashProtocol};
 

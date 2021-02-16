@@ -176,7 +176,7 @@ impl LimitOrderConstructor {
     /// given `nonces` and a `Client` as `signer`. FIXME: handle other chains
     pub fn blockchain_signatures(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
         nonces: &[PayloadNonces],
     ) -> Result<LimitBlockchainSignatures> {
         let mut order_payloads = Vec::new();
@@ -238,7 +238,7 @@ impl LimitOrderConstructor {
         nonces: Vec<PayloadNonces>,
         current_time: i64,
         affiliate: Option<String>,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<LimitOrderMutation> {
         let mut request = self.graphql_request(current_time, affiliate)?;
         // compute and add blockchain signatures
@@ -357,7 +357,7 @@ impl MarketOrderConstructor {
     /// given `nonces` and a `Client` as `signer`. FIXME: handle other chains
     pub fn blockchain_signatures(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
         nonces: &[PayloadNonces],
     ) -> Result<MarketBlockchainSignatures> {
         let mut order_payloads = Vec::new();
@@ -405,7 +405,7 @@ impl MarketOrderConstructor {
         nonces: Vec<PayloadNonces>,
         current_time: i64,
         affiliate: Option<String>,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<MarketOrderMutation> {
         let mut request = self.graphql_request(current_time, affiliate)?;
         // compute and add blockchain signatures

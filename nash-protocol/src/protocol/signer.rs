@@ -1,12 +1,18 @@
-use crate::errors::{ProtocolError, Result};
-use crate::protocol::RequestPayloadSignature;
-use crate::types::ApiKeys;
-use crate::types::Blockchain;
-use crate::types::PublicKey;
+#[cfg(feature = "k256")]
+use k256::ecdsa::signature::Signer as k256_Signer;
+#[cfg(feature = "k256")]
+use k256::ecdsa::{Signature, SigningKey};
 #[cfg(feature = "secp256k1")]
-use crate::utils::{der_encode_sig, hash_message};
+use rust_bigint::traits::Converter;
+#[cfg(feature = "secp256k1")]
+use secp256k1::constants::{COMPACT_SIGNATURE_SIZE, MESSAGE_SIZE, SECRET_KEY_SIZE};
+#[cfg(feature = "secp256k1")]
+use secp256k1::{Message, SecretKey};
+
 use nash_mpc::client::APIchildkey;
 use nash_mpc::common::Curve;
+#[cfg(feature = "secp256k1")]
+use nash_mpc::curves::secp256_k1::get_context;
 #[cfg(feature = "k256")]
 use nash_mpc::curves::secp256_k1_rust::Secp256k1Scalar;
 #[cfg(feature = "k256")]
@@ -14,19 +20,14 @@ use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::paillier_common;
 use nash_mpc::rust_bigint::BigInt;
 
-#[cfg(feature = "k256")]
-use k256::ecdsa::signature::Signer as k256_Signer;
-#[cfg(feature = "k256")]
-use k256::ecdsa::{Signature, SigningKey};
+use crate::errors::{ProtocolError, Result};
+use crate::protocol::RequestPayloadSignature;
+use crate::types::ApiKeys;
+use crate::types::Blockchain;
+use crate::types::PublicKey;
 #[cfg(feature = "secp256k1")]
-use secp256k1::constants::{COMPACT_SIGNATURE_SIZE, MESSAGE_SIZE, SECRET_KEY_SIZE};
-#[cfg(feature = "secp256k1")]
-use secp256k1::{Message, SecretKey};
-#[cfg(feature = "secp256k1")]
-use rust_bigint::traits::Converter;
-#[cfg(feature = "secp256k1")]
-use nash_mpc::curves::secp256_k1::get_context;
-
+use crate::utils::{der_encode_sig, hash_message};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub fn chain_path(chain: Blockchain) -> &'static str {
     match chain {
@@ -39,24 +40,24 @@ pub fn chain_path(chain: Blockchain) -> &'static str {
 #[derive(Debug)]
 pub struct Signer {
     pub api_keys: ApiKeys,
-    k1_remaining: u32,
-    r1_remaining: u32,
+    k1_remaining: AtomicU32,
+    r1_remaining: AtomicU32,
 }
 
 impl Signer {
     pub fn new(key_path: &str) -> Result<Self> {
         Ok(Self {
             api_keys: ApiKeys::new(key_path)?,
-            k1_remaining: 0,
-            r1_remaining: 0,
+            k1_remaining: AtomicU32::new(0),
+            r1_remaining: AtomicU32::new(0),
         })
     }
 
     pub fn from_data(secret: &str, session: &str) -> Result<Self> {
         Ok(Self {
             api_keys: ApiKeys::from_data(secret, session)?,
-            k1_remaining: 0,
-            r1_remaining: 0,
+            k1_remaining: AtomicU32::new(0),
+            r1_remaining: AtomicU32::new(0),
         })
     }
 
@@ -65,7 +66,8 @@ impl Signer {
     /// Either implemented with k256 from rustcrypto (pure rust) or secp256k1 (better performance)
     #[cfg(feature = "rustcrypto")]
     pub fn sign_canonical_string(&self, request: &str) -> RequestPayloadSignature {
-        let signing_key: Secp256k1Scalar = ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
+        let signing_key: Secp256k1Scalar =
+            ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
         let key = SigningKey::new(&signing_key.to_vec()).expect("invalid secret key");
         let sig_pre: Signature = key.try_sign(request.as_bytes()).expect("signing failed");
         let sig = sig_pre.to_asn1();
@@ -103,11 +105,11 @@ impl Signer {
 
     /// Sign data hashed to `BigInt` with the MPC child key for the given `Blockchain`
     pub fn sign_child_key(
-        &mut self,
+        &self,
         data: BigInt,
         chain: Blockchain,
     ) -> Result<(BigInt, BigInt, String)> {
-        if self.remaining_r_vals(chain) <= 0 {
+        if self.get_remaining_r_vals(&chain) <= 0 {
             return Err(ProtocolError("Ran out of R values"));
         }
         let key = self.get_child_key(chain);
@@ -119,7 +121,7 @@ impl Signer {
         let (sig, r) = nash_mpc::client::compute_presig(&key, &data, curve)
             .map_err(|_| ProtocolError("Error computing presignature"))?;
         // Track the fact that we now have one less R value
-        self.decrement_r_val(chain);
+        self.decr_r_vals(chain);
         Ok((sig, r, key.public_key))
     }
 
@@ -129,7 +131,7 @@ impl Signer {
     }
 
     /// Return public key for payload signing in format expected by the Nash backend service
-    /// BigInt conversion to hex will stip leading zeros, which Nash backedn doesn't like
+    /// BigInt conversion to hex will strip leading zeros, which Nash backend doesn't like
     pub fn request_payload_public_key(&self) -> String {
         let mut key_str = self.api_keys.keys.payload_public_key.to_str_radix(16);
         if key_str.len() % 2 != 0 {
@@ -159,26 +161,28 @@ impl Signer {
         }
     }
 
+    /// Get the current number of available R values for the given chain
+    pub fn get_remaining_r_vals(&self, chain: &Blockchain) -> u32 {
+        match chain {
+            Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining.load(Ordering::Acquire),
+            Blockchain::NEO => self.r1_remaining.load(Ordering::Acquire),
+        }
+    }
+
     /// Call after filling R values to update tracking
-    pub fn fill_r_vals(&mut self, chain: Blockchain, n: u32) {
+    pub fn fill_r_vals(&self, chain: Blockchain, n: u32) {
         match chain {
-            Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining = n,
-            Blockchain::NEO => self.r1_remaining = n,
-        }
+            Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining.fetch_add(n, Ordering::Release),
+            Blockchain::NEO => self.r1_remaining.fetch_add(n, Ordering::Release),
+        };
+        tracing::info!("filled {:?}: +{}", chain, n);
     }
 
-    fn decrement_r_val(&mut self, chain: Blockchain) {
+    fn decr_r_vals(&self, chain: Blockchain) {
         match chain {
-            Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining -= 1,
-            Blockchain::NEO => self.r1_remaining -= 1,
-        }
-    }
-
-    pub fn remaining_r_vals(&self, chain: Blockchain) -> u32 {
-        match chain {
-            Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining,
-            Blockchain::NEO => self.r1_remaining,
-        }
+            Blockchain::Ethereum | Blockchain::Bitcoin => self.k1_remaining.fetch_sub(1, Ordering::Release),
+            Blockchain::NEO => self.r1_remaining.fetch_sub(1, Ordering::Release),
+        };
     }
 }
 

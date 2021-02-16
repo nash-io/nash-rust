@@ -25,7 +25,7 @@ impl FillOrder {
 
     pub fn to_blockchain_signature(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<place_limit_order::BlockchainSignature> {
         // The only way I could get this to work with backend is to sign garbage data...
         let (sig, r, pub_key) =
@@ -43,7 +43,7 @@ impl FillOrder {
 
     pub fn to_market_blockchain_signature(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<place_market_order::BlockchainSignature> {
         // The only way I could get this to work with backend is to sign garbage data...
         let (sig, r, pub_key) =

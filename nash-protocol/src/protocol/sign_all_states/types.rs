@@ -1,18 +1,17 @@
-use super::super::{
-    asset_nonces::AssetNoncesRequest,
-    dh_fill_pool::DhFillPoolRequest,
-    list_markets::ListMarketsRequest,
-    sign_states::{SignStatesRequest, SignStatesResponse},
-    NashProtocol, NashProtocolPipeline, ResponseOrError, State,
-};
-use super::super::{NashProtocolRequest, ProtocolHook};
-use crate::errors::{ProtocolError, Result};
-use crate::types::Blockchain;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
-use std::sync::Arc;
-use tracing::trace;
+
+use crate::errors::{ProtocolError, Result};
+
+use super::super::{
+    asset_nonces::AssetNoncesRequest,
+    list_markets::ListMarketsRequest,
+    NashProtocol,
+    NashProtocolPipeline, ResponseOrError, sign_states::{SignStatesRequest, SignStatesResponse}, State,
+};
+use super::super::{NashProtocolRequest, ProtocolHook};
 
 /// Request to initiate pipeline for signing all states
 #[derive(Clone, Debug)]
@@ -36,8 +35,11 @@ impl NashProtocolPipeline for SignAllStates {
     type PipelineState = SignAllPipelineState;
     type ActionType = SignStatesRequest;
 
-    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
-        Some(state.read().await.sign_all_states_semaphore.clone())
+    async fn acquire_permit(
+        &self,
+        state: Arc<RwLock<State>>,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        state.read().await.sign_all_states_semaphore.clone().acquire_owned().await.ok()
     }
 
     /// Initialize pipeline state to None
@@ -95,22 +97,12 @@ impl NashProtocolPipeline for SignAllStates {
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         let state = state.read().await;
         let mut hooks = Vec::new();
-
         // If the client doesn't currently have a list of assets, run a list markets query to
         // get that. The assets will then be stored in client state
         if state.assets.is_none() {
             hooks.push(ProtocolHook::Protocol(NashProtocolRequest::ListMarkets(
                 ListMarketsRequest,
             )));
-        }
-
-        for chain in Blockchain::all() {
-            if state.signer()?.remaining_r_vals(chain) <= 10 {
-                trace!("Triggering FillPool (sign_all_states) for {:?}, {} remaining R values", chain, state.signer()?.remaining_r_vals(chain));
-                hooks.push(ProtocolHook::Protocol(NashProtocolRequest::DhFill(
-                    DhFillPoolRequest::new(chain)?,
-                )))
-            }
         }
         Ok(Some(hooks))
     }

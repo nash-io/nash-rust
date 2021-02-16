@@ -6,7 +6,7 @@ use std::time::Duration;
 use async_recursion::async_recursion;
 use rand::Rng;
 use reqwest::header::AUTHORIZATION;
-use tracing::{error, trace, Instrument};
+use tracing::{error, trace_span, Instrument};
 
 use nash_protocol::errors::{ProtocolError, Result};
 use nash_protocol::protocol::{NashProtocol, NashProtocolPipeline, ResponseOrError, State};
@@ -56,10 +56,21 @@ impl InnerClient {
         }
         let response = request.send().await;
         response
-            .map_err(|_| ProtocolError("Failed request"))?
+            .map_err(|e| {
+                if e.is_timeout() {
+                    ProtocolError("Request timeout")
+                } else {
+                    ProtocolError::coerce_static_from_str(&format!("Failed HTTP request: {}", e))
+                }
+            })?
             .json()
             .await
-            .map_err(|_| ProtocolError("Could not parse response as JSON"))
+            .map_err(|e| {
+                ProtocolError::coerce_static_from_str(&format!(
+                    "Could not parse response as JSON: {}",
+                    e
+                ))
+            })
     }
 
     /// Execute a NashProtocol request. Query will be created, executed over network, response will
@@ -74,10 +85,17 @@ impl InnerClient {
         let protocol_response = request
             .response_from_json(json_payload, self.state.clone())
             .await?;
-        if let Some(response) = protocol_response.response() {
-            request
-                .process_response(response, self.state.clone())
-                .await?;
+        match protocol_response{
+            ResponseOrError::Response(ref response) => {
+                request
+                    .process_response(&response.data, self.state.clone())
+                    .await?;
+            }
+            ResponseOrError::Error(ref error_response) => {
+                request
+                    .process_error(error_response, self.state.clone())
+                    .await?;
+            }
         }
         Ok(protocol_response)
     }
@@ -89,8 +107,7 @@ impl InnerClient {
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
         async {
             let response = {
-                if let Some(semaphore) = request.get_semaphore(self.state.clone()).await {
-                    let _permit = semaphore.acquire().await;
+                if let Some(_permit) = request.acquire_permit(self.state.clone()).await {
                     self.run_helper_http(request).await
                 } else {
                     self.run_helper_http(request).await
@@ -101,7 +118,26 @@ impl InnerClient {
             }
             response
         }
-        .instrument(tracing::info_span!(
+        .instrument(trace_span!(
+                "RUN (http)",
+                request = type_name::<T>(),
+                id = %rand::thread_rng().gen::<u32>()))
+        .await
+    }
+
+    pub async fn run_http_with_permit<T: NashProtocolPipeline + Clone>(
+        &self,
+        request: T,
+        _permit: tokio::sync::OwnedSemaphorePermit,
+    ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
+        async {
+            let response = self.run_helper_http(request).await;
+            if let Err(ref e) = response {
+                error!(error = %e, "request error");
+            }
+            response
+        }
+        .instrument(trace_span!(
                 "RUN (http)",
                 request = type_name::<T>(),
                 id = %rand::thread_rng().gen::<u32>()))
@@ -113,7 +149,6 @@ impl InnerClient {
         &self,
         request: T,
     ) -> Result<ResponseOrError<<T::ActionType as NashProtocol>::Response>> {
-        trace!("running pre-hooks");
         // First run any dependencies of the request/pipeline
         let before_actions = request.run_before(self.state.clone()).await?;
         if let Some(actions) = before_actions {
@@ -121,7 +156,6 @@ impl InnerClient {
                 self.run_http(action).await?;
             }
         }
-        trace!("running main pipeline");
         // Now run the pipeline
         let mut protocol_state = request.init_state(self.state.clone()).await;
         // While pipeline contains more actions for client to take, execute them
@@ -133,7 +167,11 @@ impl InnerClient {
                 let protocol_response = self.execute_protocol_http(protocol_request).await?;
                 // If error, end pipeline early and return GraphQL/network error data
                 if protocol_response.is_error() {
-                    Self::manage_client_error(self.state.clone()).await;
+                    Self::manage_client_error(
+                        self.state.clone(),
+                        protocol_response.error().unwrap(),
+                    )
+                    .await;
 
                     return Ok(ResponseOrError::Error(
                         protocol_response
@@ -155,7 +193,6 @@ impl InnerClient {
                 break;
             }
         }
-        trace!("running post-hooks");
         // Get things to run after the request/pipeline
         let after_actions = request.run_after(self.state.clone()).await?;
         // Now run anything specified for after the pipeline

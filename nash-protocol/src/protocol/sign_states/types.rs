@@ -112,9 +112,8 @@ impl NashProtocol for SignStatesRequest {
     type Response = SignStatesResponse;
     /// Serialize a SignStates protocol request to a GraphQL string
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
-        let mut state = state.write().await;
-        let signer = state.signer_mut()?;
-        let query = self.make_query(signer)?;
+        let state = state.read().await;
+        let query = self.make_query(state.signer()?)?;
         serializable_to_json(&query)
     }
     /// Deserialize response to SignStates protocol request

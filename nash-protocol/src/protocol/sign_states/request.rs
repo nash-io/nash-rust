@@ -14,7 +14,7 @@ impl SignStatesRequest {
     /// Create SignStates GraphQL request
     pub fn make_query(
         &self,
-        signer: &mut Signer,
+        signer: &Signer,
     ) -> Result<graphql_client::QueryBody<sign_states::Variables>> {
         // If we have state data from a previous request, sign it
         let (signed_orders, signed_states) = match &self.input_states {

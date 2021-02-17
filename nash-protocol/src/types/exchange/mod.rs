@@ -9,6 +9,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use super::blockchain::bigdecimal_to_nash_prec;
 
+pub mod convert;
+
 /// Representation of blockchains to help navigate encoding issues
 
 #[derive(Clone, Debug, Copy, PartialEq, Hash, Eq)]

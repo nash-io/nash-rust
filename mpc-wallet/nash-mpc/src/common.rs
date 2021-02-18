@@ -2,6 +2,7 @@
  * Functions for MPC-based API keys used by both server and client
  */
 
+use crate::curves::edwards25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
@@ -83,6 +84,30 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
     let mut dh_publics: Vec<Secp256k1Point> = Vec::new();
     for _ in 0..n {
         let dh_secret = match Secp256k1Scalar::new_random() {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let dh_public = match &base * &dh_secret {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        dh_secrets.push(dh_secret);
+        dh_publics.push(dh_public);
+    }
+    Ok((dh_secrets, dh_publics))
+}
+
+/// Diffie-Hellman: create a set of secret values and a set of public values (using curve edwards25519)
+pub fn dh_init_edwards25519(n: usize) -> Result<(Vec<Ed25519Scalar>, Vec<Ed25519Point>), ()> {
+    // don't allow creating too many values at once.
+    if n > 100 {
+        return Err(());
+    }
+    let base: Ed25519Point = ECPoint::generator();
+    let mut dh_secrets: Vec<Ed25519Scalar> = Vec::new();
+    let mut dh_publics: Vec<Ed25519Point> = Vec::new();
+    for _ in 0..n {
+        let dh_secret = match Ed25519Scalar::new_random() {
             Ok(v) => v,
             Err(_) => return Err(()),
         };
@@ -325,8 +350,8 @@ fn create_hash(int: &BigInt) -> BigInt {
 #[cfg(test)]
 mod tests {
     use crate::common::{
-        correct_key_proof_rho, create_hash, dh_init_secp256k1, dh_init_secp256r1, i2osp,
-        publickey_from_secretkey, verify, Curve,
+        correct_key_proof_rho, create_hash, dh_init_edwards25519, dh_init_secp256k1,
+        dh_init_secp256r1, i2osp, publickey_from_secretkey, verify, Curve,
     };
     #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::Secp256k1Point;
@@ -396,6 +421,14 @@ mod tests {
     }
 
     #[test]
+    fn test_dh_init_ed() {
+        let (secret1, public1) = dh_init_edwards25519(1).unwrap();
+        let (secret2, public2) = dh_init_edwards25519(1).unwrap();
+        assert_ne!(secret1, secret2);
+        assert_ne!(public1, public2);
+    }
+
+    #[test]
     #[should_panic]
     fn test_dh_init_k1_fail() {
         dh_init_secp256k1(101).unwrap();
@@ -405,6 +438,12 @@ mod tests {
     #[should_panic]
     fn test_dh_init_r1_fail() {
         dh_init_secp256r1(101).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_dh_init_ed_fail() {
+        dh_init_edwards25519(101).unwrap();
     }
 
     #[test]

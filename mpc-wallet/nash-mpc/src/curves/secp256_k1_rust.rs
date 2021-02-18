@@ -4,7 +4,7 @@ use super::traits::{ECPoint, ECScalar};
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;
-use k256::ecdsa::VerifyKey;
+use k256::ecdsa::VerifyingKey;
 use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use k256::{AffinePoint, EncodedPoint, ProjectivePoint, Scalar};
 #[cfg(feature = "num_bigint")]
@@ -26,10 +26,10 @@ pub struct Secp256k1Scalar {
     pub(crate) fe: Scalar,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Secp256k1Point {
     purpose: &'static str,
-    pub(crate) ge: VerifyKey,
+    pub(crate) ge: VerifyingKey,
 }
 
 impl Zeroize for Secp256k1Scalar {
@@ -229,11 +229,11 @@ impl Zeroize for Secp256k1Point {
     }
 }
 
-impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
+impl ECPoint<VerifyingKey, Scalar> for Secp256k1Point {
     fn generator() -> Secp256k1Point {
         Secp256k1Point {
             purpose: "base_fe",
-            ge: VerifyKey::from_encoded_point(&AffinePoint::generator().to_encoded_point(false))
+            ge: VerifyingKey::from_encoded_point(&AffinePoint::generator().to_encoded_point(false))
                 .unwrap(),
         }
     }
@@ -243,7 +243,7 @@ impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
     }
 
     fn x_coor(&self) -> BigInt {
-        BigInt::from_bytes(&EncodedPoint::from(&self.ge).x())
+        BigInt::from_bytes(&EncodedPoint::from(&self.ge).x().unwrap())
     }
 
     fn y_coor(&self) -> BigInt {
@@ -254,7 +254,7 @@ impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Secp256k1Point, ()> {
-        match VerifyKey::new(&bytes) {
+        match VerifyingKey::from_sec1_bytes(&bytes) {
             Ok(v) => Ok(Secp256k1Point {
                 purpose: "random",
                 ge: v,
@@ -274,7 +274,7 @@ impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
         if bool::from(point.is_none()) {
             return Err(());
         }
-        match VerifyKey::from_encoded_point(
+        match VerifyingKey::from_encoded_point(
             &(ProjectivePoint::from(point.unwrap()) * fe)
                 .to_affine()
                 .to_encoded_point(true),
@@ -287,13 +287,13 @@ impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
         }
     }
 
-    fn add_point(&self, other: &VerifyKey) -> Result<Secp256k1Point, ()> {
+    fn add_point(&self, other: &VerifyingKey) -> Result<Secp256k1Point, ()> {
         let point1 = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
         let point2 = AffinePoint::from_encoded_point(&EncodedPoint::from(other));
         if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
             return Err(());
         }
-        match VerifyKey::from_encoded_point(
+        match VerifyingKey::from_encoded_point(
             &(ProjectivePoint::from(point1.unwrap()) + ProjectivePoint::from(point2.unwrap()))
                 .to_affine()
                 .to_encoded_point(true),
@@ -306,13 +306,13 @@ impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
         }
     }
 
-    fn sub_point(&self, other: &VerifyKey) -> Result<Secp256k1Point, ()> {
+    fn sub_point(&self, other: &VerifyingKey) -> Result<Secp256k1Point, ()> {
         let point1 = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
         let point2 = AffinePoint::from_encoded_point(&EncodedPoint::from(other));
         if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
             return Err(());
         }
-        match VerifyKey::from_encoded_point(
+        match VerifyingKey::from_encoded_point(
             &(ProjectivePoint::from(point1.unwrap()) - ProjectivePoint::from(point2.unwrap()))
                 .to_affine()
                 .to_encoded_point(true),
@@ -338,7 +338,7 @@ impl ECPoint<VerifyKey, Scalar> for Secp256k1Point {
 
         let x_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec_x);
         let y_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&vec_y);
-        match VerifyKey::from_encoded_point(&EncodedPoint::from_affine_coordinates(
+        match VerifyingKey::from_encoded_point(&EncodedPoint::from_affine_coordinates(
             &x_arr, &y_arr, false,
         )) {
             Ok(v) => Ok(Secp256k1Point {
@@ -833,10 +833,10 @@ mod tests {
     fn add_sub_point() {
         let g = Secp256k1Point::generator();
         let i: Secp256k1Scalar = ECScalar::from(&BigInt::from(3)).unwrap();
-        assert_eq!(((g + g).unwrap() + g).unwrap().ge, (g * i).unwrap().ge);
+        assert_eq!(((&g + &g).unwrap() + &g).unwrap().ge, (&g * &i).unwrap().ge);
         assert_eq!(
-            (g + g).unwrap().ge,
-            (((g + g).unwrap() - g).unwrap() + g).unwrap().ge
+            (&g + &g).unwrap().ge,
+            (((&g + &g).unwrap() - &g).unwrap() + &g).unwrap().ge
         );
     }
 

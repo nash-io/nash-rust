@@ -62,7 +62,7 @@ pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        let dh_public = match base * &dh_secret {
+        let dh_public = match &base * &dh_secret {
             Ok(v) => v,
             Err(_) => return Err(()),
         };
@@ -86,7 +86,7 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        let dh_public = match base * &dh_secret {
+        let dh_public = match &base * &dh_secret {
             Ok(v) => v,
             Err(_) => return Err(()),
         };

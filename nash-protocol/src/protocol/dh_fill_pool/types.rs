@@ -12,6 +12,7 @@ use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::errors::{ProtocolError, Result};
 use crate::graphql::dh_fill_pool;
 use crate::types::Blockchain;
+use std::convert::TryInto;
 
 use super::super::{
     serializable_to_json, try_response_from_json, NashProtocol, ResponseOrError, State,
@@ -62,6 +63,7 @@ pub struct K1FillPool {
 
 impl K1FillPool {
     pub fn new(size: u32) -> Result<Self> {
+        let size = size.try_into().map_err(|_| ProtocolError("Couldn't convert size from u32 to usize"))?;
         let (secrets, publics) = nash_mpc::common::dh_init_secp256k1(size)
             .map_err(|_| ProtocolError("Could not initialize k1 values"))?;
         Ok(Self { publics, secrets })
@@ -77,6 +79,7 @@ pub struct R1FillPool {
 
 impl R1FillPool {
     pub fn new(size: u32) -> Result<Self> {
+        let size = size.try_into().map_err(|_| ProtocolError("Couldn't convert size from u32 to usize"))?;
         let (secrets, publics) = nash_mpc::common::dh_init_secp256r1(size)
             .map_err(|_| ProtocolError("Could not initialize r1 values"))?;
         Ok(Self { publics, secrets })

@@ -1,6 +1,6 @@
 [package]
 name = "nash-native-client"
-version = "0.1.19-alpha.0"
+version = "0.1.19"
 authors = ["Ethan Fast <ethan@nash.io>", "Danilo Guanabara <danilo@nash.io"]
 edition = "2018"
 license = "MIT"

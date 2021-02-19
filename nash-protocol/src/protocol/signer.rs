@@ -68,7 +68,7 @@ impl Signer {
     pub fn sign_canonical_string(&self, request: &str) -> RequestPayloadSignature {
         let signing_key: Secp256k1Scalar =
             ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
-        let key = SigningKey::new(&signing_key.to_vec()).expect("invalid secret key");
+        let key = SigningKey::from_bytes(&signing_key.to_vec()).expect("invalid secret key");
         let sig_pre: Signature = key.try_sign(request.as_bytes()).expect("signing failed");
         let sig = sig_pre.to_asn1();
         RequestPayloadSignature {

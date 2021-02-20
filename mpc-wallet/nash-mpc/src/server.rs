@@ -2,7 +2,11 @@
  * Server functions for MPC-based API keys
  */
 
-use crate::common::{correct_key_proof_rho, verify, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+use crate::common::{
+    correct_key_proof_rho, eddsa_s_hash, verify_ecdsa, verify_eddsa, CorrectKeyProof, Curve,
+    PAILLIER_KEY_SIZE,
+};
+use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
@@ -15,10 +19,11 @@ use paillier_common::{
     extract_nroot, Decrypt, DecryptionKey, EncryptionKey, KeyGeneration, Paillier, RawCiphertext,
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-use rust_bigint::traits::{BitManipulation, Converter, Modulo, ZeroizeBN};
+use rust_bigint::traits::{BitManipulation, Modulo, ZeroizeBN};
 use rust_bigint::BigInt;
 use std::cmp;
 use std::collections::HashMap;
+use zeroize::Zeroize;
 
 /// generate paillier keypair
 pub fn generate_paillier_keypair() -> (EncryptionKey, DecryptionKey) {
@@ -42,7 +47,7 @@ pub fn compute_rpool_secp256r1(
         return Err(());
     }
     let mut rpool_new = HashMap::new();
-    let mut tmp = vec!["0".to_string(); server_dh_secrets.len()];
+    let mut tmp = vec!["".to_string(); server_dh_secrets.len()];
     for (i, item) in tmp.iter_mut().enumerate().take(server_dh_secrets.len()) {
         *item = i.to_string();
     }
@@ -51,8 +56,7 @@ pub fn compute_rpool_secp256r1(
         *i = match client_dh_publics[i.parse::<usize>().unwrap()]
             .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
         {
-            // use string with leading zeros for ME
-            Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
+            Ok(v) => v.to_hex(),
             Err(_) => "".to_string(),
         };
     });
@@ -77,7 +81,7 @@ pub fn compute_rpool_secp256k1(
         return Err(());
     }
     let mut rpool_new = HashMap::new();
-    let mut tmp = vec!["0".to_string(); server_dh_secrets.len()];
+    let mut tmp = vec!["".to_string(); server_dh_secrets.len()];
     for (i, item) in tmp.iter_mut().enumerate().take(server_dh_secrets.len()) {
         *item = i.to_string();
     }
@@ -86,8 +90,7 @@ pub fn compute_rpool_secp256k1(
         *i = match client_dh_publics[i.parse::<usize>().unwrap()]
             .scalar_mul(&server_dh_secrets[i.parse::<usize>().unwrap()].fe)
         {
-            // use string with leading zeros for ME
-            Ok(v) => format!("{:0>66}", v.to_bigint().to_hex()),
+            Ok(v) => v.to_hex(),
             Err(_) => "".to_string(),
         };
     });
@@ -103,8 +106,45 @@ pub fn compute_rpool_secp256k1(
     Ok(rpool_new)
 }
 
+/// compute r_pool-values for curve25519
+pub fn compute_rpool_curve25519(
+    server_dh_secrets: &[Ed25519Scalar],
+    client_dh_publics: &[Ed25519Point],
+) -> Result<HashMap<String, Ed25519Scalar>, ()> {
+    if server_dh_secrets.len() != client_dh_publics.len() {
+        return Err(());
+    }
+    let mut rpool_new = HashMap::new();
+    let mut tmp = vec!["".to_string(); server_dh_secrets.len()];
+    for (i, item) in tmp.iter_mut().enumerate().take(server_dh_secrets.len()) {
+        *item = i.to_string();
+    }
+    // execute scalar multiplication and point addition in parallel
+    tmp.par_iter_mut().for_each(|i| {
+        let server_dh_public =
+            match &Ed25519Point::generator() * &server_dh_secrets[i.parse::<usize>().unwrap()] {
+                Ok(v) => v,
+                Err(_) => return (),
+            };
+        *i = match server_dh_public + client_dh_publics[i.parse::<usize>().unwrap()] {
+            Ok(v) => v.to_hex(),
+            Err(_) => "".to_string(),
+        };
+    });
+    // check if any parallel operation failed
+    for item in tmp.iter().take(server_dh_secrets.len()) {
+        if item.is_empty() {
+            return Err(());
+        }
+    }
+    for i in 0..server_dh_secrets.len() {
+        rpool_new.insert(tmp[i].clone(), server_dh_secrets[i].clone());
+    }
+    Ok(rpool_new)
+}
+
 /// complete presignature to conventional ECDSA signature
-pub fn complete_sig(
+pub fn complete_sig_ecdsa(
     paillier_sk: &DecryptionKey,
     presig: &BigInt,
     r: &BigInt,
@@ -137,7 +177,7 @@ pub fn complete_sig(
     }
     let (s, recid) = complete_sig_curveindependent(&paillier_sk, &presig, &k, &rx, &ry, &q);
     // verify that the resulting signature is indeed valid
-    if verify(&rx, &s, pubkey_str, msg_hash, curve) {
+    if verify_ecdsa(&rx, &s, pubkey_str, msg_hash, curve) {
         Ok((rx, s, recid))
     } else {
         Err(())
@@ -170,6 +210,56 @@ fn complete_sig_curveindependent(
     (s, recid)
 }
 
+/// complete presignature to conventional EdDSA signature
+pub fn complete_sig_eddsa(
+    mut server_secret_share_int: BigInt,
+    s_client: &Ed25519Scalar,
+    r: &Ed25519Point,
+    mut r_server: Ed25519Scalar,
+    pk_str: &str,
+    msg: &BigInt,
+) -> Result<Ed25519Scalar, ()> {
+    let mut server_secret_share: Ed25519Scalar = match ECScalar::from(&server_secret_share_int) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    server_secret_share_int.zeroize_bn();
+    let pk = match Ed25519Point::from_hex(pk_str) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    let hash: Ed25519Scalar = match eddsa_s_hash(r, &pk, msg) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+
+    // compute server part of S
+    let mut tmp = match &hash * &server_secret_share {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    server_secret_share.zeroize();
+    let s_server = match &r_server + &tmp {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    tmp.zeroize();
+    r_server.zeroize();
+
+    // combine the two individual s values into one to get the full signature (R, S)
+    let s = match s_client + &s_server {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+
+    // verify that the resulting signature is indeed valid
+    if verify_eddsa(r, &s, pk_str, msg) {
+        Ok(s)
+    } else {
+        Err(())
+    }
+}
+
 /// compute sigma values for correct key proof
 /// see paper "Efficient Noninteractive Certification of RSA Moduli and Beyond" by Goldberg et al. 2019 Section 3.2 and Appendix C.4
 fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<BigInt> {
@@ -183,15 +273,17 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
 #[cfg(test)]
 mod tests {
     use crate::common::{publickey_from_secretkey, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
+    use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
     #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     #[cfg(feature = "k256")]
     use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-    use crate::curves::traits::ECScalar;
+    use crate::curves::traits::{ECPoint, ECScalar};
     use crate::server::{
-        complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, correct_key_proof_sigma,
-        generate_paillier_keypair, generate_paillier_proof,
+        complete_sig_ecdsa, compute_rpool_curve25519, compute_rpool_secp256k1,
+        compute_rpool_secp256r1, correct_key_proof_sigma, generate_paillier_keypair,
+        generate_paillier_proof,
     };
     use paillier_common::{DecryptionKey, MinimalDecryptionKey};
     use rust_bigint::traits::{Converter, NumberTests};
@@ -373,6 +465,67 @@ mod tests {
     }
 
     #[test]
+    fn test_rpool_ed_ok() {
+        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("1").unwrap()).unwrap();
+        let dh_public = Ed25519Point::generator();
+        let dh_secret_vec = vec![dh_secret.clone()];
+        let dh_public_vec = vec![dh_public];
+        let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();
+        let mut expected = HashMap::new();
+        let two: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("2").unwrap()).unwrap();
+        expected.insert(
+            (Ed25519Point::generator() * two).unwrap().to_hex(),
+            dh_secret,
+        );
+        assert_eq!(computed, expected);
+    }
+
+    #[test]
+    fn test_rpool_ed_ok2() {
+        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
+        let dh_public = Ed25519Point::from_bigint(&BigInt::from_hex("1faf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163").unwrap()).unwrap();
+        let dh_secret_vec = vec![dh_secret.clone()];
+        let dh_public_vec = vec![dh_public];
+        let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();
+        let mut expected = HashMap::new();
+        expected.insert(
+            "804161a83fdb88ec4fb941440be2928a01285651cb6843de965c6ec14e2b97f0".to_string(),
+            dh_secret,
+        );
+        assert_eq!(computed, expected);
+    }
+
+    #[test]
+    fn test_rpool_ed_wrong_secret() {
+        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("0545c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
+        let dh_public = Ed25519Point::from_bigint(&BigInt::from_hex("1faf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163").unwrap()).unwrap();
+        let dh_secret_vec = vec![dh_secret.clone()];
+        let dh_public_vec = vec![dh_public];
+        let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();
+        let mut expected = HashMap::new();
+        expected.insert(
+            "804161a83fdb88ec4fb941440be2928a01285651cb6843de965c6ec14e2b97f0".to_string(),
+            dh_secret,
+        );
+        assert_ne!(computed, expected);
+    }
+
+    #[test]
+    fn test_rpool_ed_wrong_public() {
+        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
+        let dh_public = Ed25519Point::from_bigint(&BigInt::from_hex("1eaf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163").unwrap()).unwrap();
+        let dh_secret_vec = vec![dh_secret.clone()];
+        let dh_public_vec = vec![dh_public];
+        let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();
+        let mut expected = HashMap::new();
+        expected.insert(
+            "804161a83fdb88ec4fb941440be2928a01285651cb6843de965c6ec14e2b97f0".to_string(),
+            dh_secret,
+        );
+        assert_ne!(computed, expected);
+    }
+
+    #[test]
     fn test_complete_sig_k1_ok() {
         let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
         let presig = BigInt::from_hex("4eef881b16b678841b4688be1609cf3eb4b9d31b00e74d9f2c0a7c6e827a43eb099099802893d7568655db7ceb590092a09f2d3154e4c25527091c50e8b956104e03f6ec04bd13158341d1728f7f0e9aa9e9664e0fbfcca06a2fbb97a48ddbf6e86d39b58cd8581b494b084f6b2d1d70f66994da6b7c73a034f0580b77658aed33517b7cf6b6cfb6e23a67001ab4caa49ed8445890a74d60ecac4140cc0ae9817a7d974deb1111784c0ad400ae30c74e421d0f5f31b42364c44b577be00ef13deb2a2d9c90b913abfad7056fb2e9d86f1ad521441f7a58b264c56b5da86e1d07a84d50ef28c711d023ca5f7c8759d4aa9d6fc83db5be69c05d8a6804a344c169e3dc7ab542283f1f03151bade022ce18685f0142523fb27154e29104efb10757e5be11c669c4a16d1de7d294d019c0a742cf64f0b91953ff36da960ac55aa023ff10fd9410bfb0fe5f68210d93a7c67d4e743aaae7aef6659b90a0b23e7ad267514ec359624581b8d6a1fd839db0ab05c1ab82192214c3e3d26b337d4937fd9a4d1c78d843c511e6de4f4f44fe7784a7edc33fdabd222be0c6600d38c55f48967847f17f6f049fe4b0ac485010226c16eece202a34b357d5acee6109d5bccfa3a61a79c80ddebb8c2cef192afa0440452739bbe55fc94b6a0af2d98328196b6041e584215a399ce615cfd697c6cca8ea30bac926de61b636d4029a226955854d").unwrap();
@@ -393,7 +546,7 @@ mod tests {
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         let (r_, s, recid) =
-            complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+            complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
         assert_eq!(
             r_,
             BigInt::from_hex("7c1adefb68c11af735850d77e24bd0c4dbc256cf100d441d4542d853a81508f3")
@@ -428,7 +581,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -452,7 +605,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -476,7 +629,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -500,7 +653,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -524,7 +677,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -548,7 +701,7 @@ mod tests {
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         let (r_, s, recid) =
-            complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+            complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
         assert_eq!(
             r_,
             BigInt::from_hex("0a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
@@ -583,7 +736,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -607,7 +760,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -631,7 +784,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -655,7 +808,7 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 
     #[test]
@@ -679,6 +832,6 @@ mod tests {
         let msg_hash =
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
-        complete_sig(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+        complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
     }
 }

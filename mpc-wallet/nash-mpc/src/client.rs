@@ -3,8 +3,10 @@
  */
 
 use crate::common::{
-    correct_key_proof_rho, publickey_from_secretkey, CorrectKeyProof, Curve, CORRECT_KEY_M,
+    correct_key_proof_rho, eddsa_s_hash, publickey_from_secretkey, CorrectKeyProof, Curve,
+    CORRECT_KEY_M,
 };
+use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
@@ -30,8 +32,7 @@ use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
 use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use zeroize::Zeroize;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct APIchildkeyCreator {
@@ -48,6 +49,13 @@ pub struct APIchildkey {
     pub client_secret_share: BigInt,
     #[serde(with = "rust_bigint::serialize::bigint")]
     pub server_secret_share_encrypted: BigInt,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct APIchildkeyEdDSA {
+    pub public_key: String,
+    #[serde(with = "rust_bigint::serialize::bigint")]
+    pub client_secret_share: BigInt,
 }
 
 impl APIchildkeyCreator {
@@ -160,8 +168,88 @@ impl APIchildkeyCreator {
     }
 }
 
+/// create API child key for EdDSA/curve25519 curve
+pub fn create_eddsa_api_childkey(secret_key: &BigInt) -> Result<(APIchildkeyEdDSA, BigInt), ()> {
+    let secret_key = match ECScalar::from(secret_key) {
+        Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+        Err(_) => return Err(()),
+    };
+    let public_key = publickey_from_secretkey(&secret_key.to_bigint(), Curve::Curve25519)
+        .expect("Invalid curve");
+    // client's secret share is just some random value
+    let client_secret_share = match Ed25519Scalar::new_random() {
+        Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+        Err(_) => return Err(()),
+    };
+    // compute additive server secret share, i.e., full secret = client secret share + server secret share % L
+    let mut server_secret_share_bytes = *(&secret_key.fe - &client_secret_share.fe).as_bytes();
+    server_secret_share_bytes.reverse();
+    let server_secret_share = Zeroizing::<Ed25519Scalar>::new(
+        ECScalar::from(&BigInt::from_bytes(&server_secret_share_bytes)).unwrap(),
+    );
+    server_secret_share_bytes.zeroize();
+    Ok((
+        APIchildkeyEdDSA {
+            public_key,
+            client_secret_share: client_secret_share.to_bigint(),
+        },
+        server_secret_share.to_bigint(),
+    ))
+}
+
+/// compute EdDSA presignature
+pub fn compute_presig_eddsa(
+    api_childkey: &APIchildkeyEdDSA,
+    msg_hash: &BigInt,
+) -> Result<(Ed25519Point, Ed25519Scalar), ()> {
+    // fetch and remove random value R and r_client from pool
+    let mut pool_entry = match RPOOL_CURVE25519.lock().unwrap().pop() {
+        Option::Some(val) => val,
+        Option::None => return Err(()),
+    };
+    let mut r_client: Ed25519Scalar = match ECScalar::from(&(pool_entry.1).1) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    (pool_entry.1).1.zeroize_bn();
+    let r = match Ed25519Point::from_bigint(&pool_entry.0) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+
+    let pk = match Ed25519Point::from_hex(&api_childkey.public_key) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    let mut client_secret_share: Ed25519Scalar =
+        match ECScalar::from(&api_childkey.client_secret_share) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+    let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg_hash) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+
+    // compute client part of S
+    let mut tmp = match &hash * &client_secret_share {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    client_secret_share.zeroize();
+    let s_client = match &r_client + &tmp {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    tmp.zeroize();
+    r_client.zeroize();
+
+    // return R and client part of S
+    Ok((r, s_client))
+}
+
 /// compute presignature
-pub fn compute_presig(
+pub fn compute_presig_ecdsa(
     api_childkey: &APIchildkey,
     msg_hash: &BigInt,
     curve: Curve,
@@ -248,7 +336,7 @@ fn compute_presig_curveindependent(
         .into_owned()
 }
 
-// two pools of r-values (one for each curve) and one pool of random values for Paillier.
+// three pools of r-values (one for each curve) and one pool of random values for Paillier.
 // mutex is essential for security (helps us ensuring that no value is used twice).
 lazy_static! {
     static ref RPOOL_SECP256R1: Mutex<IndexMap<BigInt, (DateTime<Utc>, BigInt)>> =
@@ -256,6 +344,8 @@ lazy_static! {
     static ref RPOOL_SECP256K1: Mutex<IndexMap<BigInt, (DateTime<Utc>, BigInt)>> =
         Mutex::new(IndexMap::new());
     static ref POOL_PAILLIER: Mutex<IndexSet<BigInt>> = Mutex::new(IndexSet::new());
+    static ref RPOOL_CURVE25519: Mutex<IndexMap<BigInt, (DateTime<Utc>, BigInt)>> =
+        Mutex::new(IndexMap::new());
 }
 
 /// fill pool of random values for Paillier
@@ -351,6 +441,49 @@ pub fn fill_rpool_secp256k1(
     Ok(())
 }
 
+/// fill pool of random and nonce values for curve25519
+pub fn fill_rpool_curve25519(
+    mut own_dh_secrets: Vec<Ed25519Scalar>,
+    other_dh_publics: &[Ed25519Point],
+) -> Result<(), ()> {
+    if own_dh_secrets.len() != other_dh_publics.len() {
+        return Err(());
+    }
+    // sequentially for wasm, else parallel
+    #[cfg(feature = "wasm")]
+    for i in 0..own_dh_secrets.len() {
+        let own_dh_public = match &Ed25519Point::generator() * &own_dh_secrets[i] {
+            Ok(v) => v,
+            Err(_) => return (),
+        };
+        match own_dh_publics + other_dh_publics[i] {
+            Ok(r) => RPOOL_CURVE25519
+                .lock()
+                .unwrap()
+                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+            Err(_) => None,
+        };
+    }
+    #[cfg(not(feature = "wasm"))]
+    (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
+        let own_dh_public = match &Ed25519Point::generator() * &own_dh_secrets[i] {
+            Ok(v) => v,
+            Err(_) => return (),
+        };
+        match own_dh_public + other_dh_publics[i] {
+            Ok(r) => RPOOL_CURVE25519
+                .lock()
+                .unwrap()
+                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+            Err(_) => None,
+        };
+    });
+    for i in &mut own_dh_secrets {
+        i.zeroize();
+    }
+    Ok(())
+}
+
 /// get number of r-values in pool
 pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
     if curve == Curve::Secp256k1 {
@@ -367,6 +500,13 @@ pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
             .unwrap()
             .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
         Ok(RPOOL_SECP256R1.lock().unwrap().len())
+    } else if curve == Curve::Curve25519 {
+        // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
+        RPOOL_CURVE25519
+            .lock()
+            .unwrap()
+            .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
+        Ok(RPOOL_CURVE25519.lock().unwrap().len())
     } else {
         Err(())
     }
@@ -417,16 +557,18 @@ fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> 
 mod tests {
     use crate::client::POOL_PAILLIER;
     use crate::client::{
-        compute_presig, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
+        compute_presig_ecdsa, compute_presig_eddsa, create_eddsa_api_childkey,
+        encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
         get_rpool_size, verify_correct_key_proof, APIchildkeyCreator,
     };
     use crate::common::{CorrectKeyProof, Curve};
+    use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
     #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     #[cfg(feature = "k256")]
     use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-    use crate::curves::traits::ECScalar;
+    use crate::curves::traits::{ECPoint, ECScalar};
     use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use rust_bigint::traits::Converter;
     use rust_bigint::BigInt;
@@ -576,7 +718,8 @@ mod tests {
         let api_childkey = api_childkey_creator
             .create_api_childkey(Curve::Secp256k1)
             .unwrap();
-        let (presig1, r) = compute_presig(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
+        let (presig1, r) =
+            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
         assert_eq!(
             r,
             BigInt::from_hex("3703d86c98836a6ef32371e1b91ed2ca64bd6d7a0774631f47ffebc49406c94ac")
@@ -585,7 +728,8 @@ mod tests {
         assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
         fill_rpool_secp256k1(vec![dh_secret], &dh_public_vec, &paillier_pk).unwrap();
         assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 1);
-        let (presig2, _) = compute_presig(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
+        let (presig2, _) =
+            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
         assert_ne!(presig1, presig2);
         assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
     }
@@ -621,19 +765,36 @@ mod tests {
         let api_childkey = api_childkey_creator
             .create_api_childkey(Curve::Secp256r1)
             .unwrap();
-        let (presig1, r) = compute_presig(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
+        let (presig1, r) =
+            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
         assert_eq!(
             r,
             BigInt::from_hex("306978b9dd8d1438387f3e1e58ecec203c61ac0c848834ed094ebef5547b74fda")
                 .unwrap()
         );
         fill_rpool_secp256r1(dh_secret_vec.clone(), &dh_public_vec, &paillier_pk).unwrap();
-        let (presig2, _) = compute_presig(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
+        let (presig2, _) =
+            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
         assert_ne!(presig1, presig2);
     }
 
     #[test]
-    fn test_encrypt_secrate_share() {
+    fn test_fill_rpool_ed() {
+        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("1").unwrap()).unwrap();
+        let dh_public = Ed25519Point::generator();
+        let dh_secret_vec = vec![dh_secret.clone()];
+        let dh_public_vec = vec![dh_public];
+        fill_rpool_curve25519(dh_secret_vec, &dh_public_vec).unwrap();
+        let secret_key = Ed25519Scalar::new_random().unwrap().to_bigint();
+        let (api_childkey, _) = create_eddsa_api_childkey(&secret_key).unwrap();
+        let msg = BigInt::from_hex("1").unwrap();
+        let (r, _) = compute_presig_eddsa(&api_childkey, &msg).unwrap();
+        let two: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("2").unwrap()).unwrap();
+        assert_eq!(r, (Ed25519Point::generator() * two).unwrap());
+    }
+
+    #[test]
+    fn test_encrypt_secret_share() {
         let secret_key =
             BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap();

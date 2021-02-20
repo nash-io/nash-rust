@@ -1,8 +1,9 @@
-// ed25519 elliptic curve utility functions.
+// curve25519 utility functions
 
 use super::traits::{ECPoint, ECScalar};
 use curve25519_dalek::constants::{BASEPOINT_ORDER, ED25519_BASEPOINT_COMPRESSED};
-use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
+use curve25519_dalek::edwards::CompressedEdwardsY;
+pub(crate) use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 use getrandom::getrandom;
 use num_traits::identities::{One, Zero};
@@ -13,7 +14,7 @@ use serde::de::Visitor;
 use serde::ser::{Serialize, Serializer};
 use serde::{Deserialize, Deserializer};
 use std::fmt;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Neg};
 use std::ptr;
 use std::sync::atomic;
 use zeroize::Zeroize;
@@ -54,7 +55,7 @@ impl ECScalar<Scalar> for Ed25519Scalar {
     }
 
     fn from(n: &BigInt) -> Result<Ed25519Scalar, ()> {
-        if n >= &Ed25519Scalar::q() || n < &BigInt::zero() {
+        if n >= &Ed25519Scalar::q() || n <= &BigInt::zero() {
             return Err(());
         }
         let mut vec = vec![0; 32 - BigInt::to_vec(n).len()];
@@ -134,31 +135,59 @@ impl ECScalar<Scalar> for Ed25519Scalar {
     }
 }
 
+impl Ed25519Scalar {
+    /// derive Scalar from bytes
+    pub(crate) fn from_bytes(bytes: &[u8; 64]) -> Result<Ed25519Scalar, ()> {
+        let scalar = Scalar::from_bytes_mod_order_wide(bytes);
+        if scalar == Scalar::zero() {
+            return Err(());
+        };
+        Ok(Ed25519Scalar {
+            purpose: "from_bytes",
+            fe: scalar,
+        })
+    }
+}
+
 impl Mul<Ed25519Scalar> for Ed25519Scalar {
     type Output = Result<Ed25519Scalar, ()>;
     fn mul(self, other: Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
-        (&self).mul(&other.fe)
+        ECScalar::mul(&(&self), &other.fe)
     }
 }
 
 impl<'o> Mul<&'o Ed25519Scalar> for Ed25519Scalar {
     type Output = Result<Ed25519Scalar, ()>;
     fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
-        (&self).mul(&other.fe)
+        ECScalar::mul(&(&self), &other.fe)
+    }
+}
+
+impl<'o> Mul<&'o Ed25519Scalar> for &'o Ed25519Scalar {
+    type Output = Result<Ed25519Scalar, ()>;
+    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+        ECScalar::mul(&(&self), &other.fe)
     }
 }
 
 impl Add<Ed25519Scalar> for Ed25519Scalar {
     type Output = Result<Ed25519Scalar, ()>;
     fn add(self, other: Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
-        (&self).add(&other.fe)
+        ECScalar::add(&(&self), &other.fe)
     }
 }
 
 impl<'o> Add<&'o Ed25519Scalar> for Ed25519Scalar {
     type Output = Result<Ed25519Scalar, ()>;
     fn add(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
-        (&self).add(&other.fe)
+        ECScalar::add(&(&self), &other.fe)
+    }
+}
+
+impl<'o> Add<&'o Ed25519Scalar> for &'o Ed25519Scalar {
+    type Output = Result<Ed25519Scalar, ()>;
+    fn add(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+        ECScalar::add(&(&self), &other.fe)
     }
 }
 
@@ -319,7 +348,7 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
         })
     }
 
-    fn from_coor(x: &BigInt, y: &BigInt) -> Result<Ed25519Point, ()> {
+    fn from_coor(_x: &BigInt, y: &BigInt) -> Result<Ed25519Point, ()> {
         let vec_y = BigInt::to_vec(y);
         let mut vec = vec![0; 32 - vec_y.len()];
         // pad with zeros if necessary
@@ -329,7 +358,7 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
         vec.reverse();
 
         match CompressedEdwardsY::from_slice(&vec).decompress() {
-            Some(v) => Ok(Ed25519Point{
+            Some(v) => Ok(Ed25519Point {
                 purpose: "base_fe",
                 ge: v,
             }),
@@ -357,6 +386,20 @@ impl Ed25519Point {
             Ok(v) => Ok(v),
             Err(_) => Err(()),
         }
+    }
+
+    fn neg(&self) -> Ed25519Point {
+        Ed25519Point {
+            purpose: "neg",
+            ge: self.ge.neg(),
+        }
+    }
+}
+
+impl<'o> Neg for &'o Ed25519Point {
+    type Output = Ed25519Point;
+    fn neg(self) -> Ed25519Point {
+        self.neg()
     }
 }
 
@@ -521,8 +564,8 @@ mod tests {
     fn serialize_pk() {
         let pk = Ed25519Point::generator();
         let s = serde_json::to_string(&pk).expect("Failed in serialization");
-        let expected = serde_json::to_string(&(&pk.to_bigint().to_hex()))
-            .expect("Failed in serialization");
+        let expected =
+            serde_json::to_string(&(&pk.to_bigint().to_hex())).expect("Failed in serialization");
         assert_eq!(s, expected);
         let des_pk: Ed25519Point = serde_json::from_str(&s).expect("Failed in serialization");
         assert_eq!(des_pk.ge, pk.ge);

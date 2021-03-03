@@ -6,6 +6,7 @@
 pub mod asset_nonces;
 pub mod cancel_all_orders;
 pub mod cancel_order;
+pub mod cancel_orders;
 pub mod dh_fill_pool;
 pub mod get_account_order;
 pub mod get_ticker;
@@ -17,6 +18,7 @@ pub mod list_markets;
 pub mod list_trades;
 pub mod orderbook;
 pub mod place_order;
+pub mod place_orders;
 pub mod sign_all_states;
 pub mod sign_states;
 pub mod subscriptions;

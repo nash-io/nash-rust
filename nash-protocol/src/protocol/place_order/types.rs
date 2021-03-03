@@ -190,7 +190,9 @@ impl NashProtocol for LimitOrderRequest {
         let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
         let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
-        serializable_to_json(&query)
+        let json = serializable_to_json(&query);
+        println!("{:#?}", json);
+        json
     }
 
     async fn response_from_json(

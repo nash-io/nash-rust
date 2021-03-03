@@ -11,6 +11,7 @@ use nash_native_client::{Client, Environment};
 use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
 use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
 use nash_protocol::protocol::cancel_order::CancelOrderRequest;
+use nash_protocol::protocol::cancel_orders::{CancelOrdersRequest, CancelOrdersResponse};
 use nash_protocol::protocol::dh_fill_pool::DhFillPoolRequest;
 use nash_protocol::protocol::get_account_order::GetAccountOrderRequest;
 use nash_protocol::protocol::get_ticker::TickerRequest;
@@ -22,6 +23,7 @@ use nash_protocol::protocol::list_markets::ListMarketsRequest;
 use nash_protocol::protocol::list_trades::ListTradesRequest;
 use nash_protocol::protocol::orderbook::OrderbookRequest;
 use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest};
+use nash_protocol::protocol::place_orders::{LimitOrdersRequest, MarketOrdersRequest, PlaceOrdersResponse};
 use nash_protocol::protocol::sign_all_states::SignAllStates;
 use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
 use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
@@ -31,6 +33,7 @@ use nash_protocol::protocol::subscriptions::updated_account_orders::SubscribeAcc
 use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
+use nash_protocol::protocol::{ResponseOrError, DataResponse};
 
 async fn init_client() -> Client {
     dotenv().ok();
@@ -42,7 +45,7 @@ async fn init_client() -> Client {
         None,
         false,
         0,
-        Environment::Production,
+        Environment::Sandbox,
         Duration::from_secs_f32(5.0),
     )
         .await
@@ -645,6 +648,150 @@ async fn end_to_end_sub_account_balance() {
         .unwrap();
     let next_item = response.recv().await.unwrap().unwrap();
     println!("{:?}", next_item);
+}
+
+#[test]
+fn multi_place_multi_cancel() {
+    // create 3 orders
+    // cancel 2 orders
+    // cancel all left orders
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let async_block = async {
+        let client = init_client().await;
+
+        let requests = LimitOrdersRequest {
+            requests: vec![
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.2".to_string(),
+                    price: "0.000213070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.1".to_string(),
+                    price: "0.000203070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.05".to_string(),
+                    price: "0.000210070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+            ]
+        };
+
+        let mut response = PlaceOrdersResponse {
+            responses: Default::default()
+        };
+        for request in requests.requests {
+            response.responses.push(client
+                .run(request)
+                .await
+                .unwrap()
+                .response()
+                .unwrap()
+                .clone());
+        }
+        let response = ResponseOrError::Response(DataResponse { data: response });
+        println!("{:?}", response);
+
+        let response = client
+            .run(ListAccountOrdersRequest {
+                status: Some(vec![OrderStatus::Open]),
+                order_type: None,
+                range: None,
+                buy_or_sell: None,
+                limit: None,
+                before: None,
+                market: Some("eth_btc".into())
+            })
+            .await
+            .unwrap();
+
+        let orders = response.response().unwrap();
+        assert_eq!(orders.orders.len(), 3);
+
+        let requests = CancelOrdersRequest {
+            requests: vec![
+                CancelOrderRequest {
+                    market: "eth_btc".to_string(),
+                    order_id: orders.orders[0].id.clone()
+                },
+                CancelOrderRequest {
+                    market: "eth_btc".to_string(),
+                    order_id: orders.orders[1].id.clone()
+                }
+            ]
+        };
+
+        let mut response = CancelOrdersResponse {
+            responses: Default::default()
+        };
+        for request in requests.requests {
+            response.responses.push(client
+                .run(request)
+                .await
+                .unwrap()
+                .response()
+                .unwrap()
+                .clone());
+        }
+        let response = ResponseOrError::Response(DataResponse { data: response });
+        println!("{:?}", response);
+
+        let response = client
+            .run(ListAccountOrdersRequest {
+                status: Some(vec![OrderStatus::Open]),
+                order_type: None,
+                range: None,
+                buy_or_sell: None,
+                limit: None,
+                before: None,
+                market: Some("eth_btc".into())
+            })
+            .await
+            .unwrap();
+
+        let orders = response.response().unwrap();
+        assert_eq!(orders.orders.len(), 1);
+
+        let response = client
+            .run(CancelAllOrders {
+                market: "eth_btc".to_string(),
+            })
+            .await
+            .unwrap();
+        println!("{:?}", response);
+        assert_eq!(response.response().unwrap().accepted, true);
+
+        let response = client
+            .run(ListAccountOrdersRequest {
+                status: Some(vec![OrderStatus::Open]),
+                order_type: None,
+                range: None,
+                buy_or_sell: None,
+                limit: None,
+                before: None,
+                market: Some("eth_btc".into())
+            })
+            .await
+            .unwrap();
+
+        assert!(response.response().unwrap().orders.is_empty());
+    };
+    runtime.block_on(async_block);
 }
 
 #[test]

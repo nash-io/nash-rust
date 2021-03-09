@@ -23,7 +23,6 @@ use nash_protocol::protocol::list_markets::ListMarketsRequest;
 use nash_protocol::protocol::list_trades::ListTradesRequest;
 use nash_protocol::protocol::orderbook::OrderbookRequest;
 use nash_protocol::protocol::place_order::{LimitOrderRequest, MarketOrderRequest};
-use nash_protocol::protocol::place_orders::{LimitOrdersRequest, MarketOrdersRequest, PlaceOrdersResponse};
 use nash_protocol::protocol::sign_all_states::SignAllStates;
 use nash_protocol::protocol::subscriptions::trades::SubscribeTrades;
 use nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook;
@@ -34,6 +33,7 @@ use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
 use nash_protocol::protocol::{ResponseOrError, DataResponse};
+use nash_protocol::protocol::place_orders::LimitOrdersRequest;
 
 async fn init_client() -> Client {
     dotenv().ok();
@@ -660,43 +660,39 @@ fn multi_place_multi_cancel() {
     let async_block = async {
         let client = init_client().await;
 
-        let requests = LimitOrdersRequest {
-            requests: vec![
-                LimitOrderRequest {
-                    client_order_id: None,
-                    market: "eth_btc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.2".to_string(),
-                    price: "0.000213070".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                },
-                LimitOrderRequest {
-                    client_order_id: None,
-                    market: "eth_btc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.1".to_string(),
-                    price: "0.000203070".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                },
-                LimitOrderRequest {
-                    client_order_id: None,
-                    market: "eth_btc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.05".to_string(),
-                    price: "0.000210070".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
-                },
-            ]
-        };
+        let requests = vec![
+            LimitOrdersRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.2".to_string(),
+                price: "0.000213070".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            },
+            LimitOrdersRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.1".to_string(),
+                price: "0.000203070".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            },
+            LimitOrdersRequest {
+                client_order_id: None,
+                market: "eth_btc".to_string(),
+                buy_or_sell: BuyOrSell::Buy,
+                amount: "0.05".to_string(),
+                price: "0.000210070".to_string(),
+                cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                allow_taker: true,
+            },
+        ];
 
-        let mut response = PlaceOrdersResponse {
-            responses: Default::default()
-        };
-        for request in requests.requests {
-            response.responses.push(client
+        let mut responses = Vec::default();
+        for request in requests {
+            responses.push(client
                 .run(request)
                 .await
                 .unwrap()
@@ -704,8 +700,8 @@ fn multi_place_multi_cancel() {
                 .unwrap()
                 .clone());
         }
-        let response = ResponseOrError::Response(DataResponse { data: response });
-        println!("{:?}", response);
+        let responses = ResponseOrError::Response(DataResponse { data: responses });
+        println!("{:?}", responses);
 
         let response = client
             .run(ListAccountOrdersRequest {

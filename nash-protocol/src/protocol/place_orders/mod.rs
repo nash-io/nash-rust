@@ -1,4 +1,4 @@
-//! Place multiple orders
+//! Place orders
 
 mod request;
 mod response;

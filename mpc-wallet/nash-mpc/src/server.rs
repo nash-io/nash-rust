@@ -253,7 +253,7 @@ pub fn complete_sig_eddsa(
     };
 
     // verify that the resulting signature is indeed valid
-    if verify_eddsa(r, &s, pk_str, msg) {
+    if verify_eddsa(&r.to_bigint(), &s.to_bigint_le(), pk_str, msg) {
         Ok(s)
     } else {
         Err(())

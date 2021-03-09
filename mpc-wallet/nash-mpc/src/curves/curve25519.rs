@@ -6,6 +6,7 @@ use curve25519_dalek::edwards::CompressedEdwardsY;
 pub(crate) use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 use getrandom::getrandom;
+#[cfg(feature = "num_bigint")]
 use num_traits::identities::{One, Zero};
 use rust_bigint::traits::{Converter, Modulo};
 use rust_bigint::BigInt;
@@ -130,14 +131,16 @@ impl ECScalar<Scalar> for Ed25519Scalar {
     }
 
     fn to_vec(&self) -> Vec<u8> {
-        let vec: Vec<u8> = self.fe.to_bytes().iter().cloned().collect();
+        let mut vec: Vec<u8> = self.fe.to_bytes().iter().cloned().collect();
+        // curve25519-dalek uses reversed endianness
+        vec.reverse();
         vec
     }
 }
 
 impl Ed25519Scalar {
-    /// derive Scalar from bytes
-    pub(crate) fn from_bytes(bytes: &[u8; 64]) -> Result<Ed25519Scalar, ()> {
+    /// derive Scalar from 64 bytes
+    pub(crate) fn from_bytes64(bytes: &[u8; 64]) -> Result<Ed25519Scalar, ()> {
         let scalar = Scalar::from_bytes_mod_order_wide(bytes);
         if scalar == Scalar::zero() {
             return Err(());
@@ -146,6 +149,22 @@ impl Ed25519Scalar {
             purpose: "from_bytes",
             fe: scalar,
         })
+    }
+
+    /// derive Scalar from 32 bytes
+    pub(crate) fn from_bytes32(bytes: [u8; 32]) -> Result<Ed25519Scalar, ()> {
+        let scalar = Scalar::from_bytes_mod_order(bytes);
+        if scalar == Scalar::zero() {
+            return Err(());
+        };
+        Ok(Ed25519Scalar {
+            purpose: "from_bytes",
+            fe: scalar,
+        })
+    }
+
+    pub fn to_bigint_le(&self) -> BigInt {
+        BigInt::from_bytes(self.fe.as_bytes())
     }
 }
 

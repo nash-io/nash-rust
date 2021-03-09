@@ -3,7 +3,7 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::client::{
-    compute_presig, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
+    compute_presig_ecdsa, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
     get_rpool_size, APIchildkeyCreator,
 };
 use nash_mpc::common::{dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
@@ -114,7 +114,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     c.bench_function("compute_presig_k1", |b| {
         b.iter(|| {
-            compute_presig(
+            compute_presig_ecdsa(
                 black_box(&api_childkey_k1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256k1),
@@ -134,7 +134,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     c.bench_function("compute_presig_r1", |b| {
         b.iter(|| {
-            compute_presig(
+            compute_presig_ecdsa(
                 black_box(&api_childkey_r1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256r1),

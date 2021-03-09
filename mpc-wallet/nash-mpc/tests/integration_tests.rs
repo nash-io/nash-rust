@@ -109,7 +109,7 @@ fn test_integration_r1() {
 #[test]
 fn test_integration_ed() {
     let secret_key =
-        BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
+        BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
             .unwrap();
     let pk = publickey_from_secretkey(&secret_key, Curve::Curve25519).unwrap();
     let (api_childkey, server_secret_share) = create_eddsa_api_childkey(&secret_key).unwrap();
@@ -122,7 +122,7 @@ fn test_integration_ed() {
     let (r, s_client) = compute_presig_eddsa(&api_childkey, &msg).unwrap();
     let r_server = rpool.get(&r.to_hex()).unwrap();
     let s = complete_sig_eddsa(
-        server_secret_share,
+        server_secret_share.to_bigint(),
         &s_client,
         &r,
         r_server.clone(),
@@ -130,5 +130,5 @@ fn test_integration_ed() {
         &msg,
     )
     .unwrap();
-    assert!(verify_eddsa(&r, &s, &pk, &msg,));
+    assert!(verify_eddsa(&r.to_bigint(), &s.to_bigint_le(), &pk, &msg,));
 }

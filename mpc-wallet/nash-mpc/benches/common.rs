@@ -3,7 +3,7 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::common::{
-    dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify, Curve,
+    dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify_ecdsa, Curve,
 };
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;
@@ -45,7 +45,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             .unwrap();
     c.bench_function("verify_k1", |b| {
         b.iter(|| {
-            verify(
+            verify_ecdsa(
                 black_box(&r_k1),
                 black_box(&s_k1),
                 black_box(&pk_k1),
@@ -62,7 +62,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let pk_r1 = publickey_from_secretkey(&secret_key, Curve::Secp256r1).unwrap();
     c.bench_function("verify_r1", |b| {
         b.iter(|| {
-            verify(
+            verify_ecdsa(
                 black_box(&r_r1),
                 black_box(&s_r1),
                 black_box(&pk_r1),

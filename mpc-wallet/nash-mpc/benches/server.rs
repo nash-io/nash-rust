@@ -6,7 +6,7 @@ use nash_mpc::common::{
     dh_init_secp256k1, dh_init_secp256r1, Curve, publickey_from_secretkey
 };
 use nash_mpc::server::{
-    complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
+    complete_sig_ecdsa, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
 };
 use paillier_common::{DecryptionKey, MinimalDecryptionKey};
 use rust_bigint::traits::Converter;
@@ -51,7 +51,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             .unwrap();
     c.bench_function("complete_sig_k1", |b| {
         b.iter(|| {
-            complete_sig(
+            complete_sig_ecdsa(
                 black_box(&paillier_sk),
                 black_box(&presig_k1),
                 black_box(&r_k1),
@@ -79,7 +79,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .unwrap();
     c.bench_function("complete_sig_r1", |b| {
         b.iter(|| {
-            complete_sig(
+            complete_sig_ecdsa(
                 black_box(&paillier_sk),
                 black_box(&presig_r1),
                 black_box(&r_r1),

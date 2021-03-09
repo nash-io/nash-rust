@@ -22,14 +22,15 @@
     <br/>
     <input type="radio" name="curve" value="Secp256k1" id="Secp256k1" checked/><label for="Secp256k1">secp256k1 (BTC, ETH, ..)</label><br/>
     <input type="radio" name="curve" value="Secp256r1" id="Secp256r1"/><label for="Secp256r1">secp256r1 (NEO, ..)</label><br/>
+    <input type="radio" name="curve" value="Curve25519" id="Curve25519"/><label for="Curve25519">curve25519 (DOT, EGLD, ..)</label><br/>
     <button id="create_api_childkey">Create API childkey</button>
     <br/>
     <h3>API childkey:</h3>
     <div id="api_childkey" class="data"></div>
     <br/>
-    <button id="sig">Compute signature</button><br/>
-    on message hash:
-    <input type="text" id="message_hash" size=64 value="000000000000000fffffffffffffffffff00000000000000ffffffffff000000"></input>
+    <button id="sig">Compute signature</button>
+    on message:
+    <input type="text" id="message" size=18 value="68656c6c6f20776f726c64"></input> (i.e., "hello world")
     <br/>
     <h3>Presignature</h3>
     <div id="presig" class="data"></div>

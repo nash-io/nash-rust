@@ -36,9 +36,8 @@ defmodule ServerWeb.MPCController do
 
     Input:
       r (message-independent part of the signature),
-      presig (presignature from client)
-      curve (Secp256k1 or Secp256r1)
-      public key under which the completed signature is (supposed to be) valid. In a real-world scenario, the server may know the corresponding public key already.
+      presig (presignature from client),
+      curve (Secp256k1 or Secp256r1),
       hash of the message under which the completed signature is (supposed to be) valid. This is only for demo-purposes. In a real-world scenario, the server is supposed to compute the hash itself.
 
     Output:
@@ -48,14 +47,15 @@ defmodule ServerWeb.MPCController do
 
     Needs to fetch paillier_sk from session cache (should actually be some persistent storage).
     Needs to fetch and delete k_inv atomically(!) from session cache.
+    Needs to fetch the public key that corresponds to the user's API child key from session cache (should actually be some persistent storage).
 
     Depending on the signing policy, the server may complete the signature. This is not implemented in this demo.
   """
-  def complete_sig(conn, _params) do
+  def complete_sig_ecdsa(conn, _params) do
     r = conn.body_params["r"]
     presig = conn.body_params["presig"]
     curve = conn.body_params["curve"]
-    pubkey = conn.body_params["pubkey"]
+    pubkey = ConCache.get(:demo_cache, :pubkey)
     msg_hash = conn.body_params["msg_hash"]
     paillier_sk = ConCache.get(:demo_cache, :paillier_sk)
 
@@ -71,12 +71,57 @@ defmodule ServerWeb.MPCController do
       k_inv
     end)
 
-    {:ok, r, s, recid} = Server.MPCwallet.complete_sig(paillier_sk, presig, r, k_inv, curve, pubkey, msg_hash)
+    {:ok, r, s, recid} = Server.MPCwallet.complete_sig_ecdsa(paillier_sk, presig, r, k_inv, curve, pubkey, msg_hash)
 
     out = %{
       r: r,
       s: s,
       recovery_id: recid,
+    }
+    json(conn, out)
+  end
+
+  @doc """
+    Complete EdDSA signature from presignature.
+
+    Input:
+      r (message-independent part of the signature),
+      presig (presignature from client),
+      message
+
+    Output:
+      r: r part of an EdDSA signature
+      s: s part of an EdDSA signature
+
+    Needs to fetch and delete k_inv atomically(!) from session cache.
+    Needs to fetch the public key that corresponds to the user's API child key from session cache (should actually be some persistent storage).
+
+    Depending on the signing policy, the server may complete the signature. This is not implemented in this demo.
+  """
+  def complete_sig_eddsa(conn, _params) do
+    r = conn.body_params["r"]
+    presig = conn.body_params["presig"]
+    msg = conn.body_params["msg"]
+    pubkey = ConCache.get(:demo_cache, :pubkey)
+    server_secret_share = ConCache.get(:demo_cache, :server_secret_share)
+
+    # make sure that the r value is used exclusively for a particular message (even when this function is called concurrently)
+    # ensure that a value is consumed exactly once by mutual exclusive access to session cache. this is security-critical!
+    r_server = ConCache.isolated(:demo_cache, :rpool, nil, fn() ->
+      rpool = ConCache.get(:demo_cache, :rpool)
+      # fetch r_server from pool
+      r_server = rpool[r]
+      # delete r-value from pool and write updated rpool to session cache
+      rpool = Map.delete(rpool, r)
+      ConCache.put(:demo_cache, :rpool, rpool)
+      r_server
+    end)
+
+    {:ok, r, s} = Server.MPCwallet.complete_sig_eddsa(server_secret_share, presig, r, r_server, pubkey, msg)
+
+    out = %{
+      r: r,
+      s: s,
     }
     json(conn, out)
   end
@@ -103,5 +148,25 @@ defmodule ServerWeb.MPCController do
       paillier_pk: Poison.decode!(paillier_pk),
     }
     json(conn, out)
+  end
+
+  @doc """
+    Register API child key with the server.
+
+    Input:
+      corresponding public key
+      server secret share (only for EdDSA/Ed25519)
+
+    Output:
+      None
+
+    The registered information needs to be stored per user account.
+  """
+  def register_apikey(conn, _params) do
+    pubkey = conn.body_params["pubkey"]
+    server_secret_share = conn.body_params["server_secret_share"]
+    ConCache.put(:demo_cache, :pubkey, pubkey)
+    ConCache.put(:demo_cache, :server_secret_share, server_secret_share)
+    json(conn, %{})
   end
 end

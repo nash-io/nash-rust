@@ -3,8 +3,8 @@
  */
 
 use crate::common::{
-    correct_key_proof_rho, eddsa_s_hash, publickey_from_secretkey, CorrectKeyProof, Curve,
-    CORRECT_KEY_M,
+    correct_key_proof_rho, eddsa_s_hash, eddsa_signingkey_from_secretkey, publickey_from_secretkey,
+    CorrectKeyProof, Curve, CORRECT_KEY_M,
 };
 use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
@@ -169,20 +169,20 @@ impl APIchildkeyCreator {
 }
 
 /// create API child key for EdDSA/curve25519 curve
-pub fn create_eddsa_api_childkey(secret_key: &BigInt) -> Result<(APIchildkeyEdDSA, BigInt), ()> {
-    let secret_key = match ECScalar::from(secret_key) {
+pub fn create_eddsa_api_childkey(secret_key: &BigInt) -> Result<(APIchildkeyEdDSA, Ed25519Scalar), ()> {
+    let signing_key = match eddsa_signingkey_from_secretkey(secret_key) {
         Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
         Err(_) => return Err(()),
     };
-    let public_key = publickey_from_secretkey(&secret_key.to_bigint(), Curve::Curve25519)
-        .expect("Invalid curve");
+    let public_key =
+        publickey_from_secretkey(secret_key, Curve::Curve25519).expect("Invalid curve");
     // client's secret share is just some random value
     let client_secret_share = match Ed25519Scalar::new_random() {
         Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
         Err(_) => return Err(()),
     };
     // compute additive server secret share, i.e., full secret = client secret share + server secret share % L
-    let mut server_secret_share_bytes = *(&secret_key.fe - &client_secret_share.fe).as_bytes();
+    let mut server_secret_share_bytes = *(&signing_key.fe - &client_secret_share.fe).as_bytes();
     server_secret_share_bytes.reverse();
     let server_secret_share = Zeroizing::<Ed25519Scalar>::new(
         ECScalar::from(&BigInt::from_bytes(&server_secret_share_bytes)).unwrap(),
@@ -193,14 +193,14 @@ pub fn create_eddsa_api_childkey(secret_key: &BigInt) -> Result<(APIchildkeyEdDS
             public_key,
             client_secret_share: client_secret_share.to_bigint(),
         },
-        server_secret_share.to_bigint(),
+        server_secret_share.deref().clone(),
     ))
 }
 
 /// compute EdDSA presignature
 pub fn compute_presig_eddsa(
     api_childkey: &APIchildkeyEdDSA,
-    msg_hash: &BigInt,
+    msg: &BigInt,
 ) -> Result<(Ed25519Point, Ed25519Scalar), ()> {
     // fetch and remove random value R and r_client from pool
     let mut pool_entry = match RPOOL_CURVE25519.lock().unwrap().pop() {
@@ -226,7 +226,7 @@ pub fn compute_presig_eddsa(
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-    let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg_hash) {
+    let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg) {
         Ok(v) => v,
         Err(_) => return Err(()),
     };
@@ -454,9 +454,9 @@ pub fn fill_rpool_curve25519(
     for i in 0..own_dh_secrets.len() {
         let own_dh_public = match &Ed25519Point::generator() * &own_dh_secrets[i] {
             Ok(v) => v,
-            Err(_) => return (),
+            Err(_) => return Err(()),
         };
-        match own_dh_publics + other_dh_publics[i] {
+        match own_dh_public + other_dh_publics[i] {
             Ok(r) => RPOOL_CURVE25519
                 .lock()
                 .unwrap()
@@ -466,15 +466,14 @@ pub fn fill_rpool_curve25519(
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        let own_dh_public = match &Ed25519Point::generator() * &own_dh_secrets[i] {
-            Ok(v) => v,
-            Err(_) => return (),
-        };
-        match own_dh_public + other_dh_publics[i] {
-            Ok(r) => RPOOL_CURVE25519
-                .lock()
-                .unwrap()
-                .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+        match &Ed25519Point::generator() * &own_dh_secrets[i] {
+            Ok(v) => match v + other_dh_publics[i] {
+                Ok(r) => RPOOL_CURVE25519
+                    .lock()
+                    .unwrap()
+                    .insert(r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())),
+                Err(_) => None,
+            },
             Err(_) => None,
         };
     });

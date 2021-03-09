@@ -25,6 +25,8 @@ async function create_api_childkey() {
         set_state('curve', JSON.stringify("Secp256k1"));
     } else if (document.getElementById("Secp256r1").checked === true) {
         set_state('curve', JSON.stringify("Secp256r1"));
+    } else if (document.getElementById("Curve25519").checked === true) {
+        set_state('curve', JSON.stringify("Curve25519"));
     } else {
         console.log("ERROR: Invalid curve!");
         return;
@@ -44,7 +46,7 @@ async function create_api_childkey() {
 
     let paillier_pk = get_state("paillier_pk");
     // paillier key not verified yet.
-    if (paillier_pk === false) {
+    if (paillier_pk === false && JSON.parse(curve) !== "Curve25519") {
         console.log("Initializing API key creation.");
         let result1 = JSON.parse(MPCwallet.init_api_childkey_creator(secret_key));
         if (result1[0] === false) {
@@ -52,7 +54,7 @@ async function create_api_childkey() {
             return;
         } else {
             var api_childkey_creator = JSON.stringify(result1[1]);
-            console.log("Requestion correct key proof from server.")
+            console.log("Request correct key proof from server.")
             await axios.post("http://localhost:4000/api/v1/get_paillier_keypair_and_proof", {}).then((response) => {
                 console.log("Received response from server.")
                 let correct_key_proof = JSON.stringify(response.data["correct_key_proof"]);
@@ -70,8 +72,8 @@ async function create_api_childkey() {
                 }
             })
         }
-    // paillier key already verified; skip verification
-    } else {
+    // paillier key already verified; skip verification (for ECDSA)
+    } else if (JSON.parse(curve) !== "Curve25519") {
         console.log("Initializing (fast) API key creation.");
         let result1 = JSON.parse(MPCwallet.init_api_childkey_creator_with_verified_paillier(secret_key, paillier_pk));
         if (result1[0] === false) {
@@ -83,27 +85,60 @@ async function create_api_childkey() {
     }
 
     console.log("Computing secret shares for " + JSON.parse(curve));
-    let result3 = JSON.parse(MPCwallet.create_api_childkey(api_childkey_creator, curve));
-    if (result3[0] === false) {
-        console.log("ERROR: paillier key not verified. " + result3[1]);
+    if (JSON.parse(curve) !== "Curve25519") {
+        let result3 = JSON.parse(MPCwallet.create_ecdsa_api_childkey(api_childkey_creator, curve));
+        if (result3[0] === false) {
+            console.log("ERROR: paillier key not verified. " + result3[1]);
+        } else {
+            let api_childkey = JSON.stringify(result3[1]);
+            console.log("API childkey created successfully.")
+            set_state('api_childkey', api_childkey);
+            // show api childkey in html page
+            document.getElementById("api_childkey").innerHTML = api_childkey;
+
+            // register public key with the server
+            await axios.post("http://localhost:4000/api/v1/register_apikey", {
+                pubkey: JSON.parse(api_childkey)["public_key"],
+            }).then((response) => {
+                console.log("Successfully registered API key.")
+            })
+        }
     } else {
-        let api_childkey = JSON.stringify(result3[1]);
-        console.log("API childkey created successfully.")
-        set_state('api_childkey', api_childkey);
-        // show api childkey in html page
-        document.getElementById("api_childkey").innerHTML = api_childkey;
+        let result3 = JSON.parse(MPCwallet.create_eddsa_api_childkey(secret_key));
+        if (result3[0] === false) {
+            console.log("ERROR: create_eddsa_api_childkey() failed. " + result3[1]);
+        } else {
+            let api_childkey = JSON.stringify(result3[1]);
+            console.log("API childkey created successfully.")
+            set_state('api_childkey', api_childkey);
+            // show api childkey in html page
+            document.getElementById("api_childkey").innerHTML = api_childkey;
+
+            // register server_secret_share and public key with the server
+            await axios.post("http://localhost:4000/api/v1/register_apikey", {
+                pubkey: JSON.parse(api_childkey)["public_key"],
+                server_secret_share: result3[2],
+            }).then((response) => {
+                console.log("Successfully registered API key.")
+            })
+        }
     }
 
-    // fill pools of r-values (as well as Paillier pool).
-    fill_r_pool(JSON.stringify("Secp256k1"));
-    fill_r_pool(JSON.stringify("Secp256r1"));
+    // fill pools of r-values (as well as Paillier pool in case of Secp256k1 and Secp256r1).
+    if (JSON.parse(curve) === "Curve25519") {
+        fill_r_pool(JSON.stringify("Curve25519"));
+    } else if (JSON.parse(curve) === "Secp256k1") {
+        fill_r_pool(JSON.stringify("Secp256k1"));
+    } else if (JSON.parse(curve) === "Secp256r1") {
+        fill_r_pool(JSON.stringify("Secp256r1"));
+    }
 }
 
 
 async function fill_r_pool(curve) {
     console.log("Filling pool of r values.");
     let paillier_pk = get_state("paillier_pk");
-    if (paillier_pk === false) {
+    if (paillier_pk === false && JSON.parse(curve) !== "Curve25519") {
         console.log("Cannot fill pools yet: Paillier key not verified.");
         return;
     }
@@ -140,7 +175,7 @@ async function fill_r_pool(curve) {
 }
 
 async function compute_presig() {
-    let message_hash = document.getElementById("message_hash").value;
+    let message = document.getElementById("message").value;
     let api_childkey = get_state("api_childkey");
     let curve = get_state("curve");
 
@@ -160,36 +195,76 @@ async function compute_presig() {
     }
 
     console.log("Computing presignature on client...")
-    let result = JSON.parse(MPCwallet.compute_presig(api_childkey, message_hash, curve));
-    if (result[0] === true) {
-        let presig = result[1];
-        let r = result[2];
-        console.log("Presig computed successfully.");
-        let presig_html = document.getElementById("presig");
-        presig_html.innerHTML = presig;
-        console.log("Sending presignature to server for completion.")
-        axios.post("http://localhost:4000/api/v1/complete_sig", {
-            presig: presig,
-            r: r,
-            curve: curve,
-            pubkey: JSON.parse(get_state("public_key")),
-            msg_hash: message_hash,
-        }).then((response) =>{
-            let recovery_id = response.data["recovery_id"];
-            let r = response.data["r"];
-            let s = response.data["s"];
-            let signature_html = document.getElementById("signature");
-            signature_html.innerHTML = "r:" + JSON.stringify(r) + ", s:" + JSON.stringify(s) + ", recovery_id:" + recovery_id;
-            console.log("Server has completed the signature.")
-            let result = JSON.parse(MPCwallet.verify(r, s, get_state("public_key"), message_hash, curve));
-            if (result === true){
-                console.log("Signature verified successfully.");
-            } else {
-                console.log("Error verifying signature. " + result[1]);
-            }
-        })
+    if (JSON.parse(curve) !== "Curve25519") {
+        // for ECDSA we need the hash of the message
+        // convert hex string to ArrayBuffer (from https://gist.github.com/don/871170d88cf6b9007f7663fdbc23fe09)
+        var integers = message.match(/[\dA-F]{2}/gi).map(function(s) {
+            return parseInt(s, 16);
+        });
+        const data = new Uint8Array(integers).buffer;
+        const digest = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(digest));
+        const message_hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+        let result = JSON.parse(MPCwallet.compute_presig_ecdsa(api_childkey, message_hash, curve));
+        if (result[0] === true) {
+            let presig = result[1];
+            let r = result[2];
+            console.log("Presig computed successfully.");
+            let presig_html = document.getElementById("presig");
+            presig_html.innerHTML = presig;
+            console.log("Sending presignature to server for completion.")
+            axios.post("http://localhost:4000/api/v1/complete_sig_ecdsa", {
+                presig: presig,
+                r: r,
+                curve: curve,
+                msg_hash: message_hash,
+            }).then((response) =>{
+                let recovery_id = response.data["recovery_id"];
+                let r = response.data["r"];
+                let s = response.data["s"];
+                let signature_html = document.getElementById("signature");
+                signature_html.innerHTML = "r:" + JSON.stringify(r) + ", s:" + JSON.stringify(s) + ", recovery_id:" + recovery_id;
+                console.log("Server has completed the signature.")
+                let result = JSON.parse(MPCwallet.verify(r, s, get_state("public_key"), message_hash, curve));
+                if (result === true){
+                    console.log("Signature verified successfully.");
+                } else {
+                    console.log("Error verifying signature.");
+                }
+            })
+        } else {
+            console.log("Error computing presig: " + result[1]);
+        }
     } else {
-        console.log("Error computing presig: " + result[1]);
+        let result = JSON.parse(MPCwallet.compute_presig_eddsa(api_childkey, message));
+        if (result[0] === true) {
+            let presig = result[1];
+            let r = result[2];
+            console.log("Presig computed successfully.");
+            let presig_html = document.getElementById("presig");
+            presig_html.innerHTML = presig;
+            console.log("Sending presignature to server for completion.")
+            axios.post("http://localhost:4000/api/v1/complete_sig_eddsa", {
+                presig: presig,
+                r: r,
+                msg: message,
+            }).then((response) =>{
+                let r = response.data["r"];
+                let s = response.data["s"];
+                let signature_html = document.getElementById("signature");
+                signature_html.innerHTML = "r:" + JSON.stringify(r) + ", s:" + JSON.stringify(s);
+                console.log("Server has completed the signature.")
+                let result = JSON.parse(MPCwallet.verify(r, s, get_state("public_key"), message, curve));
+                if (result === true){
+                    console.log("Signature verified successfully.");
+                } else {
+                    console.log("Error verifying signature.");
+                }
+            })
+        } else {
+            console.log("Error computing presig: " + result[1]);
+        }
     }
 
     // refill pool of r-values (asynchronously) as soon as it gets below MIN_RPOOL_SIZE

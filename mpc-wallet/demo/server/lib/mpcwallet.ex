@@ -39,7 +39,7 @@ defmodule Server.MPCwallet do
   ## Parameters
 
       - client_dh_publics: list of DH public keys received from the client
-      - curve: Secp256k1 or Secp256r1 curve
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -70,19 +70,39 @@ defmodule Server.MPCwallet do
       - recovery_id: 2 bits that help recovering the public key from a signature
 
   """
-  def complete_sig(_paillier_sk, _presig, _r, _k, _curve, _pubkey, _msg_hash), do: :erlang.nif_error(:nif_not_loaded)
-
+  def complete_sig_ecdsa(_paillier_sk, _presig, _r, _k, _curve, _pubkey, _msg_hash), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc ~S"""
-  Verify conventional ECDSA signature.
+  Complete presignature to conventional EdDSA signature.
 
   ## Parameters
 
+      - server_secret_share: server secret share
+      - presig: presignature received from client
+      - r: random value shared between server and client
+      - r_server: server part of the nonce used in the signature
+      - pubkey: public key under which the completed signature is (supposed to be) valid
+      - msg: message under which the completed signature is (supposed to be) valid
+
+  ## Returns
+
       - r: r part of a conventional ECDSA signature
       - s: s part of a conventional ECDSA signature
-      - pubkey: ECDSA public key
-      - msg_hash: hash of the message
-      - curve: Secp256k1 or Secp256r1 curve
+
+  """
+  def complete_sig_eddsa(_server_secret_share, _presig, _r, _r_server, _pubkey, _msg), do: :erlang.nif_error(:nif_not_loaded)
+
+
+  @doc ~S"""
+  Verify conventional ECDSA or EdDSA signature.
+
+  ## Parameters
+
+      - r: r part of a conventional ECDSA or EdDSA signature
+      - s: s part of a conventional ECDSA or EdDSA signature
+      - pubkey: ECDSA or EdDSA public key
+      - msg_hash: hash of the message (ECDSA) or entire message (EdDSA)
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -98,7 +118,7 @@ defmodule Server.MPCwallet do
   ## Parameters
 
       - n: number of key pairs to generate
-      - curve: Secp256k1 or Secp256r1 curve
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -111,7 +131,7 @@ defmodule Server.MPCwallet do
 
 
   @doc ~S"""
-  Compute presignature of a message.
+  Compute ECDSA presignature of a message.
 
   ## Parameters
 
@@ -125,7 +145,7 @@ defmodule Server.MPCwallet do
       - r: message-independent part of the signature that was used to compute the presignature
 
   """
-  def compute_presig(_apikey, _msg_hash, _curve), do: :erlang.nif_error(:nif_not_loaded)
+  def compute_presig_ecdsa(_apikey, _msg_hash, _curve), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc ~S"""
@@ -135,8 +155,8 @@ defmodule Server.MPCwallet do
 
       - client_dh_secrets: list of client DH secret keys
       - server_dh_publics: list of DH public keys received from the server
-      - curve: Secp256k1 or Secp256r1 curve
-      - paillier_pk: Paillier public key
+      - curve: Secp256k1, Secp256r1, or Curve25519
+      - paillier_pk: Paillier public key (empty in case of Curve25519)
 
   ## Returns
 
@@ -195,11 +215,11 @@ defmodule Server.MPCwallet do
 
 
   @doc ~S"""
-  Create API childkey.
+  Create ECDSA API childkey.
 
   ## Parameters
 
-      - api_childkey_creator: API childkey creation struct
+      - api_childkey_creator: ECDSA API childkey creation struct
       - curve: Secp256k1 or Secp256r1 curve
 
   ## Returns
@@ -207,7 +227,7 @@ defmodule Server.MPCwallet do
       - api_childkey: API childkey struct
 
   """
-  def create_api_childkey(_api_childkey_creator, _curve), do: :erlang.nif_error(:nif_not_loaded)
+  def create_ecdsa_api_childkey(_api_childkey_creator, _curve), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc ~S"""

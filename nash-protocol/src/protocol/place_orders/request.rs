@@ -15,7 +15,7 @@ use super::super::signer::Signer;
 use super::super::{general_canonical_string, RequestPayloadSignature, State};
 use crate::protocol::place_order::blockchain::{btc, eth, neo, FillOrder};
 use super::types::{
-    LimitOrderConstructor, LimitOrdersRequest,
+    LimitOrdersConstructor, LimitOrdersRequest,
     MarketOrderConstructor, MarketOrdersRequest,
     PayloadNonces
 };
@@ -31,23 +31,24 @@ type MarketBlockchainSignatures = Vec<Option<place_market_order::BlockchainSigna
 impl LimitOrdersRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
     // of `LimitOrderConstructor` that can be used to create smart contract and graphql payloads
-    pub async fn make_constructor(&self, state: Arc<RwLock<State>>) -> Result<LimitOrderConstructor> {
+    pub async fn make_constructor(&self, state: Arc<RwLock<State>>) -> Result<LimitOrdersConstructor> {
+        let request = &self.requests[0];
         let state = state.read().await;
-        let market = state.get_market(&self.market)?;
+        let market = state.get_market(&request.market)?;
 
         // Amount of order always in asset A in ME. This will handle precision conversion also...
-        let amount_of_a = market.asset_a.with_amount(&self.amount)?;
+        let amount_of_a = market.asset_a.with_amount(&request.amount)?;
 
         // Price is always in terms of asset B in ME
         // TODO: add precision to rate and handle this better
-        let format_user_price = pad_zeros(&self.price, market.asset_b.precision)?;
+        let format_user_price = pad_zeros(&request.price, market.asset_b.precision)?;
         let b_per_a: Rate = OrderRate::new(&format_user_price)?.into();
         
         let a_per_b = b_per_a.invert_rate(None)?;
 
         let amount_of_b = amount_of_a.exchange_at(&b_per_a, market.asset_b)?;
 
-        let (source, rate, destination) = match self.buy_or_sell {
+        let (source, rate, destination) = match request.buy_or_sell {
             BuyOrSell::Buy => {
                 // Buying: in SC, source is B, rate is B, and moving to asset A
                 (amount_of_b, a_per_b.clone(), market.asset_a)
@@ -58,14 +59,14 @@ impl LimitOrdersRequest {
             }
         };
 
-        Ok(LimitOrderConstructor {
-            client_order_id: self.client_order_id.clone(),
+        Ok(LimitOrdersConstructor {
+            client_order_id: request.client_order_id.clone(),
             me_amount: amount_of_a,
             me_rate: b_per_a,
             market: market.clone(),
-            buy_or_sell: self.buy_or_sell,
-            cancellation_policy: self.cancellation_policy,
-            allow_taker: self.allow_taker,
+            buy_or_sell: request.buy_or_sell,
+            cancellation_policy: request.cancellation_policy,
+            allow_taker: request.allow_taker,
             source,
             destination,
             rate,
@@ -115,7 +116,7 @@ fn map_crosschain(nonce: Nonce, chain: Blockchain, asset: Asset) -> Nonce {
     }
 }
 
-impl LimitOrderConstructor {
+impl LimitOrdersConstructor {
     /// Helper to transform a limit order into signed fillorder data on every blockchain
     pub fn make_fill_order(
         &self,
@@ -207,7 +208,7 @@ impl LimitOrderConstructor {
                 client_order_id: self.client_order_id.clone(),
                 allow_taker: self.allow_taker,
                 buy_or_sell: self.buy_or_sell.into(),
-                cancel_at: cancel_at,
+                cancel_at,
                 cancellation_policy: self.cancellation_policy.into(),
                 market_name: self.market.market_name(),
                 amount: self.me_amount.clone().try_into()?,

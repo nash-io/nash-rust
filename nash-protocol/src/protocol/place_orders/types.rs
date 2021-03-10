@@ -19,18 +19,13 @@ use crate::types::{
     OrderType, Rate,
 };
 use crate::utils::current_time_as_i64;
+use crate::protocol::place_order::LimitOrderRequest;
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
 #[derive(Clone, Debug)]
 pub struct LimitOrdersRequest {
-    pub market: String,
-    pub client_order_id: Option<String>,
-    pub buy_or_sell: BuyOrSell,
-    pub amount: String,
-    pub price: String,
-    pub cancellation_policy: OrderCancellationPolicy,
-    pub allow_taker: bool,
+    pub requests: Vec<LimitOrderRequest>
 }
 
 #[derive(Clone, Debug)]
@@ -41,24 +36,8 @@ pub struct MarketOrdersRequest {
 }
 
 impl LimitOrdersRequest {
-    pub fn new(
-        market: String,
-        buy_or_sell: BuyOrSell,
-        amount_a: &str,
-        price_b: &str,
-        cancellation_policy: OrderCancellationPolicy,
-        allow_taker: bool,
-        client_order_id: Option<String>,
-    ) -> Result<Self> {
-        Ok(Self {
-            market,
-            buy_or_sell,
-            amount: amount_a.to_string(),
-            price: price_b.to_string(),
-            cancellation_policy,
-            allow_taker,
-            client_order_id,
-        })
+    pub fn new(requests: Vec<LimitOrderRequest>) -> Result<Self> {
+        Ok(Self { requests })
     }
 }
 
@@ -73,7 +52,7 @@ impl MarketOrdersRequest {
 }
 
 /// A helper type for constructing blockchain payloads and GraphQL requests
-pub struct LimitOrderConstructor {
+pub struct LimitOrdersConstructor {
     // These fields are for GraphQL
     pub buy_or_sell: BuyOrSell,
     pub client_order_id: Option<String>,
@@ -231,7 +210,8 @@ impl NashProtocol for LimitOrdersRequest {
 
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        get_required_hooks(state, &self.market).await.map(Some)
+        let request = &self.requests[0];
+        get_required_hooks(state, &request.market).await.map(Some)
     }
 }
 

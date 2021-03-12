@@ -443,9 +443,9 @@ pub fn publickey_from_secretkey(secret_key_str: &str, curve_str: &str) -> String
 #[cfg(test)]
 mod tests {
     use crate::{
-        compute_presig_ecdsa, create_api_childkey, dh_init, fill_rpool, get_rpool_size,
+        compute_presig_ecdsa, create_ecdsa_api_childkey, dh_init, fill_rpool, get_rpool_size,
         init_api_childkey_creator, init_api_childkey_creator_with_verified_paillier,
-        publickey_from_secretkey, verify_ecdsa, verify_paillier,
+        publickey_from_secretkey, verify, verify_paillier,
     };
     use nash_mpc::client::{APIchildkey, APIchildkeyCreator};
 
@@ -538,14 +538,14 @@ mod tests {
 
     #[test]
     fn test_create_api_childkey_ok() {
-        let result = create_api_childkey("{\"secret_key\":\"4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1\",\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"}}", "\"Secp256k1\"");
+        let result = create_ecdsa_api_childkey("{\"secret_key\":\"4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1\",\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"}}", "\"Secp256k1\"");
         let (success, _): (bool, APIchildkey) = serde_json::from_str(&result).unwrap();
         assert!(success);
     }
 
     #[test]
     fn test_create_api_childkey_wrong_apichildkey() {
-        let result = create_api_childkey("a{\"secret_key\":\"4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1\",\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"}}", "\"Secp256k1\"");
+        let result = create_ecdsa_api_childkey("a{\"secret_key\":\"4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1\",\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"}}", "\"Secp256k1\"");
         let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
         assert_eq!(msg, "error deserializing api_childkey_creator");
         assert!(!success);
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn test_create_api_childkey_wrong_curve() {
-        let result = create_api_childkey("{\"secret_key\":\"4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1\",\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"}}", "\"Secp256k2\"");
+        let result = create_ecdsa_api_childkey("{\"secret_key\":\"4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1\",\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"}}", "\"Secp256k2\"");
         let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
         assert_eq!(msg, "error deserializing curve");
         assert!(!success);
@@ -845,7 +845,7 @@ mod tests {
 
     #[test]
     fn test_verify_k1_ok() {
-        let result = verify_ecdsa(
+        let result = verify(
             "ca44d5cdeab3ad356e6fa2fb715bdfd82219d35d83aa95fdea3bbe2ce472417d",
             "6cc55f9c8a1db21575830c5419b80bc43de466480ccc60c9e5752575d6565eb8",
             "\"042f1fa347032efc9cece1e1c5edcbdda64aaff92911949fe0adbb165e8d82c13025485b8c218e56a5dd932cc9ab6efaff611dc42cc3aa3acd0b0ea5ba7f1a8de3\"",
@@ -858,7 +858,7 @@ mod tests {
 
     #[test]
     fn test_verify_k1_wrong_r() {
-        let result = verify_ecdsa(
+        let result = verify(
             "da44d5cdeab3ad356e6fa2fb715bdfd82219d35d83aa95fdea3bbe2ce472417d",
             "6cc55f9c8a1db21575830c5419b80bc43de466480ccc60c9e5752575d6565eb8",
             "\"042f1fa347032efc9cece1e1c5edcbdda64aaff92911949fe0adbb165e8d82c13025485b8c218e56a5dd932cc9ab6efaff611dc42cc3aa3acd0b0ea5ba7f1a8de3\"",
@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn test_verify_k1_wrong_s() {
-        let result = verify_ecdsa(
+        let result = verify(
             "ca44d5cdeab3ad356e6fa2fb715bdfd82219d35d83aa95fdea3bbe2ce472417d",
             "7cc55f9c8a1db21575830c5419b80bc43de466480ccc60c9e5752575d6565eb8",
             "\"042f1fa347032efc9cece1e1c5edcbdda64aaff92911949fe0adbb165e8d82c13025485b8c218e56a5dd932cc9ab6efaff611dc42cc3aa3acd0b0ea5ba7f1a8de3\"",
@@ -884,7 +884,7 @@ mod tests {
 
     #[test]
     fn test_verify_k1_wrong_pk() {
-        let result = verify_ecdsa(
+        let result = verify(
             "ca44d5cdeab3ad356e6fa2fb715bdfd82219d35d83aa95fdea3bbe2ce472417d",
             "6cc55f9c8a1db21575830c5419b80bc43de466480ccc60c9e5752575d6565eb8",
             "\"043f1fa347032efc9cece1e1c5edcbdda64aaff92911949fe0adbb165e8d82c13025485b8c218e56a5dd932cc9ab6efaff611dc42cc3aa3acd0b0ea5ba7f1a8de3\"",
@@ -897,7 +897,7 @@ mod tests {
 
     #[test]
     fn test_verify_k1_wrong_hash() {
-        let result = verify_ecdsa(
+        let result = verify(
             "ca44d5cdeab3ad356e6fa2fb715bdfd82219d35d83aa95fdea3bbe2ce472417d",
             "6cc55f9c8a1db21575830c5419b80bc43de466480ccc60c9e5752575d6565eb8",
             "\"042f1fa347032efc9cece1e1c5edcbdda64aaff92911949fe0adbb165e8d82c13025485b8c218e56a5dd932cc9ab6efaff611dc42cc3aa3acd0b0ea5ba7f1a8de3\"",
@@ -910,7 +910,7 @@ mod tests {
 
     #[test]
     fn test_verify_k1_wrong_curve() {
-        let result = verify_ecdsa(
+        let result = verify(
             "ca44d5cdeab3ad356e6fa2fb715bdfd82219d35d83aa95fdea3bbe2ce472417d",
             "6cc55f9c8a1db21575830c5419b80bc43de466480ccc60c9e5752575d6565eb8",
             "\"042f1fa347032efc9cece1e1c5edcbdda64aaff92911949fe0adbb165e8d82c13025485b8c218e56a5dd932cc9ab6efaff611dc42cc3aa3acd0b0ea5ba7f1a8de3\"",
@@ -923,7 +923,7 @@ mod tests {
 
     #[test]
     fn test_verify_r1_ok() {
-        let result = verify_ecdsa(
+        let result = verify(
             "31c7081272937630d061ffec3416e1fefa79e46380a7325de6916dead4b3dfdd",
             "7bb1a85139297b30dd77626082fe9e3d2be1fdca5d32987e38f6de434f82777c",
             "\"04edb74abcc30629455eccbe8d3a61a8694999656de8b8f0615ad50c4c3ef238e5dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04\"",
@@ -936,7 +936,7 @@ mod tests {
 
     #[test]
     fn test_verify_r1_wrong_r() {
-        let result = verify_ecdsa(
+        let result = verify(
             "41c7081272937630d061ffec3416e1fefa79e46380a7325de6916dead4b3dfdd",
             "7bb1a85139297b30dd77626082fe9e3d2be1fdca5d32987e38f6de434f82777c",
             "\"04edb74abcc30629455eccbe8d3a61a8694999656de8b8f0615ad50c4c3ef238e5dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04\"",
@@ -949,7 +949,7 @@ mod tests {
 
     #[test]
     fn test_verify_r1_wrong_s() {
-        let result = verify_ecdsa(
+        let result = verify(
             "31c7081272937630d061ffec3416e1fefa79e46380a7325de6916dead4b3dfdd",
             "8bb1a85139297b30dd77626082fe9e3d2be1fdca5d32987e38f6de434f82777c",
             "\"04edb74abcc30629455eccbe8d3a61a8694999656de8b8f0615ad50c4c3ef238e5dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04\"",
@@ -962,7 +962,7 @@ mod tests {
 
     #[test]
     fn test_verify_r1_wrong_pk() {
-        let result = verify_ecdsa(
+        let result = verify(
             "31c7081272937630d061ffec3416e1fefa79e46380a7325de6916dead4b3dfdd",
             "7bb1a85139297b30dd77626082fe9e3d2be1fdca5d32987e38f6de434f82777c",
             "\"04fdb74abcc30629455eccbe8d3a61a8694999656de8b8f0615ad50c4c3ef238e5dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04\"",
@@ -975,7 +975,7 @@ mod tests {
 
     #[test]
     fn test_verify_r1_wrong_hash() {
-        let result = verify_ecdsa(
+        let result = verify(
             "31c7081272937630d061ffec3416e1fefa79e46380a7325de6916dead4b3dfdd",
             "7bb1a85139297b30dd77626082fe9e3d2be1fdca5d32987e38f6de434f82777c",
             "\"04edb74abcc30629455eccbe8d3a61a8694999656de8b8f0615ad50c4c3ef238e5dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04\"",
@@ -988,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_verify_r1_wrong_curve() {
-        let result = verify_ecdsa(
+        let result = verify(
             "31c7081272937630d061ffec3416e1fefa79e46380a7325de6916dead4b3dfdd",
             "7bb1a85139297b30dd77626082fe9e3d2be1fdca5d32987e38f6de434f82777c",
             "\"04feb74abcc30629455eccbe8d3a61a8694999656de8b8f0615ad50c4c3ef238e5dcf1956f7877ffb5c927e5d3e479fe913e10a0caa7a34866fe44f8bddf4b0a04\"",

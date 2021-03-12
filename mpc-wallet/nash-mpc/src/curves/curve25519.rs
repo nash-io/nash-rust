@@ -332,6 +332,10 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Ed25519Point, ()> {
+        // CompressedEdwardsY::from_slice() panics if slice does not have a length of 32
+        if bytes.len() != 32 {
+            return Err(());
+        };
         let point = CompressedEdwardsY::from_slice(&bytes);
         match point.decompress() {
             Some(v) => Ok(Ed25519Point {
@@ -401,7 +405,11 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
 impl Ed25519Point {
     /// derive point from BigInt
     pub fn from_bigint(i: &BigInt) -> Result<Ed25519Point, ()> {
-        match Ed25519Point::from_bytes(&BigInt::to_vec(i)) {
+        let vec_i = BigInt::to_vec(i);
+        let mut vec = vec![0; 32 - vec_i.len()];
+        // pad with zeros if necessary
+        vec.extend_from_slice(&vec_i);
+        match Ed25519Point::from_bytes(&vec) {
             Ok(v) => Ok(v),
             Err(_) => Err(()),
         }

@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>MPC API key demo</title>
+    <title>MPC API childkey demo</title>
     <style>
       .data{
         font-family: 'Courier New', Courier, monospace;
@@ -20,9 +20,9 @@
     Secret key: <input type="text" id="secret_key" size=64 value="4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1"></input>
     <br/>
     <br/>
-    <input type="radio" name="curve" value="Secp256k1" id="Secp256k1" checked/><label for="Secp256k1">secp256k1 (BTC, ETH, ..)</label><br/>
-    <input type="radio" name="curve" value="Secp256r1" id="Secp256r1"/><label for="Secp256r1">secp256r1 (NEO, ..)</label><br/>
-    <input type="radio" name="curve" value="Curve25519" id="Curve25519"/><label for="Curve25519">curve25519 (DOT, EGLD, ..)</label><br/>
+    <input type="radio" name="curve" value="Secp256k1" id="Secp256k1" checked/><label for="Secp256k1">ECDSA secp256k1 (Bitcoin, Ethereum, and most other blockchains.)</label><br/>
+    <input type="radio" name="curve" value="Secp256r1" id="Secp256r1"/><label for="Secp256r1">ECDSA secp256r1 (NEO, Ontology, and a few other blockchains.)</label><br/>
+    <input type="radio" name="curve" value="Curve25519" id="Curve25519"/><label for="Curve25519">EdDSA curve25519 (Polkadot, Elrond, and many of the newer blockchains.)</label><br/>
     <button id="create_api_childkey">Create API childkey</button>
     <br/>
     <h3>API childkey:</h3>

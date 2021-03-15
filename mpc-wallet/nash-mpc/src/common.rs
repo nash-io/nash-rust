@@ -18,6 +18,7 @@ use k256::AffinePoint as AffinePoint_k256;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
+use num_traits::Zero;
 #[cfg(feature = "secp256k1")]
 use p256::elliptic_curve::sec1::{
     FromEncodedPoint as FromEncodedPoint_p256, ToEncodedPoint as ToEncodedPoint_p256,
@@ -279,6 +280,10 @@ pub(crate) fn eddsa_s_hash(
         Ok(v) => v,
         Err(_) => return Err(()),
     };
+    // check for hash == 0 as that might (theoretically) allow a brute-force attack on the secret key by the server
+    if hash.to_bigint() == BigInt::zero() {
+        return Err(());
+    }
     Ok(hash)
 }
 

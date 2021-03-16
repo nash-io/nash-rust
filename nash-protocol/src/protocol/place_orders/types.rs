@@ -1,23 +1,17 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, RwLock};
 use tracing::error;
 
 use crate::errors::{Result, ProtocolError};
-use crate::graphql::place_limit_order;
-use crate::graphql::place_market_order;
 use crate::protocol::ErrorResponse;
 use crate::protocol::{
     asset_nonces::AssetNoncesRequest, list_markets::ListMarketsRequest, serializable_to_json,
-    sign_all_states::SignAllStates, try_response_from_json, NashProtocol, NashProtocolRequest,
+    sign_all_states::SignAllStates, NashProtocol, NashProtocolRequest,
     ProtocolHook, ResponseOrError, State,
 };
-use crate::types::{
-    AssetAmount, AssetofPrecision, BuyOrSell, Market, Nonce, OrderCancellationPolicy, OrderStatus,
-    OrderType, Rate,
-};
+use crate::types::{AssetAmount, AssetofPrecision, Market};
 use crate::utils::current_time_as_i64;
 use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse};
 
@@ -52,7 +46,7 @@ impl MarketOrdersRequest {
 }
 
 use crate::protocol::place_order::types::LimitOrderConstructor;
-use crate::protocol::place_orders::response::ResponseData;
+use crate::protocol::place_orders::response::{LimitResponseData, MarketResponseData};
 
 /// A helper type for constructing blockchain payloads and GraphQL requests
 pub struct LimitOrdersConstructor {
@@ -155,7 +149,7 @@ impl NashProtocol for LimitOrdersRequest {
         let data = response.get("data")
             .ok_or_else(|| ProtocolError("data field not found."))?
             .clone();
-        let response: ResponseData = serde_json::from_value(data).map_err(|x| {
+        let response: LimitResponseData = serde_json::from_value(data).map_err(|x| {
             ProtocolError::coerce_static_from_str(&format!("{:#?}", x))
         })?;
         Ok(ResponseOrError::from_data(response.into()))
@@ -229,8 +223,13 @@ impl NashProtocol for MarketOrdersRequest {
         response: serde_json::Value,
         _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<PlaceOrdersResponse, place_market_order::ResponseData>(response)
-    }
+        let data = response.get("data")
+            .ok_or_else(|| ProtocolError("data field not found."))?
+            .clone();
+        let response: MarketResponseData = serde_json::from_value(data).map_err(|x| {
+            ProtocolError::coerce_static_from_str(&format!("{:#?}", x))
+        })?;
+        Ok(ResponseOrError::from_data(response.into()))    }
 
     /// Update the number of orders remaining before state sync
     async fn process_response(

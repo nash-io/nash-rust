@@ -652,10 +652,6 @@ async fn end_to_end_sub_account_balance() {
 
 #[test]
 fn multi_place_multi_cancel() {
-    // create 3 orders
-    // cancel 2 orders
-    // cancel all left orders
-
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let async_block = async {
         let client = init_client().await;
@@ -699,6 +695,7 @@ fn multi_place_multi_cancel() {
             .response()
             .unwrap()
             .clone();
+        println!("{:#?}", response);
         assert_eq!(response.responses.len(), 3);
 
         let response = client
@@ -715,6 +712,7 @@ fn multi_place_multi_cancel() {
             .unwrap();
 
         let orders = response.response().unwrap();
+        println!("{:#?}", orders);
         assert_eq!(orders.orders.len(), 3);
 
         let requests = CancelOrdersRequest {
@@ -741,7 +739,7 @@ fn multi_place_multi_cancel() {
 
         let response = client
             .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open]),
+                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
                 order_type: None,
                 range: None,
                 buy_or_sell: None,
@@ -766,7 +764,7 @@ fn multi_place_multi_cancel() {
 
         let response = client
             .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open]),
+                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
                 order_type: None,
                 range: None,
                 buy_or_sell: None,

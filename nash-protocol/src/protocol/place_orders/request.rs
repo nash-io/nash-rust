@@ -40,7 +40,6 @@ pub struct MultiQueryBody {
 
 type LimitOrdersMutation = MultiQueryBody;
 type MarketOrderMutation = graphql_client::QueryBody<place_market_order::Variables>;
-type LimitBlockchainSignatures = Vec<Option<place_limit_order::BlockchainSignature>>;
 type MarketBlockchainSignatures = Vec<Option<place_market_order::BlockchainSignature>>;
 
 impl LimitOrdersRequest {

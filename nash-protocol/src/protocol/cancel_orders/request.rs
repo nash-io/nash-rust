@@ -22,7 +22,7 @@ impl CancelOrdersRequest {
             calls = format!(r#"
                 {}
                 response{}: cancelOrder(payload: ${}, signature: ${}) {{
-                    orderIr
+                    orderId
                 }}
                 "#, calls, index, payload, signature);
             variables.insert(payload, serde_json::to_value(variable.payload).unwrap());

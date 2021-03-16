@@ -33,6 +33,7 @@ use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
 use nash_protocol::protocol::place_orders::{LimitOrdersRequest, MarketOrdersRequest};
+use std::thread::sleep;
 
 async fn init_client() -> Client {
     dotenv().ok();
@@ -655,6 +656,16 @@ fn multi_limit_multi_cancel() {
     let async_block = async {
         let client = init_client().await;
 
+        // Cancel all pre-existing orders.
+        let response = client
+            .run(CancelAllOrders {
+                market: "eth_btc".to_string(),
+            })
+            .await
+            .unwrap();
+        println!("{:?}", response);
+        assert_eq!(response.response().unwrap().accepted, true);
+
         let limit_orders = LimitOrdersRequest {
             requests: vec![
                 LimitOrderRequest {
@@ -699,7 +710,7 @@ fn multi_limit_multi_cancel() {
 
         let response = client
             .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open]),
+                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
                 order_type: None,
                 range: None,
                 buy_or_sell: None,
@@ -730,6 +741,9 @@ fn multi_limit_multi_cancel() {
             .clone();
         println!("{:?}", response);
 
+        // REVIEW: Cancelling orders is too slow and if we list account orders after this step, we will still find the orders we asked for cancellation. Is it a backend issue?
+        sleep(Duration::from_secs(1));
+
         let response = client
             .run(ListAccountOrdersRequest {
                 status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
@@ -744,6 +758,7 @@ fn multi_limit_multi_cancel() {
             .unwrap();
 
         let orders = response.response().unwrap();
+        println!("{:#?}", orders);
         assert_eq!(orders.orders.len(), 1);
 
         let response = client

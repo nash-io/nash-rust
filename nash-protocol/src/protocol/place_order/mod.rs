@@ -4,6 +4,6 @@
 pub(crate) mod blockchain;
 mod request;
 mod response;
-mod types;
+pub mod types;
 
 pub use types::{LimitOrderRequest, MarketOrderRequest, PlaceOrderResponse};

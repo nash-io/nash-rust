@@ -18,10 +18,10 @@ use tokio::sync::RwLock;
 pub fn json_to_type_or_error<T: DeserializeOwned>(
     response: serde_json::Value,
 ) -> Result<ResponseOrError<T>> {
-    let string_val = serde_json::to_string(&response)
-        .map_err(|_| ProtocolError("Unexpected problem serializing JSON to string"))?;
-    Ok(serde_json::from_str(&string_val)
-        .map_err(|_| ProtocolError("Could not convert JSON to T"))?)
+    Ok(serde_json::from_value(response)
+        .map_err(|x| {
+            ProtocolError::coerce_static_from_str(&format!("{:#?}", x))
+        })?)
 }
 
 pub fn serializable_to_json<T: Serialize>(obj: &T) -> Result<serde_json::Value> {

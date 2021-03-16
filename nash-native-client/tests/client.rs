@@ -660,7 +660,7 @@ fn multi_place_multi_cancel() {
     let async_block = async {
         let client = init_client().await;
 
-        let request = LimitOrdersRequest {
+        let limit_orders = LimitOrdersRequest {
             requests: vec![
                 LimitOrderRequest {
                     client_order_id: None,
@@ -693,13 +693,13 @@ fn multi_place_multi_cancel() {
         };
 
         let response = client
-            .run(request)
+            .run(limit_orders)
             .await
             .unwrap()
             .response()
             .unwrap()
             .clone();
-        println!("{:?}", response);
+        assert_eq!(response.responses.len(), 3);
 
         let response = client
             .run(ListAccountOrdersRequest {
@@ -715,12 +715,10 @@ fn multi_place_multi_cancel() {
             .unwrap();
 
         let orders = response.response().unwrap();
-        // FIXME: Change left to 3
-        assert_eq!(orders.orders.len(), 1);
+        assert_eq!(orders.orders.len(), 3);
 
-        // FIXME: Change take(0) to take(2)
         let requests = CancelOrdersRequest {
-            requests: orders.orders.iter().take(0).map(|order| CancelOrderRequest {
+            requests: orders.orders.iter().take(2).map(|order| CancelOrderRequest {
                 market: order.market.clone(),
                 order_id: order.id.clone()
             }).collect()

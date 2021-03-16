@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, RwLock};
 use tracing::error;
 
-use crate::errors::Result;
+use crate::errors::{Result, ProtocolError};
 use crate::graphql::place_limit_order;
 use crate::graphql::place_market_order;
 use crate::protocol::ErrorResponse;
@@ -19,7 +19,7 @@ use crate::types::{
     OrderType, Rate,
 };
 use crate::utils::current_time_as_i64;
-use crate::protocol::place_order::LimitOrderRequest;
+use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse};
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
@@ -51,20 +51,12 @@ impl MarketOrdersRequest {
     }
 }
 
+use crate::protocol::place_order::types::LimitOrderConstructor;
+use crate::protocol::place_orders::response::ResponseData;
+
 /// A helper type for constructing blockchain payloads and GraphQL requests
 pub struct LimitOrdersConstructor {
-    // These fields are for GraphQL
-    pub buy_or_sell: BuyOrSell,
-    pub client_order_id: Option<String>,
-    pub market: Market,
-    pub me_amount: AssetAmount,
-    pub me_rate: Rate,
-    pub cancellation_policy: OrderCancellationPolicy,
-    pub allow_taker: bool,
-    // These fields are for the smart contracts
-    pub source: AssetAmount,
-    pub destination: AssetofPrecision,
-    pub rate: Rate,
+    pub constructors: Vec<LimitOrderConstructor>
 }
 
 pub struct MarketOrderConstructor {
@@ -77,25 +69,10 @@ pub struct MarketOrderConstructor {
     pub destination: AssetofPrecision,
 }
 
-/// Helper type to hold all nonces for payload construction and make
-/// passing them as arguments more descriptive.
-#[derive(Clone, Debug, Copy)]
-pub struct PayloadNonces {
-    pub nonce_from: Nonce,
-    pub nonce_to: Nonce,
-    pub order_nonce: Nonce,
-}
-
 /// Response from server once we have placed a limit order
 #[derive(Clone, Debug)]
 pub struct PlaceOrdersResponse {
-    pub remaining_orders: u64,
-    pub order_id: String,
-    pub status: OrderStatus,
-    pub placed_at: DateTime<Utc>,
-    pub order_type: OrderType,
-    pub buy_or_sell: BuyOrSell,
-    pub market_name: String,
+    pub responses: Vec<PlaceOrderResponse>
 }
 
 async fn get_required_hooks(state: Arc<RwLock<State>>, market: &str) -> Result<Vec<ProtocolHook>> {
@@ -165,13 +142,9 @@ impl NashProtocol for LimitOrdersRequest {
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
-        let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let state = state.read().await;
-        let affiliate = state.affiliate_code.clone();
-        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
-        let json = serializable_to_json(&query);
-        println!("{:#?}", json);
-        json
+        let affiliate = state.read().await.affiliate_code.clone();
+        let query = builder.signed_graphql_request(time, affiliate, state).await?;
+        serializable_to_json(&query)
     }
 
     async fn response_from_json(
@@ -179,7 +152,13 @@ impl NashProtocol for LimitOrdersRequest {
         response: serde_json::Value,
         _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
-        try_response_from_json::<PlaceOrdersResponse, place_limit_order::ResponseData>(response)
+        let data = response.get("data")
+            .ok_or_else(|| ProtocolError("data field not found."))?
+            .clone();
+        let response: ResponseData = serde_json::from_value(data).map_err(|x| {
+            ProtocolError::coerce_static_from_str(&format!("{:#?}", x))
+        })?;
+        Ok(ResponseOrError::from_data(response.into()))
     }
 
     /// Update the number of orders remaining before state sync
@@ -188,8 +167,10 @@ impl NashProtocol for LimitOrdersRequest {
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let state = state.read().await;
-        state.set_remaining_orders(response.remaining_orders);
+        if let Some(response) = response.responses.last() {
+            let state = state.read().await;
+            state.set_remaining_orders(response.remaining_orders);
+        }
         Ok(())
     }
 
@@ -257,9 +238,11 @@ impl NashProtocol for MarketOrdersRequest {
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let state = state.read().await;
-        // TODO: Incorporate error into process response
-        state.set_remaining_orders(response.remaining_orders);
+        if let Some(response) = response.responses.last() {
+            let state = state.read().await;
+            // TODO: Incorporate error into process response
+            state.set_remaining_orders(response.remaining_orders);
+        }
         Ok(())
     }
 

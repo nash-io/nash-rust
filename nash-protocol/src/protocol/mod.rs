@@ -22,6 +22,7 @@ pub mod place_orders;
 pub mod sign_all_states;
 pub mod sign_states;
 pub mod subscriptions;
+pub mod multi_request;
 
 mod canonical_string;
 mod graphql;

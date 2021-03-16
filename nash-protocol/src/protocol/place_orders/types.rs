@@ -14,39 +14,21 @@ use crate::protocol::{
 use crate::utils::current_time_as_i64;
 use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse, MarketOrderRequest};
 
-#[derive(Clone, Debug)]
-pub struct OrdersRequest<T> {
-    pub requests: Vec<T>
-}
-
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
-pub type LimitOrdersRequest = OrdersRequest<LimitOrderRequest>;
+pub type LimitOrdersRequest = MultiRequest<LimitOrderRequest>;
 
 /// Request to place market orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
-pub type MarketOrdersRequest = OrdersRequest<MarketOrderRequest>;
-
-impl<T> OrdersRequest<T> {
-    pub fn new(requests: Vec<T>) -> Result<Self> { Ok(Self { requests })}
-}
+pub type MarketOrdersRequest = MultiRequest<MarketOrderRequest>;
 
 use crate::protocol::place_order::types::{LimitOrderConstructor, MarketOrderConstructor};
 use crate::protocol::place_orders::response::{LimitResponseData, MarketResponseData};
+use crate::protocol::multi_request::{MultiRequest, MultiRequestConstructor, MultiResponse};
 
-/// A helper type for constructing blockchain payloads and GraphQL requests
-pub struct OrdersConstructor<T> {
-    pub constructors: Vec<T>
-}
-
-pub type LimitOrdersConstructor = OrdersConstructor<LimitOrderConstructor>;
-pub type MarketOrdersConstructor = OrdersConstructor<MarketOrderConstructor>;
-
-/// Response from server once we have placed a limit order
-#[derive(Clone, Debug)]
-pub struct PlaceOrdersResponse {
-    pub responses: Vec<PlaceOrderResponse>
-}
+pub type LimitOrdersConstructor = MultiRequestConstructor<LimitOrderConstructor>;
+pub type MarketOrdersConstructor = MultiRequestConstructor<MarketOrderConstructor>;
+pub type PlaceOrdersResponse = MultiResponse<PlaceOrderResponse>;
 
 async fn get_required_hooks(state: Arc<RwLock<State>>, market: &str) -> Result<Vec<ProtocolHook>> {
     let state = state.read().await;

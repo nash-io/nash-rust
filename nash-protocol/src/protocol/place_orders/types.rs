@@ -13,55 +13,35 @@ use crate::protocol::{
 };
 use crate::types::{AssetAmount, AssetofPrecision, Market};
 use crate::utils::current_time_as_i64;
-use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse};
+use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse, MarketOrderRequest};
+
+#[derive(Clone, Debug)]
+pub struct OrdersRequest<T> {
+    pub requests: Vec<T>
+}
 
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
-#[derive(Clone, Debug)]
-pub struct LimitOrdersRequest {
-    pub requests: Vec<LimitOrderRequest>
+pub type LimitOrdersRequest = OrdersRequest<LimitOrderRequest>;
+
+/// Request to place market orders on Nash exchange. On an A/B market
+/// price amount will always be in terms of A and price in terms of B.
+pub type MarketOrdersRequest = OrdersRequest<MarketOrderRequest>;
+
+impl<T> OrdersRequest<T> {
+    pub fn new(requests: Vec<T>) -> Result<Self> { Ok(Self { requests })}
 }
 
-#[derive(Clone, Debug)]
-pub struct MarketOrdersRequest {
-    pub client_order_id: Option<String>,
-    pub market: String,
-    pub amount: String,
-}
-
-impl LimitOrdersRequest {
-    pub fn new(requests: Vec<LimitOrderRequest>) -> Result<Self> {
-        Ok(Self { requests })
-    }
-}
-
-impl MarketOrdersRequest {
-    pub fn new(market: String, amount_a: &str, client_order_id: Option<String>) -> Result<Self> {
-        Ok(Self {
-            market,
-            amount: amount_a.to_string(),
-            client_order_id,
-        })
-    }
-}
-
-use crate::protocol::place_order::types::LimitOrderConstructor;
+use crate::protocol::place_order::types::{LimitOrderConstructor, MarketOrderConstructor};
 use crate::protocol::place_orders::response::{LimitResponseData, MarketResponseData};
 
 /// A helper type for constructing blockchain payloads and GraphQL requests
-pub struct LimitOrdersConstructor {
-    pub constructors: Vec<LimitOrderConstructor>
+pub struct OrdersConstructor<T> {
+    pub constructors: Vec<T>
 }
 
-pub struct MarketOrderConstructor {
-    // These fields are for GraphQL
-    pub market: Market,
-    pub client_order_id: Option<String>,
-    pub me_amount: AssetAmount,
-    // These fields are for the smart contracts
-    pub source: AssetAmount,
-    pub destination: AssetofPrecision,
-}
+pub type LimitOrdersConstructor = OrdersConstructor<LimitOrderConstructor>;
+pub type MarketOrdersConstructor = OrdersConstructor<MarketOrderConstructor>;
 
 /// Response from server once we have placed a limit order
 #[derive(Clone, Debug)]
@@ -211,10 +191,8 @@ impl NashProtocol for MarketOrdersRequest {
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         let builder = self.make_constructor(state.clone()).await?;
         let time = current_time_as_i64();
-        let nonces = builder.make_payload_nonces(state.clone(), time).await?;
-        let state = state.read().await;
-        let affiliate = state.affiliate_code.clone();
-        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
+        let affiliate = state.read().await.affiliate_code.clone();
+        let query = builder.signed_graphql_request(time, affiliate, state).await?;
         serializable_to_json(&query)
     }
 
@@ -257,6 +235,7 @@ impl NashProtocol for MarketOrdersRequest {
 
     /// Potentially get more r values or sign states before placing an order
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
-        get_required_hooks(state, &self.market).await.map(Some)
+        let request = &self.requests[0];
+        get_required_hooks(state, &request.market).await.map(Some)
     }
 }

@@ -33,7 +33,7 @@ use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
 use nash_protocol::protocol::{ResponseOrError, DataResponse};
-use nash_protocol::protocol::place_orders::LimitOrdersRequest;
+use nash_protocol::protocol::place_orders::{LimitOrdersRequest, MarketOrdersRequest};
 
 async fn init_client() -> Client {
     dotenv().ok();
@@ -781,45 +781,33 @@ fn multi_limit_multi_cancel() {
 }
 
 #[test]
-fn multi_market_multi_cancel() {
+fn multi_market_order() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let async_block = async {
         let client = init_client().await;
 
-        let limit_orders = LimitOrdersRequest {
+        let market_orders = MarketOrdersRequest {
             requests: vec![
-                LimitOrderRequest {
+                MarketOrderRequest {
                     client_order_id: None,
                     market: "eth_btc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
                     amount: "0.2".to_string(),
-                    price: "0.000213070".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
                 },
-                LimitOrderRequest {
+                MarketOrderRequest {
                     client_order_id: None,
                     market: "eth_btc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
                     amount: "0.1".to_string(),
-                    price: "0.000203070".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
                 },
-                LimitOrderRequest {
+                MarketOrderRequest {
                     client_order_id: None,
                     market: "eth_btc".to_string(),
-                    buy_or_sell: BuyOrSell::Buy,
                     amount: "0.05".to_string(),
-                    price: "0.000210070".to_string(),
-                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-                    allow_taker: true,
                 },
             ]
         };
 
         let response = client
-            .run(limit_orders)
+            .run(market_orders)
             .await
             .unwrap()
             .response()
@@ -827,85 +815,6 @@ fn multi_market_multi_cancel() {
             .clone();
         println!("{:#?}", response);
         assert_eq!(response.responses.len(), 3);
-
-        let response = client
-            .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open]),
-                order_type: None,
-                range: None,
-                buy_or_sell: None,
-                limit: None,
-                before: None,
-                market: Some("eth_btc".into())
-            })
-            .await
-            .unwrap();
-
-        let orders = response.response().unwrap();
-        println!("{:#?}", orders);
-        assert_eq!(orders.orders.len(), 3);
-
-        let requests = CancelOrdersRequest {
-            requests: orders.orders.iter().take(2).map(|order| CancelOrderRequest {
-                market: order.market.clone(),
-                order_id: order.id.clone()
-            }).collect()
-        };
-
-        let mut response = CancelOrdersResponse {
-            responses: Default::default()
-        };
-        for request in requests.requests {
-            response.responses.push(client
-                .run(request)
-                .await
-                .unwrap()
-                .response()
-                .unwrap()
-                .clone());
-        }
-        let response = ResponseOrError::Response(DataResponse { data: response });
-        println!("{:?}", response);
-
-        let response = client
-            .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
-                order_type: None,
-                range: None,
-                buy_or_sell: None,
-                limit: None,
-                before: None,
-                market: Some("eth_btc".into())
-            })
-            .await
-            .unwrap();
-
-        let orders = response.response().unwrap();
-        assert_eq!(orders.orders.len(), 1);
-
-        let response = client
-            .run(CancelAllOrders {
-                market: "eth_btc".to_string(),
-            })
-            .await
-            .unwrap();
-        println!("{:?}", response);
-        assert_eq!(response.response().unwrap().accepted, true);
-
-        let response = client
-            .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
-                order_type: None,
-                range: None,
-                buy_or_sell: None,
-                limit: None,
-                before: None,
-                market: Some("eth_btc".into())
-            })
-            .await
-            .unwrap();
-
-        assert!(response.response().unwrap().orders.is_empty());
     };
     runtime.block_on(async_block);
 }

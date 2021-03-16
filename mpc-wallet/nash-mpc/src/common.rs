@@ -18,6 +18,7 @@ use k256::AffinePoint as AffinePoint_k256;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
+#[cfg(feature = "num_bigint")]
 use num_traits::Zero;
 #[cfg(feature = "secp256k1")]
 use p256::elliptic_curve::sec1::{

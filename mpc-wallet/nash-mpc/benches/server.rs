@@ -3,10 +3,12 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::common::{
-    dh_init_secp256k1, dh_init_secp256r1, Curve, publickey_from_secretkey
+    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, Curve, publickey_from_secretkey
 };
+use nash_mpc::curves::curve25519::{Ed25519Point, Ed25519Scalar};
+use nash_mpc::curves::traits::{ECPoint, ECScalar};
 use nash_mpc::server::{
-    complete_sig_ecdsa, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
+    complete_sig_ecdsa, complete_sig_eddsa, compute_rpool_curve25519, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
 };
 use paillier_common::{DecryptionKey, MinimalDecryptionKey};
 use rust_bigint::traits::Converter;
@@ -31,6 +33,13 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("compute_rpool_secp256r1", |b| {
         b.iter(|| {
             compute_rpool_secp256r1(black_box(&dh_secrets_r1), black_box(&dh_publics_r1)).unwrap();
+        })
+    });
+
+    let (dh_secrets_ed, dh_publics_ed) = dh_init_curve25519(10).unwrap();
+    c.bench_function("compute_rpool_curve25519", |b| {
+        b.iter(|| {
+            compute_rpool_curve25519(black_box(&dh_secrets_ed), black_box(&dh_publics_ed)).unwrap();
         })
     });
 
@@ -87,6 +96,26 @@ fn criterion_benchmark(c: &mut Criterion) {
                 black_box(Curve::Secp256r1),
                 black_box(&pk),
                 black_box(&msg_hash),
+            )
+            .unwrap();
+        })
+    });
+
+    let pk = publickey_from_secretkey(&BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap(), Curve::Curve25519).unwrap();
+    let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+    let server_secret_share = BigInt::from_hex("6eb9906e008c0d1021119fede0ddfb390993fdd47d346f7ff50cfbc19081f9").unwrap();
+    let s_client: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("adb68715561e6de95f7df5b2b1347b9b5d1c98d8048ba515085b4c71afebb42").unwrap()).unwrap();
+    let r = Ed25519Point::from_hex("e7d802e3a9e6feec611953326ac641352f112e6051f6b56eaf968a6c934e3218").unwrap();
+    let r_server: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("3a906a0e5d730994cc2f953651d3c6dc7f8128e8e6ad7304dc9743b80f94545").unwrap()).unwrap();
+    c.bench_function("complete_sig_ed", |b| {
+        b.iter(|| {
+            complete_sig_eddsa(
+                black_box(server_secret_share.clone()),
+                black_box(&s_client),
+                black_box(&r),
+                black_box(r_server.clone()),
+                black_box(&pk),
+                black_box(&msg),
             )
             .unwrap();
         })

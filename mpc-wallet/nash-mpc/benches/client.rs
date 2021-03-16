@@ -3,10 +3,10 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::client::{
-    compute_presig_ecdsa, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
+    compute_presig_eddsa, compute_presig_ecdsa, create_eddsa_api_childkey, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
     get_rpool_size, APIchildkeyCreator,
 };
-use nash_mpc::common::{dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
+use nash_mpc::common::{dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
 use paillier_common::{EncryptionKey, MinimalEncryptionKey};
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;
@@ -60,6 +60,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
+    c.bench_function("create_eddsa_api_childkey", |b| {
+        b.iter(|| {
+            create_eddsa_api_childkey(&secret_key).unwrap();
+        })
+    });
+
     c.bench_function("encrypt_secret_share", |b| {
         b.iter(|| {
             encrypt_secret_share(black_box(&paillier_pk), black_box(&secret_key));
@@ -102,6 +108,24 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
+    let (dh_secrets_ed, dh_publics_ed) = dh_init_curve25519(10).unwrap();
+    c.bench_function("fill_rpool_curve25519", |b| {
+        b.iter(|| {
+            fill_rpool_curve25519(
+                black_box(dh_secrets_ed.clone()),
+                black_box(&dh_publics_ed),
+            )
+            .unwrap();
+        })
+    });
+
+    c.bench_function("get_rpool_size_ed", |b| {
+        b.iter(|| {
+            get_rpool_size(black_box(black_box(Curve::Curve25519))).unwrap();
+        })
+    });
+
+
     let msg_hash =
         BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
             .unwrap();
@@ -138,6 +162,23 @@ fn criterion_benchmark(c: &mut Criterion) {
                 black_box(&api_childkey_r1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256r1),
+            )
+            .unwrap();
+        })
+    });
+
+    let (api_child_key_ed, _) = create_eddsa_api_childkey(&BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
+    let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+    for _ in 0..10000 {
+        let (client_dh_secrets, _) = dh_init_curve25519(100).unwrap();
+        let (_, server_dh_publics) = dh_init_curve25519(100).unwrap();
+        fill_rpool_curve25519(client_dh_secrets, &server_dh_publics).unwrap();
+    }
+    c.bench_function("compute_presig_ed", |b| {
+        b.iter(|| {
+            compute_presig_eddsa(
+                black_box(&api_child_key_ed),
+                black_box(&msg),
             )
             .unwrap();
         })

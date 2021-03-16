@@ -11,7 +11,6 @@ use crate::protocol::{
     sign_all_states::SignAllStates, NashProtocol, NashProtocolRequest,
     ProtocolHook, ResponseOrError, State,
 };
-use crate::types::{AssetAmount, AssetofPrecision, Market};
 use crate::utils::current_time_as_i64;
 use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse, MarketOrderRequest};
 

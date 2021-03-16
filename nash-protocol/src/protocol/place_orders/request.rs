@@ -1,18 +1,7 @@
-use crate::errors::{ProtocolError, Result};
-use crate::graphql;
+use crate::errors::Result;
 use crate::graphql::place_limit_order;
 use crate::graphql::place_market_order;
-use crate::types::neo::PublicKey as NeoPublicKey;
-use crate::types::PublicKey;
-use crate::types::{
-    Asset, Blockchain, BuyOrSell, Nonce, OrderCancellationPolicy, Rate
-};
-use graphql_client::GraphQLQuery;
-use std::convert::TryInto;
-
-use super::super::signer::Signer;
-use super::super::{general_canonical_string, RequestPayloadSignature, State};
-use crate::protocol::place_order::blockchain::{btc, eth, neo, FillOrder};
+use super::super::State;
 use super::types::{
     LimitOrdersConstructor, LimitOrdersRequest,
     MarketOrdersConstructor, MarketOrdersRequest
@@ -23,8 +12,6 @@ use std::sync::Arc;
 
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use crate::protocol::place_order::types::PayloadNonces;
-use crate::protocol::place_orders::types::OrdersRequest;
 
 /// The form in which queries are sent over HTTP in most implementations. This will be built using the [`GraphQLQuery`] trait normally.
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,9 +24,6 @@ pub struct MultiQueryBody {
     #[serde(rename = "operationName")]
     pub operation_name: &'static str,
 }
-
-type LimitOrdersMutation = MultiQueryBody;
-type MarketOrdersMutation = MultiQueryBody;
 
 impl LimitOrdersRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
@@ -65,16 +49,6 @@ impl MarketOrdersRequest {
     }
 }
 
-// If an asset is on another chain, convert it into a crosschain nonce
-// FIXME: maybe Nonce should also keep track of asset type to make this easier?
-fn map_crosschain(nonce: Nonce, chain: Blockchain, asset: Asset) -> Nonce {
-    if asset.blockchain() == chain {
-        nonce
-    } else {
-        Nonce::Crosschain
-    }
-}
-
 impl LimitOrdersConstructor {
     /// Create a GraphQL request with everything filled in besides blockchain order payloads
     /// and signatures (for both the overall request and blockchain payloads)
@@ -83,40 +57,11 @@ impl LimitOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
     ) -> Result<Vec<place_limit_order::Variables>> {
-        let mut result = Vec::new();
-        for (index, request) in self.constructors.iter().enumerate() {
-            let cancel_at = match request.cancellation_policy {
-                OrderCancellationPolicy::GoodTilTime(time) => Some(format!("{:?}", time)),
-                _ => None,
-            };
-            result.push(place_limit_order::Variables {
-                payload: place_limit_order::PlaceLimitOrderParams {
-                    client_order_id: request.client_order_id.clone(),
-                    allow_taker: request.allow_taker,
-                    buy_or_sell: request.buy_or_sell.into(),
-                    cancel_at,
-                    cancellation_policy: request.cancellation_policy.into(),
-                    market_name: request.market.market_name(),
-                    amount: request.me_amount.clone().try_into()?,
-                    // These two nonces are deprecated...
-                    nonce_from: 1234,
-                    nonce_to: 1234,
-                    nonce_order: (current_time as u32) as i64 + index as i64, // 4146194029, // Fixme: what do we validate on this?
-                    timestamp: current_time,
-                    limit_price: place_limit_order::CurrencyPriceParams {
-                        // This format is confusing, but prices are always in
-                        // B for an A/B market, so reverse the normal thing
-                        currency_a: request.market.asset_b.asset.name().to_string(),
-                        currency_b: request.market.asset_a.asset.name().to_string(),
-                        amount: request.me_rate.to_bigdecimal()?.to_string(),
-                    },
-                    blockchain_signatures: vec![],
-                },
-                affiliate: affiliate.clone(),
-                signature: RequestPayloadSignature::empty().into(),
-            });
+        let mut variables = Vec::new();
+        for (index, variable) in self.constructors.iter().enumerate() {
+            variables.push(variable.graphql_request(current_time + index as i64, affiliate.clone())?);
         }
-        Ok(result)
+        Ok(variables)
     }
 
     /// Create a signed GraphQL request with blockchain payloads that can be submitted
@@ -126,25 +71,19 @@ impl LimitOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
         state: Arc<RwLock<State>>,
-    ) -> Result<LimitOrdersMutation> {
+    ) -> Result<MultiQueryBody> {
         let variables = self.graphql_request(current_time, affiliate)?;
         let mut map = HashMap::new();
         let mut params = String::new();
         let mut calls = String::new();
-        for (index, (mut variable, constructor)) in variables.into_iter().zip(self.constructors.iter()).enumerate() {
+        for (index, (variable, constructor)) in variables.into_iter().zip(self.constructors.iter()).enumerate() {
             // FIXME: This current_time + index for nonces is replicated in graphql_request. We would benefit to abstract this logic somewhere.
             let nonces = constructor.make_payload_nonces(state.clone(), current_time + index as i64).await?;
             let state = state.read().await;
             let signer = state.signer()?;
-            // compute and add blockchain signatures
-            let bc_sigs = constructor.blockchain_signatures(signer, &nonces)?;
-            variable.payload.blockchain_signatures = bc_sigs;
-            // now compute overall request payload signature
-            let canonical_string = limit_order_canonical_string(&variable)?;
-            let sig: place_limit_order::Signature =
-                signer.sign_canonical_string(&canonical_string).into();
-            variable.signature = sig;
+            let variable = constructor.sign_graphql_request(variable, nonces, signer)?;
 
+            // FIXME: This is also replicated in MarketOrdersConstructor::signed_graphql_request
             let payload = format!("payload{}", index);
             let signature = format!("signature{}", index);
             let affiliate = format!("affiliate{}", index);
@@ -168,7 +107,7 @@ impl LimitOrdersConstructor {
             map.insert(signature, serde_json::to_value(variable.signature).unwrap());
             map.insert(affiliate, serde_json::to_value(variable.affiliate).unwrap());
         }
-        Ok(LimitOrdersMutation {
+        Ok(MultiQueryBody {
             variables: map,
             operation_name: "PlaceLimitOrder",
             query: format!(r#"
@@ -188,26 +127,11 @@ impl MarketOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
     ) -> Result<Vec<place_market_order::Variables>> {
-        let mut result = Vec::new();
-        for (index, request) in self.constructors.iter().enumerate() {
-            result.push(place_market_order::Variables {
-                payload: place_market_order::PlaceMarketOrderParams {
-                    buy_or_sell: BuyOrSell::Sell.into(),
-                    client_order_id: request.client_order_id.clone(),
-                    market_name: request.market.market_name(),
-                    amount: request.me_amount.clone().try_into()?,
-                    // These two nonces are deprecated...
-                    nonce_from: Some(0),
-                    nonce_to: Some(0),
-                    nonce_order: (current_time as u32) as i64 + index as i64, // 4146194029, // Fixme: what do we validate on this?
-                    timestamp: current_time,
-                    blockchain_signatures: vec![],
-                },
-                affiliate: affiliate.clone(),
-                signature: RequestPayloadSignature::empty().into(),
-            });
+        let mut variables = Vec::new();
+        for (index, variable) in self.constructors.iter().enumerate() {
+            variables.push(variable.graphql_request(current_time + index as i64, affiliate.clone())?);
         }
-        Ok(result)
+        Ok(variables)
     }
 
     /// Create a signed GraphQL request with blockchain payloads that can be submitted
@@ -217,24 +141,17 @@ impl MarketOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
         state: Arc<RwLock<State>>,
-    ) -> Result<MarketOrdersMutation> {
+    ) -> Result<MultiQueryBody> {
         let variables = self.graphql_request(current_time, affiliate)?;
         let mut map = HashMap::new();
         let mut params = String::new();
         let mut calls = String::new();
-        for (index, (mut variable, constructor)) in variables.into_iter().zip(self.constructors.iter()).enumerate() {
+        for (index, (variable, constructor)) in variables.into_iter().zip(self.constructors.iter()).enumerate() {
             // FIXME: This current_time + index for nonces is replicated in graphql_request. We would benefit to abstract this logic somewhere.
             let nonces = constructor.make_payload_nonces(state.clone(), current_time + index as i64).await?;
             let state = state.read().await;
             let signer = state.signer()?;
-            // compute and add blockchain signatures
-            let bc_sigs = constructor.blockchain_signatures(signer, &nonces)?;
-            variable.payload.blockchain_signatures = bc_sigs;
-            // now compute overall request payload signature
-            let canonical_string = market_order_canonical_string(&variable)?;
-            let sig: place_market_order::Signature =
-                signer.sign_canonical_string(&canonical_string).into();
-            variable.signature = sig;
+            let variable = constructor.sign_graphql_request(variable, nonces, signer)?;
 
             let payload = format!("payload{}", index);
             let signature = format!("signature{}", index);
@@ -259,7 +176,7 @@ impl MarketOrdersConstructor {
             map.insert(signature, serde_json::to_value(variable.signature).unwrap());
             map.insert(affiliate, serde_json::to_value(variable.affiliate).unwrap());
         }
-        Ok(MarketOrdersMutation {
+        Ok(MultiQueryBody {
             variables: map,
             operation_name: "PlaceMarketOrder",
             query: format!(r#"
@@ -270,24 +187,3 @@ impl MarketOrdersConstructor {
         })
     }
 }
-
-pub fn limit_order_canonical_string(variables: &place_limit_order::Variables) -> Result<String> {
-    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize limit order into canonical string"))?;
-
-    Ok(general_canonical_string(
-        "place_limit_order".to_string(),
-        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize limit order into canonical string"))?,
-        vec!["blockchain_signatures".to_string()],
-    ))
-}
-
-pub fn market_order_canonical_string(variables: &place_market_order::Variables) -> Result<String> {
-    let serialized_all = serde_json::to_string(variables).map_err(|_|ProtocolError("Failed to serialize market order into canonical string"))?;
-
-    Ok(general_canonical_string(
-        "place_market_order".to_string(),
-        serde_json::from_str(&serialized_all).map_err(|_|ProtocolError("Failed to deserialize market order into canonical string"))?,
-        vec!["blockchain_signatures".to_string()],
-    ))
-}
-

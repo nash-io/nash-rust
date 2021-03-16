@@ -231,6 +231,22 @@ impl LimitOrderConstructor {
         Ok(order_args)
     }
 
+    pub fn sign_graphql_request(
+        &self,
+        mut variables: place_limit_order::Variables,
+        nonces: Vec<PayloadNonces>,
+        signer: &Signer) -> Result<place_limit_order::Variables>
+    {
+        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
+        variables.payload.blockchain_signatures = bc_sigs;
+        // now compute overall request payload signature
+        let canonical_string = limit_order_canonical_string(&variables)?;
+        let sig: place_limit_order::Signature =
+            signer.sign_canonical_string(&canonical_string).into();
+        variables.signature = sig;
+        Ok(variables)
+    }
+
     /// Create a signed GraphQL request with blockchain payloads that can be submitted
     /// to Nash
     pub fn signed_graphql_request(
@@ -240,15 +256,7 @@ impl LimitOrderConstructor {
         affiliate: Option<String>,
         signer: &Signer,
     ) -> Result<LimitOrderMutation> {
-        let mut request = self.graphql_request(current_time, affiliate)?;
-        // compute and add blockchain signatures
-        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
-        request.payload.blockchain_signatures = bc_sigs;
-        // now compute overall request payload signature
-        let canonical_string = limit_order_canonical_string(&request)?;
-        let sig: place_limit_order::Signature =
-            signer.sign_canonical_string(&canonical_string).into();
-        request.signature = sig;
+        let request = self.sign_graphql_request(self.graphql_request(current_time, affiliate)?, nonces, signer)?;
         Ok(graphql::PlaceLimitOrder::build_query(request))
     }
 
@@ -398,6 +406,23 @@ impl MarketOrderConstructor {
         Ok(order_args)
     }
 
+    pub fn sign_graphql_request(
+        &self,
+        mut variables: place_market_order::Variables,
+        nonces: Vec<PayloadNonces>,
+        signer: &Signer) -> Result<place_market_order::Variables>
+    {
+        // compute and add blockchain signatures
+        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
+        variables.payload.blockchain_signatures = bc_sigs;
+        // now compute overall request payload signature
+        let canonical_string = market_order_canonical_string(&variables)?;
+        let sig: place_market_order::Signature =
+            signer.sign_canonical_string(&canonical_string).into();
+        variables.signature = sig;
+        Ok(variables)
+    }
+
     /// Create a signed GraphQL request with blockchain payloads that can be submitted
     /// to Nash
     pub fn signed_graphql_request(
@@ -407,15 +432,7 @@ impl MarketOrderConstructor {
         affiliate: Option<String>,
         signer: &Signer,
     ) -> Result<MarketOrderMutation> {
-        let mut request = self.graphql_request(current_time, affiliate)?;
-        // compute and add blockchain signatures
-        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
-        request.payload.blockchain_signatures = bc_sigs;
-        // now compute overall request payload signature
-        let canonical_string = market_order_canonical_string(&request)?;
-        let sig: place_market_order::Signature =
-            signer.sign_canonical_string(&canonical_string).into();
-        request.signature = sig;
+        let request = self.sign_graphql_request(self.graphql_request(current_time, affiliate)?, nonces, signer)?;
         Ok(graphql::PlaceMarketOrder::build_query(request))
     }
 

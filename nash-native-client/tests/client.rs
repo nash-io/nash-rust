@@ -33,7 +33,6 @@ use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
 use nash_protocol::protocol::place_orders::{LimitOrdersRequest, MarketOrdersRequest};
-use std::thread::sleep;
 
 async fn init_client() -> Client {
     dotenv().ok();
@@ -656,15 +655,21 @@ fn multi_limit_multi_cancel() {
     let async_block = async {
         let client = init_client().await;
 
-        // Cancel all pre-existing orders.
-        let response = client
-            .run(CancelAllOrders {
-                market: "eth_btc".to_string(),
-            })
-            .await
-            .unwrap();
-        println!("{:?}", response);
-        assert_eq!(response.response().unwrap().accepted, true);
+        let mut placed_orders = client.subscribe_protocol(SubscribeAccountOrders {
+            market: Some("eth_btc".into()),
+            buy_or_sell: Some(BuyOrSell::Buy),
+            range: None,
+            status: Some(vec![OrderStatus::Pending, OrderStatus::Open]),
+            order_type: None
+        }).await.expect("Couldn't subscribe to account orders");
+
+        let mut canceled_orders = client.subscribe_protocol(SubscribeAccountOrders {
+            market: Some("eth_btc".into()),
+            buy_or_sell: Some(BuyOrSell::Buy),
+            range: None,
+            status: Some(vec![OrderStatus::Canceled]),
+            order_type: None
+        }).await.expect("Couldn't subscribe to account orders");
 
         let limit_orders = LimitOrdersRequest {
             requests: vec![
@@ -706,27 +711,23 @@ fn multi_limit_multi_cancel() {
             .unwrap()
             .clone();
         println!("{:#?}", response);
-        assert_eq!(response.responses.len(), 3);
 
-        let response = client
-            .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
-                order_type: None,
-                range: None,
-                buy_or_sell: None,
-                limit: None,
-                before: None,
-                market: Some("eth_btc".into())
-            })
-            .await
-            .unwrap();
-
-        let orders = response.response().unwrap();
-        println!("{:#?}", orders);
-        assert_eq!(orders.orders.len(), 3);
+        let mut orders = Vec::new();
+        while orders.len() < 3 {
+            let mut notification = placed_orders
+                .recv()
+                .await
+                .expect("No incoming order")
+                .expect("Failed to get order")
+                .response()
+                .expect("Failed to get response")
+                .clone();
+            orders.append(&mut notification.orders);
+        }
+        assert_eq!(orders.len(), 3);
 
         let cancel_orders = CancelOrdersRequest {
-            requests: orders.orders.iter().take(2).map(|order| CancelOrderRequest {
+            requests: orders.iter().take(2).map(|order| CancelOrderRequest {
                 market: order.market.clone(),
                 order_id: order.id.clone()
             }).collect()
@@ -741,25 +742,19 @@ fn multi_limit_multi_cancel() {
             .clone();
         println!("{:?}", response);
 
-        // REVIEW: Cancelling orders is too slow and if we list account orders after this step, we will still find the orders we asked for cancellation. Is it a backend issue?
-        sleep(Duration::from_secs(1));
-
-        let response = client
-            .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
-                order_type: None,
-                range: None,
-                buy_or_sell: None,
-                limit: None,
-                before: None,
-                market: Some("eth_btc".into())
-            })
-            .await
-            .unwrap();
-
-        let orders = response.response().unwrap();
-        println!("{:#?}", orders);
-        assert_eq!(orders.orders.len(), 1);
+        let mut orders = Vec::new();
+        while orders.len() < 2 {
+            let mut notification = canceled_orders
+                .recv()
+                .await
+                .expect("No incoming order")
+                .expect("Failed to get order")
+                .response()
+                .expect("Failed to get response")
+                .clone();
+            orders.append(&mut notification.orders);
+        }
+        assert_eq!(orders.len(), 2);
 
         let response = client
             .run(CancelAllOrders {
@@ -770,20 +765,16 @@ fn multi_limit_multi_cancel() {
         println!("{:?}", response);
         assert_eq!(response.response().unwrap().accepted, true);
 
-        let response = client
-            .run(ListAccountOrdersRequest {
-                status: Some(vec![OrderStatus::Open, OrderStatus::Pending]),
-                order_type: None,
-                range: None,
-                buy_or_sell: None,
-                limit: None,
-                before: None,
-                market: Some("eth_btc".into())
-            })
+        let orders = canceled_orders
+            .recv()
             .await
-            .unwrap();
-
-        assert!(response.response().unwrap().orders.is_empty());
+            .expect("No incoming order.")
+            .expect("Failed to get canceled orders.")
+            .response()
+            .expect("Failed to get the response")
+            .clone();
+        let orders = &orders.orders;
+        assert_eq!(orders.len(), 1);
     };
     runtime.block_on(async_block);
 }

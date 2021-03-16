@@ -17,6 +17,7 @@ use crate::protocol::place_order::{LimitOrderRequest, PlaceOrderResponse, Market
 /// Request to place limit orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
 pub type LimitOrdersRequest = MultiRequest<LimitOrderRequest>;
+pub type PlaceOrdersResponse = MultiResponse<PlaceOrderResponse>;
 
 /// Request to place market orders on Nash exchange. On an A/B market
 /// price amount will always be in terms of A and price in terms of B.
@@ -28,7 +29,6 @@ use crate::protocol::multi_request::{MultiRequest, MultiRequestConstructor, Mult
 
 pub type LimitOrdersConstructor = MultiRequestConstructor<LimitOrderConstructor>;
 pub type MarketOrdersConstructor = MultiRequestConstructor<MarketOrderConstructor>;
-pub type PlaceOrdersResponse = MultiResponse<PlaceOrderResponse>;
 
 async fn get_required_hooks(state: Arc<RwLock<State>>, market: &str) -> Result<Vec<ProtocolHook>> {
     let state = state.read().await;

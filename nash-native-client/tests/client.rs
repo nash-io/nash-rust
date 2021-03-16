@@ -11,7 +11,7 @@ use nash_native_client::{Client, Environment};
 use nash_protocol::protocol::asset_nonces::AssetNoncesRequest;
 use nash_protocol::protocol::cancel_all_orders::CancelAllOrders;
 use nash_protocol::protocol::cancel_order::CancelOrderRequest;
-use nash_protocol::protocol::cancel_orders::{CancelOrdersRequest, CancelOrdersResponse};
+use nash_protocol::protocol::cancel_orders::CancelOrdersRequest;
 use nash_protocol::protocol::dh_fill_pool::DhFillPoolRequest;
 use nash_protocol::protocol::get_account_order::GetAccountOrderRequest;
 use nash_protocol::protocol::get_ticker::TickerRequest;
@@ -32,7 +32,6 @@ use nash_protocol::protocol::subscriptions::updated_account_orders::SubscribeAcc
 use nash_protocol::types::{
     Blockchain, BuyOrSell, DateTimeRange, OrderCancellationPolicy, OrderStatus, OrderType,
 };
-use nash_protocol::protocol::{ResponseOrError, DataResponse};
 use nash_protocol::protocol::place_orders::{LimitOrdersRequest, MarketOrdersRequest};
 
 async fn init_client() -> Client {
@@ -715,26 +714,20 @@ fn multi_limit_multi_cancel() {
         println!("{:#?}", orders);
         assert_eq!(orders.orders.len(), 3);
 
-        let requests = CancelOrdersRequest {
+        let cancel_orders = CancelOrdersRequest {
             requests: orders.orders.iter().take(2).map(|order| CancelOrderRequest {
                 market: order.market.clone(),
                 order_id: order.id.clone()
             }).collect()
         };
 
-        let mut response = CancelOrdersResponse {
-            responses: Default::default()
-        };
-        for request in requests.requests {
-            response.responses.push(client
-                .run(request)
-                .await
-                .unwrap()
-                .response()
-                .unwrap()
-                .clone());
-        }
-        let response = ResponseOrError::Response(DataResponse { data: response });
+        let response = client
+            .run(cancel_orders)
+            .await
+            .unwrap()
+            .response()
+            .unwrap()
+            .clone();
         println!("{:?}", response);
 
         let response = client

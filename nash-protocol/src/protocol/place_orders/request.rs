@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use std::sync::Arc;
 
 use std::collections::HashMap;
-use crate::protocol::multi_request::MultiQueryBody;
+use crate::protocol::multi_request::DynamicQueryBody;
 
 impl LimitOrdersRequest {
     // Buy or sell `amount` of `A` in price of `B` for an A/B market. Returns a builder struct
@@ -59,7 +59,7 @@ impl LimitOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
         state: Arc<RwLock<State>>,
-    ) -> Result<MultiQueryBody> {
+    ) -> Result<DynamicQueryBody> {
         let variables = self.graphql_request(current_time, affiliate)?;
         let mut map = HashMap::new();
         let mut params = String::new();
@@ -95,7 +95,7 @@ impl LimitOrdersConstructor {
             map.insert(signature, serde_json::to_value(variable.signature).unwrap());
             map.insert(affiliate, serde_json::to_value(variable.affiliate).unwrap());
         }
-        Ok(MultiQueryBody {
+        Ok(DynamicQueryBody {
             variables: map,
             operation_name: "PlaceLimitOrder",
             query: format!(r#"
@@ -129,7 +129,7 @@ impl MarketOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
         state: Arc<RwLock<State>>,
-    ) -> Result<MultiQueryBody> {
+    ) -> Result<DynamicQueryBody> {
         let variables = self.graphql_request(current_time, affiliate)?;
         let mut map = HashMap::new();
         let mut params = String::new();
@@ -164,7 +164,7 @@ impl MarketOrdersConstructor {
             map.insert(signature, serde_json::to_value(variable.signature).unwrap());
             map.insert(affiliate, serde_json::to_value(variable.affiliate).unwrap());
         }
-        Ok(MultiQueryBody {
+        Ok(DynamicQueryBody {
             variables: map,
             operation_name: "PlaceMarketOrder",
             query: format!(r#"

@@ -4,7 +4,7 @@ use nash_mpc::client::{
 };
 use nash_mpc::common::{
     dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey,
-    verify_ecdsa, verify_eddsa, Curve,
+    verify, Curve,
 };
 use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::server::{
@@ -51,7 +51,7 @@ fn test_integration_k1() {
         &msg_hash,
     )
     .unwrap();
-    assert!(verify_ecdsa(
+    assert!(verify(
         &rx,
         &s,
         &publickey_from_secretkey(&secret_key, Curve::Secp256k1).unwrap(),
@@ -97,7 +97,7 @@ fn test_integration_r1() {
         &msg_hash,
     )
     .unwrap();
-    assert!(verify_ecdsa(
+    assert!(verify(
         &rx,
         &s,
         &publickey_from_secretkey(&secret_key, Curve::Secp256r1).unwrap(),
@@ -135,5 +135,5 @@ fn test_integration_ed() {
         &msg,
     )
     .unwrap();
-    assert!(verify_eddsa(&r, &s.to_bigint_le(), &pk, &msg,));
+    assert!(verify(&r, &s.to_bigint_le(), &pk, &msg, Curve::Curve25519));
 }

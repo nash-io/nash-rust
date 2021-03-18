@@ -3,7 +3,7 @@
  */
 
 use crate::common::{
-    correct_key_proof_rho, eddsa_s_hash, verify_ecdsa, verify_eddsa, CorrectKeyProof, Curve,
+    correct_key_proof_rho, eddsa_s_hash, verify, CorrectKeyProof, Curve,
     PAILLIER_KEY_SIZE,
 };
 use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
@@ -177,7 +177,7 @@ pub fn complete_sig_ecdsa(
     }
     let (s, recid) = complete_sig_curveindependent(&paillier_sk, &presig, &k, &rx, &ry, &q);
     // verify that the resulting signature is indeed valid
-    if verify_ecdsa(&rx, &s, pubkey_str, msg_hash, curve) {
+    if verify(&rx, &s, pubkey_str, msg_hash, curve) {
         Ok((rx, s, recid))
     } else {
         Err(())
@@ -259,7 +259,7 @@ pub fn complete_sig_eddsa(
     };
 
     // verify that the resulting signature is indeed valid
-    if verify_eddsa(&r.to_bigint(), &s.to_bigint_le(), pk_str, msg) {
+    if verify(&r.to_bigint(), &s.to_bigint_le(), pk_str, msg, Curve::Curve25519) {
         Ok(s)
     } else {
         Err(())

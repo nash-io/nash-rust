@@ -362,20 +362,10 @@ fn verify<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
 
-    if curve == common::Curve::Curve25519 {
-        if common::verify_eddsa(&r, &s, &pubkey, &msg_hash) {
-            Ok(atoms::ok().encode(env))
-        } else {
-            Ok(atoms::error().encode(env))
-        }
-    } else if curve == common::Curve::Secp256k1 || curve == common::Curve::Secp256r1 {
-        if common::verify_ecdsa(&r, &s, &pubkey, &msg_hash, curve) {
-            Ok(atoms::ok().encode(env))
-        } else {
-            Ok(atoms::error().encode(env))
-        }
+    if common::verify(&r, &s, &pubkey, &msg_hash, curve) {
+        Ok(atoms::ok().encode(env))
     } else {
-        return Ok((atoms::error(), &"error invalid curve").encode(env));
+        Ok(atoms::error().encode(env))
     }
 }
 

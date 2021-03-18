@@ -364,14 +364,7 @@ pub fn verify(
         Ok(v) => v,
         Err(_) => return serde_json::to_string(&(false, &"error deserializing curve")).unwrap(),
     };
-
-    if curve == common::Curve::Curve25519 {
-        return serde_json::to_string(&common::verify_eddsa(&r, &s, &pubkey, &msg_hash)).unwrap();
-    } else if curve == common::Curve::Secp256k1 || curve == common::Curve::Secp256r1 {
-        return serde_json::to_string(&common::verify_ecdsa(&r, &s, &pubkey, &msg_hash, curve)).unwrap();
-    } else {
-        return serde_json::to_string(&(false, &"invalid curve")).unwrap();
-    }
+    serde_json::to_string(&common::verify(&r, &s, &pubkey, &msg_hash, curve)).unwrap()
 }
 
 /// Derive public key from given secret key.

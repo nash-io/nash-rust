@@ -3,7 +3,7 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::client::{
-    compute_presig_eddsa, compute_presig_ecdsa, create_eddsa_api_childkey, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
+    compute_presig, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
     get_rpool_size, APIchildkeyCreator,
 };
 use nash_mpc::common::{dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
@@ -62,7 +62,11 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("create_eddsa_api_childkey", |b| {
         b.iter(|| {
-            create_eddsa_api_childkey(&secret_key).unwrap();
+            let api_childkey_creator =
+                APIchildkeyCreator::init_with_verified_paillier(&secret_key, &paillier_pk);
+            api_childkey_creator
+                .create_api_childkey(black_box(Curve::Curve25519))
+                .unwrap();
         })
     });
 
@@ -138,7 +142,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     c.bench_function("compute_presig_k1", |b| {
         b.iter(|| {
-            compute_presig_ecdsa(
+            compute_presig(
                 black_box(&api_childkey_k1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256k1),
@@ -158,7 +162,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     c.bench_function("compute_presig_r1", |b| {
         b.iter(|| {
-            compute_presig_ecdsa(
+            compute_presig(
                 black_box(&api_childkey_r1),
                 black_box(&msg_hash),
                 black_box(Curve::Secp256r1),
@@ -167,7 +171,11 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let (api_child_key_ed, _) = create_eddsa_api_childkey(&BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
+    let api_childkey_creator3 =
+        APIchildkeyCreator::init_with_verified_paillier(&BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap(), &paillier_pk);
+    let api_childkey_ed = api_childkey_creator3
+        .create_api_childkey(Curve::Curve25519)
+        .unwrap();
     let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
     for _ in 0..10000 {
         let (client_dh_secrets, _) = dh_init_curve25519(100).unwrap();
@@ -176,9 +184,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     c.bench_function("compute_presig_ed", |b| {
         b.iter(|| {
-            compute_presig_eddsa(
-                black_box(&api_child_key_ed),
+            compute_presig(
+                black_box(&api_childkey_ed),
                 black_box(&msg),
+                black_box(Curve::Curve25519),
             )
             .unwrap();
         })

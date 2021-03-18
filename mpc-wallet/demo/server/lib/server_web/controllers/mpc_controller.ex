@@ -155,18 +155,23 @@ defmodule ServerWeb.MPCController do
 
     Input:
       corresponding public key
-      server secret share (only for EdDSA/Ed25519)
+      encrypted server secret share (only for EdDSA/Ed25519)
 
     Output:
       None
 
     The registered information needs to be stored per user account.
+    Needs to fetch paillier_sk from session cache (should actually be some persistent storage).
   """
   def register_apikey(conn, _params) do
     pubkey = conn.body_params["pubkey"]
-    server_secret_share = conn.body_params["server_secret_share"]
+    server_secret_share_encrypted = conn.body_params["server_secret_share_encrypted"]
     ConCache.put(:demo_cache, :pubkey, pubkey)
-    ConCache.put(:demo_cache, :server_secret_share, server_secret_share)
+    if !is_nil(server_secret_share_encrypted) do
+      paillier_sk = ConCache.get(:demo_cache, :paillier_sk)
+      {:ok, server_secret_share} = Server.MPCwallet.decrypt(paillier_sk, server_secret_share_encrypted)
+      ConCache.put(:demo_cache, :server_secret_share, Poison.decode!(server_secret_share))
+    end
     json(conn, %{})
   end
 end

@@ -46,7 +46,7 @@ async function create_api_childkey() {
 
     let paillier_pk = get_state("paillier_pk");
     // paillier key not verified yet.
-    if (paillier_pk === false && JSON.parse(curve) !== "Curve25519") {
+    if (paillier_pk === false) {
         console.log("Initializing API key creation.");
         let result1 = JSON.parse(MPCwallet.init_api_childkey_creator(secret_key));
         if (result1[0] === false) {
@@ -72,8 +72,8 @@ async function create_api_childkey() {
                 }
             })
         }
-    // paillier key already verified; skip verification (for ECDSA)
-    } else if (JSON.parse(curve) !== "Curve25519") {
+    // paillier key already verified; skip verification
+    } else {
         console.log("Initializing (fast) API key creation.");
         let result1 = JSON.parse(MPCwallet.init_api_childkey_creator_with_verified_paillier(secret_key, paillier_pk));
         if (result1[0] === false) {
@@ -85,39 +85,28 @@ async function create_api_childkey() {
     }
 
     console.log("Computing secret shares for " + JSON.parse(curve));
-    if (JSON.parse(curve) !== "Curve25519") {
-        let result3 = JSON.parse(MPCwallet.create_ecdsa_api_childkey(api_childkey_creator, curve));
-        if (result3[0] === false) {
-            console.log("ERROR: paillier key not verified. " + result3[1]);
-        } else {
-            let api_childkey = JSON.stringify(result3[1]);
-            console.log("API childkey created successfully.")
-            set_state('api_childkey', api_childkey);
-            // show api childkey in html page
-            document.getElementById("api_childkey").innerHTML = api_childkey;
+    let result3 = JSON.parse(MPCwallet.create_api_childkey(api_childkey_creator, curve));
+    if (result3[0] === false) {
+        console.log("ERROR: paillier key not verified. " + result3[1]);
+    } else {
+        let api_childkey = JSON.stringify(result3[1]);
+        console.log("API childkey created successfully.")
+        set_state('api_childkey', api_childkey);
+        // show api childkey in html page
+        document.getElementById("api_childkey").innerHTML = api_childkey;
 
+        if (JSON.parse(curve) !== "Curve25519") {
             // register public key with the server
             await axios.post("http://localhost:4000/api/v1/register_apikey", {
                 pubkey: JSON.parse(api_childkey)["public_key"],
             }).then((response) => {
                 console.log("Successfully registered API key.")
             })
-        }
-    } else {
-        let result3 = JSON.parse(MPCwallet.create_eddsa_api_childkey(secret_key));
-        if (result3[0] === false) {
-            console.log("ERROR: create_eddsa_api_childkey() failed. " + result3[1]);
         } else {
-            let api_childkey = JSON.stringify(result3[1]);
-            console.log("API childkey created successfully.")
-            set_state('api_childkey', api_childkey);
-            // show api childkey in html page
-            document.getElementById("api_childkey").innerHTML = api_childkey;
-
-            // register server_secret_share and public key with the server
+            // register public key with the server
             await axios.post("http://localhost:4000/api/v1/register_apikey", {
                 pubkey: JSON.parse(api_childkey)["public_key"],
-                server_secret_share: result3[2],
+                server_secret_share_encrypted: JSON.parse(api_childkey)["server_secret_share_encrypted"],
             }).then((response) => {
                 console.log("Successfully registered API key.")
             })
@@ -206,7 +195,7 @@ async function compute_presig() {
         const hashArray = Array.from(new Uint8Array(digest));
         const message_hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-        let result = JSON.parse(MPCwallet.compute_presig_ecdsa(api_childkey, message_hash, curve));
+        let result = JSON.parse(MPCwallet.compute_presig(api_childkey, message_hash, curve));
         if (result[0] === true) {
             let presig = result[1];
             let r = result[2];
@@ -237,7 +226,7 @@ async function compute_presig() {
             console.log("Error computing presig: " + result[1]);
         }
     } else {
-        let result = JSON.parse(MPCwallet.compute_presig_eddsa(api_childkey, message));
+        let result = JSON.parse(MPCwallet.compute_presig(api_childkey, message, curve));
         if (result[0] === true) {
             let presig = result[1];
             let r = result[2];

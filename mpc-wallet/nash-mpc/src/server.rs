@@ -192,9 +192,7 @@ fn complete_sig_curveindependent(
     ry: &BigInt,
     q: &BigInt,
 ) -> (BigInt, u8) {
-    let mut s_tag = Paillier::decrypt(paillier_sk, &RawCiphertext::from(presig))
-        .0
-        .into_owned();
+    let mut s_tag = decrypt(paillier_sk, presig);
     let mut k_inv = BigInt::mod_inv(&k, &q);
     let s_tag_tag = BigInt::mod_mul(&k_inv, &s_tag, &q);
     k_inv.zeroize_bn();
@@ -213,8 +211,8 @@ fn complete_sig_curveindependent(
 /// complete presignature to conventional EdDSA signature
 pub fn complete_sig_eddsa(
     mut server_secret_share_int: BigInt,
-    s_client: &Ed25519Scalar,
-    r: &Ed25519Point,
+    presig: &BigInt,
+    r_int: &BigInt,
     mut r_server: Ed25519Scalar,
     pk_str: &str,
     msg: &BigInt,
@@ -224,11 +222,19 @@ pub fn complete_sig_eddsa(
         Err(_) => return Err(()),
     };
     server_secret_share_int.zeroize_bn();
+    let s_client: Ed25519Scalar = match ECScalar::from(&presig) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    let r = match Ed25519Point::from_bigint(&r_int) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
     let pk = match Ed25519Point::from_hex(pk_str) {
         Ok(v) => v,
         Err(_) => return Err(()),
     };
-    let hash: Ed25519Scalar = match eddsa_s_hash(r, &pk, msg) {
+    let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg) {
         Ok(v) => v,
         Err(_) => return Err(()),
     };
@@ -268,6 +274,11 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
         sigma_vec.push(extract_nroot(&paillier_sk, &i));
     }
     sigma_vec
+}
+
+/// decrypt ciphertext using Paillier
+pub fn decrypt(paillier_sk: &DecryptionKey, ciphertext: &BigInt) -> BigInt {
+    Paillier::decrypt(paillier_sk, &RawCiphertext::from(ciphertext)).0.into_owned()
 }
 
 #[cfg(test)]

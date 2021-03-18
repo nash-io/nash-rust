@@ -51,13 +51,6 @@ pub struct APIchildkey {
     pub server_secret_share_encrypted: BigInt,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct APIchildkeyEdDSA {
-    pub public_key: String,
-    #[serde(with = "rust_bigint::serialize::bigint")]
-    pub client_secret_share: BigInt,
-}
-
 impl APIchildkeyCreator {
     /// initialize api key creation by setting the full secret key
     pub fn init(secret_key: &BigInt) -> APIchildkeyCreator {
@@ -123,7 +116,7 @@ impl APIchildkeyCreator {
             let public_key =
                 publickey_from_secretkey(&self.secret_key, curve).expect("Invalid curve");
             let server_secret_share_encrypted =
-                encrypt_secret_share(&self.paillier_pk.clone().unwrap(), &server_secret_share);
+                encrypt_secret_share(&self.paillier_pk.as_ref().unwrap(), &server_secret_share);
             server_secret_share.zeroize_bn();
             Ok(APIchildkey {
                 paillier_pk: self.paillier_pk.unwrap(),
@@ -154,8 +147,37 @@ impl APIchildkeyCreator {
             let public_key =
                 publickey_from_secretkey(&self.secret_key, curve).expect("Invalid curve");
             let server_secret_share_encrypted =
-                encrypt_secret_share(&self.paillier_pk.clone().unwrap(), &server_secret_share);
+                encrypt_secret_share(&self.paillier_pk.as_ref().unwrap(), &server_secret_share);
             server_secret_share.zeroize_bn();
+            Ok(APIchildkey {
+                paillier_pk: self.paillier_pk.unwrap(),
+                public_key,
+                client_secret_share: client_secret_share.to_bigint(),
+                server_secret_share_encrypted,
+            })
+        // EdDSA/Ed25519 API keys could be generated without any Paillier key at all, but we
+        // decided to encrypt the server secret share. This makes key generation slower, but
+        // facilitates to generate API keys on an air-gapped, trusted device and move that
+        // keys to some untrusted device without risking to leak secret key material.
+        } else if curve == Curve::Curve25519 {
+            let signing_key = match eddsa_signingkey_from_secretkey(&self.secret_key) {
+                Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
+            let public_key =
+                publickey_from_secretkey(&self.secret_key, Curve::Curve25519).expect("Invalid curve");
+            // client's secret share is just some random value
+            let client_secret_share = match Ed25519Scalar::new_random() {
+                Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+                Err(_) => return Err(()),
+            };
+            // compute additive server secret share, i.e., full secret = client secret share + server secret share % L
+            let mut server_secret_share_bytes = *(&signing_key.fe - &client_secret_share.fe).as_bytes();
+            server_secret_share_bytes.reverse();
+            let server_secret_share_encrypted =
+                encrypt_secret_share(&self.paillier_pk.as_ref().unwrap(), &BigInt::from_bytes(&server_secret_share_bytes));
+            server_secret_share_bytes.zeroize();
+            // FIXME: we don't need paillier_pk at all, and server_secret_share_encrypted does not need to be part of the api key
             Ok(APIchildkey {
                 paillier_pk: self.paillier_pk.unwrap(),
                 public_key,
@@ -168,152 +190,118 @@ impl APIchildkeyCreator {
     }
 }
 
-/// create API child key for EdDSA/curve25519 curve
-pub fn create_eddsa_api_childkey(secret_key: &BigInt) -> Result<(APIchildkeyEdDSA, Ed25519Scalar), ()> {
-    let signing_key = match eddsa_signingkey_from_secretkey(secret_key) {
-        Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
-        Err(_) => return Err(()),
-    };
-    let public_key =
-        publickey_from_secretkey(secret_key, Curve::Curve25519).expect("Invalid curve");
-    // client's secret share is just some random value
-    let client_secret_share = match Ed25519Scalar::new_random() {
-        Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
-        Err(_) => return Err(()),
-    };
-    // compute additive server secret share, i.e., full secret = client secret share + server secret share % L
-    let mut server_secret_share_bytes = *(&signing_key.fe - &client_secret_share.fe).as_bytes();
-    server_secret_share_bytes.reverse();
-    let server_secret_share = Zeroizing::<Ed25519Scalar>::new(
-        ECScalar::from(&BigInt::from_bytes(&server_secret_share_bytes)).unwrap(),
-    );
-    server_secret_share_bytes.zeroize();
-    Ok((
-        APIchildkeyEdDSA {
-            public_key,
-            client_secret_share: client_secret_share.to_bigint(),
-        },
-        server_secret_share.deref().clone(),
-    ))
-}
-
-/// compute EdDSA presignature
-pub fn compute_presig_eddsa(
-    api_childkey: &APIchildkeyEdDSA,
-    msg: &BigInt,
-) -> Result<(Ed25519Point, Ed25519Scalar), ()> {
-    // fetch and remove random value R and r_client from pool
-    let mut pool_entry = match RPOOL_CURVE25519.lock().unwrap().pop() {
-        Option::Some(val) => val,
-        Option::None => return Err(()),
-    };
-    let mut r_client: Ed25519Scalar = match ECScalar::from(&(pool_entry.1).1) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    (pool_entry.1).1.zeroize_bn();
-    let r = match Ed25519Point::from_bigint(&pool_entry.0) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-
-    let pk = match Ed25519Point::from_hex(&api_childkey.public_key) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    let mut client_secret_share: Ed25519Scalar =
-        match ECScalar::from(&api_childkey.client_secret_share) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-    let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-
-    // compute client part of S
-    let mut tmp = match &hash * &client_secret_share {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    client_secret_share.zeroize();
-    let s_client = match &r_client + &tmp {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    tmp.zeroize();
-    r_client.zeroize();
-
-    // return R and client part of S
-    Ok((r, s_client))
-}
-
-/// compute presignature
-pub fn compute_presig_ecdsa(
+/// compute presignature. in case of ECDSA msg = hash of message, in case of EdDSA/Ed25519 msg = full message
+pub fn compute_presig(
     api_childkey: &APIchildkey,
-    msg_hash: &BigInt,
+    msg: &BigInt,
     curve: Curve,
 ) -> Result<(BigInt, BigInt), ()> {
-    let rx: BigInt;
-    let q: BigInt;
-    let mut k: BigInt;
-    let r: BigInt;
     if curve == Curve::Secp256k1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256K1.lock().unwrap().pop() {
             Option::Some(val) => val,
             Option::None => return Err(()),
         };
-        k = (pool_entry.1).1.clone();
+        let k = (pool_entry.1).1.clone();
         (pool_entry.1).1.zeroize_bn();
-        r = pool_entry.0;
+        let r = pool_entry.0;
         let r_point = match Secp256k1Point::from_bigint(&r) {
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        q = Secp256k1Scalar::q();
-        rx = r_point.x_coor().mod_floor(&q);
+        let q = Secp256k1Scalar::q();
+        let rx = r_point.x_coor().mod_floor(&q);
+        let c3 = match compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        Ok((c3, r))
     } else if curve == Curve::Secp256r1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256R1.lock().unwrap().pop() {
             Option::Some(val) => val,
             Option::None => return Err(()),
         };
-        k = (pool_entry.1).1.clone();
+        let k = (pool_entry.1).1.clone();
         (pool_entry.1).1.zeroize_bn();
-        r = pool_entry.0;
+        let r = pool_entry.0;
         let r_point = match Secp256r1Point::from_bigint(&r) {
             Ok(v) => v,
             Err(_) => return Err(()),
         };
-        q = Secp256r1Scalar::q();
-        rx = r_point.x_coor().mod_floor(&q);
+        let q = Secp256r1Scalar::q();
+        let rx = r_point.x_coor().mod_floor(&q);
+        let c3 = match compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        Ok((c3, r))
+    } else if curve == Curve::Curve25519 {
+        // fetch and remove random value R and r_client from pool
+        let mut pool_entry = match RPOOL_CURVE25519.lock().unwrap().pop() {
+            Option::Some(val) => val,
+            Option::None => return Err(()),
+        };
+        let mut r_client: Ed25519Scalar = match ECScalar::from(&(pool_entry.1).1) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        (pool_entry.1).1.zeroize_bn();
+        let r = match Ed25519Point::from_bigint(&pool_entry.0) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+
+        let pk = match Ed25519Point::from_hex(&api_childkey.public_key) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        let mut client_secret_share: Ed25519Scalar =
+            match ECScalar::from(&api_childkey.client_secret_share) {
+                Ok(v) => v,
+                Err(_) => return Err(()),
+            };
+        let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg) {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+
+        // compute client part of S
+        let mut tmp = match &hash * &client_secret_share {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        client_secret_share.zeroize();
+        let s_client = match &r_client + &tmp {
+            Ok(v) => v,
+            Err(_) => return Err(()),
+        };
+        tmp.zeroize();
+        r_client.zeroize();
+        Ok((s_client.to_bigint(), r.to_bigint()))
     } else {
         return Err(());
     }
+}
+
+fn compute_ecdsa_presig_curveindependent(
+    api_childkey: &APIchildkey,
+    msg_hash: &BigInt,
+    rx: &BigInt,
+    q: &BigInt,
+    mut k: BigInt,
+) -> Result<BigInt, ()> {
+    let rho = BigInt::sample_below(&q.pow(2u32));
+    let mut k_inv = BigInt::mod_inv(&k, q);
+    k.zeroize_bn();
+    let partial_sig = rho * q + BigInt::mod_mul(&k_inv, msg_hash, q);
     // get and remove random value for Paillier from pool
     let mut rn = match POOL_PAILLIER.lock().unwrap().pop() {
         Option::Some(val) => val,
         Option::None => return Err(()),
     };
-    let c3 = compute_presig_curveindependent(api_childkey, msg_hash, &rx, &q, &k, &rn);
-    k.zeroize_bn();
-    rn.zeroize_bn();
-    Ok((c3, r))
-}
-
-fn compute_presig_curveindependent(
-    api_childkey: &APIchildkey,
-    msg_hash: &BigInt,
-    rx: &BigInt,
-    q: &BigInt,
-    k: &BigInt,
-    rn: &BigInt,
-) -> BigInt {
-    let rho = BigInt::sample_below(&q.pow(2u32));
-    let mut k_inv = BigInt::mod_inv(k, q);
-    let partial_sig = rho * q + BigInt::mod_mul(&k_inv, msg_hash, q);
     let mut rn_ = PrecomputedRandomness(rn.clone());
+    rn.zeroize_bn();
     let c1 = Paillier::encrypt_with_chosen_randomness(
         &api_childkey.paillier_pk,
         RawPlaintext::from(partial_sig),
@@ -331,9 +319,9 @@ fn compute_presig_curveindependent(
         RawCiphertext::from(&api_childkey.server_secret_share_encrypted),
         RawPlaintext::from(v),
     );
-    Paillier::add(&api_childkey.paillier_pk, c2, c1)
+    Ok(Paillier::add(&api_childkey.paillier_pk, c2, c1)
         .0
-        .into_owned()
+        .into_owned())
 }
 
 // three pools of r-values (one for each curve) and one pool of random values for Paillier.
@@ -556,8 +544,7 @@ fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> 
 mod tests {
     use crate::client::POOL_PAILLIER;
     use crate::client::{
-        compute_presig_ecdsa, compute_presig_eddsa, create_eddsa_api_childkey,
-        encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
+        compute_presig, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
         get_rpool_size, verify_correct_key_proof, APIchildkeyCreator,
     };
     use crate::common::{CorrectKeyProof, Curve};
@@ -718,7 +705,7 @@ mod tests {
             .create_api_childkey(Curve::Secp256k1)
             .unwrap();
         let (presig1, r) =
-            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
+            compute_presig(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
         assert_eq!(
             r,
             BigInt::from_hex("3703d86c98836a6ef32371e1b91ed2ca64bd6d7a0774631f47ffebc49406c94ac")
@@ -728,7 +715,7 @@ mod tests {
         fill_rpool_secp256k1(vec![dh_secret], &dh_public_vec, &paillier_pk).unwrap();
         assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 1);
         let (presig2, _) =
-            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
+            compute_presig(&api_childkey, &msg_hash, Curve::Secp256k1).unwrap();
         assert_ne!(presig1, presig2);
         assert_eq!(POOL_PAILLIER.lock().unwrap().len(), 0);
     }
@@ -765,7 +752,7 @@ mod tests {
             .create_api_childkey(Curve::Secp256r1)
             .unwrap();
         let (presig1, r) =
-            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
+            compute_presig(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
         assert_eq!(
             r,
             BigInt::from_hex("306978b9dd8d1438387f3e1e58ecec203c61ac0c848834ed094ebef5547b74fda")
@@ -773,23 +760,29 @@ mod tests {
         );
         fill_rpool_secp256r1(dh_secret_vec.clone(), &dh_public_vec, &paillier_pk).unwrap();
         let (presig2, _) =
-            compute_presig_ecdsa(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
+            compute_presig(&api_childkey, &msg_hash, Curve::Secp256r1).unwrap();
         assert_ne!(presig1, presig2);
     }
 
     #[test]
     fn test_fill_rpool_ed() {
+        let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129").unwrap()});
+        let secret_key = Ed25519Scalar::new_random().unwrap().to_bigint();
+        let api_childkey_creator =
+            APIchildkeyCreator::init_with_verified_paillier(&secret_key, &paillier_pk);
+        let api_childkey = api_childkey_creator
+            .create_api_childkey(Curve::Curve25519)
+            .unwrap();
         let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("1").unwrap()).unwrap();
         let dh_public = Ed25519Point::generator();
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         fill_rpool_curve25519(dh_secret_vec, &dh_public_vec).unwrap();
-        let secret_key = Ed25519Scalar::new_random().unwrap().to_bigint();
-        let (api_childkey, _) = create_eddsa_api_childkey(&secret_key).unwrap();
+
         let msg = BigInt::from_hex("1").unwrap();
-        let (r, _) = compute_presig_eddsa(&api_childkey, &msg).unwrap();
+        let (_, r) = compute_presig(&api_childkey, &msg, Curve::Curve25519).unwrap();
         let two: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("2").unwrap()).unwrap();
-        assert_eq!(r, (Ed25519Point::generator() * two).unwrap());
+        assert_eq!(r.to_hex(), (Ed25519Point::generator() * two).unwrap().to_bigint().to_hex());
     }
 
     #[test]

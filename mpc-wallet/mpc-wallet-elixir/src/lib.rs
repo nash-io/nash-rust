@@ -11,7 +11,7 @@ use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
 use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use nash_mpc::curves::traits::{ECPoint, ECScalar};
+use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::paillier_common::{DecryptionKey, EncryptionKey};
 use nash_mpc::rust_bigint::traits::Converter;
 use nash_mpc::rust_bigint::BigInt;
@@ -26,14 +26,15 @@ rustler_export_nifs! {
     ("complete_sig_ecdsa", 7, complete_sig_ecdsa),
     ("complete_sig_eddsa", 6, complete_sig_eddsa),
     ("verify", 5, verify),
-    ("compute_presig_ecdsa", 3, compute_presig_ecdsa),
+    ("compute_presig", 3, compute_presig),
     ("fill_rpool", 4, fill_rpool),
     ("dh_init", 2, dh_init),
     ("init_api_childkey_creator", 1, init_api_childkey_creator),
     ("init_api_childkey_creator_with_verified_paillier", 2, init_api_childkey_creator_with_verified_paillier),
     ("verify_paillier", 3, verify_paillier),
-    ("create_ecdsa_api_childkey", 2, create_ecdsa_api_childkey),
+    ("create_api_childkey", 2, create_api_childkey),
     ("publickey_from_secretkey", 2, publickey_from_secretkey),
+    ("decrypt", 2, decrypt),
     ],
     None
 }
@@ -267,19 +268,15 @@ fn complete_sig_eddsa<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, E
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error parsing presig").encode(env)),
     };
-    let presig_int = match BigInt::from_hex(&presig_str) {
+    let presig = match BigInt::from_hex(&presig_str) {
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error deserializing presig_str").encode(env)),
-    };
-    let presig: Ed25519Scalar = match ECScalar::from(&presig_int) {
-        Ok(v) => v,
-        Err(_) => return Ok((atoms::error(), &"error deserializing presig").encode(env)),
     };
     let r_str: String = match args[2].decode() {
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error parsing r").encode(env)),
     };
-    let r = match Ed25519Point::from_hex(&r_str) {
+    let r = match BigInt::from_hex(&r_str) {
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error deserializing r").encode(env)),
     };
@@ -421,10 +418,10 @@ fn dh_init<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
     Ok((atoms::ok(), &dh_secrets_json, &dh_publics_json).encode(env))
 }
 
-/// compute ECDSA presignature
-/// input: api_childkey, message_hash, curve (Secp256k1 or Secp256r1)
+/// compute presignature
+/// input: api_childkey, message or message hash, curve (Secp256k1, Secp256r1, or Curve25519)
 /// output: presignature, r
-fn compute_presig_ecdsa<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
+fn compute_presig<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
     let api_childkey_str: String = match args[0].decode() {
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error parsing api_childkey").encode(env)),
@@ -450,17 +447,29 @@ fn compute_presig_ecdsa<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>,
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
 
-    let (presig, r) = match client::compute_presig_ecdsa(&api_childkey, &msg_hash, curve) {
+    let (presig, r) = match client::compute_presig(&api_childkey, &msg_hash, curve) {
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error getting value from rpool").encode(env)),
     };
-    // add leading zeros if necessary
-    Ok((
-        atoms::ok(),
-        &format!("{:0>1024}", presig.to_hex()),
-        &format!("{:0>66}", r.to_hex()),
-    )
-        .encode(env))
+    if curve == common::Curve::Secp256k1 || curve == common::Curve::Secp256r1 {
+        // add leading zeros if necessary
+        Ok((
+            atoms::ok(),
+            &format!("{:0>1024}", presig.to_hex()),
+            &format!("{:0>66}", r.to_hex()),
+        )
+            .encode(env))
+    } else if curve == common::Curve::Curve25519 {
+        // add leading zeros if necessary
+        Ok((
+            atoms::ok(),
+            &format!("{:0>64}", presig.to_hex()),
+            &r.to_hex(),
+        )
+            .encode(env))
+    } else {
+        Ok((atoms::error(), &"invalid curve").encode(env))
+    }
 }
 
 /// fill pool of r-values from dh secret and public values
@@ -669,10 +678,10 @@ fn verify_paillier<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Erro
     Ok((atoms::ok(), &api_childkey_creator_new_json).encode(env))
 }
 
-/// create ECDSA API childkey
+/// create API childkey
 /// input: api_childkey_creator, curve
 /// output: api_childkey
-fn create_ecdsa_api_childkey<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
+fn create_api_childkey<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
     let api_childkey_creator_str: String = match args[0].decode() {
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error parsing api_childkey_creator").encode(env)),
@@ -727,4 +736,27 @@ fn publickey_from_secretkey<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<
     let public_key = common::publickey_from_secretkey(&secret_key, curve);
     let public_key_json = serde_json::to_string(&public_key).unwrap();
     Ok((atoms::ok(), &public_key_json).encode(env))
+}
+
+/// decrypt server secret share (or any other ciphertext) using Paillier
+fn decrypt<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<'a>, Error> {
+    let paillier_sk_str: String = match args[0].decode() {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error parsing paillier_sk").encode(env)),
+    };
+    let paillier_sk: DecryptionKey = match serde_json::from_str(&paillier_sk_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing paillier_sk").encode(env)),
+    };
+    let ciphertext_str: String = match args[1].decode() {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error parsing ciphertext").encode(env)),
+    };
+    let ciphertext = match BigInt::from_hex(&ciphertext_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing ciphertext").encode(env)),
+    };
+    let cleartext = server::decrypt(&paillier_sk, &ciphertext);
+    let cleartext_json = serde_json::to_string(&cleartext).unwrap();
+    Ok((atoms::ok(), &cleartext_json).encode(env))
 }

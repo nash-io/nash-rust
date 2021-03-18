@@ -6,12 +6,12 @@ defmodule Server.MPCwallet do
       - MPC: Multi-party computation. A method to have multiple parties compute a function while keeping their inputs private. For our case, the function is creating a digital signature and the (private) inputs are secret shares.
       - DH: Diffie-Hellman key exchange. A method to derive a shared secret key over an insecure channel.
       - Paillier: A public-key, additive homomorphic cryptosystem. Allows the client to conduct operations on the ciphertext.
-      - r: Random value shared between client and server (derived via DH), from which the r value of the ECDSA signature is derived.
+      - r: Random value shared between client and server (derived via DH), from which the r value of the ECDSA or EdDSA signature is derived.
       - k: Server part of the nonce used in the signature. This should be handled like a secret key, i.e., store securely, delete/zeroize after use, ..
-      - curve: Elliptic curve to be used in an ECDSA signature. Currently we support secp256k1 (for BTC and ETH) and secp256r1 (for NEO).
+      - curve: Elliptic curve to be used in an ECDSA or EdDSA signature. Currently we support secp256k1 (for BTC and ETH) and secp256r1 (for NEO) in ECSDA and Curve25519 in EdDSA.
       - presig: A presignature generated on the client that can be finalized to a conventional signature by the server.
       - rpool: Pool of random values shared between client and server that allows to generate signatures with a single message.
-      - r, s: a conventional ECDSA signature.
+      - r, s: a conventional ECDSA or EdDSA signature.
       - recovery_id: 2 bits that help recovering the public key from a signature, used in Ethereum to save space.
       - correct_key_proof: ZK proof that the Paillier public key was generated correctly.
   """
@@ -131,13 +131,13 @@ defmodule Server.MPCwallet do
 
 
   @doc ~S"""
-  Compute ECDSA presignature of a message.
+  Compute presignature of a message.
 
   ## Parameters
 
       - apikey: API key struct
-      - msg_hash: hash of the message to be signed
-      - curve: Secp256k1 or Secp256r1 curve
+      - msg_hash: full message or hash of the message to be signed
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -145,7 +145,7 @@ defmodule Server.MPCwallet do
       - r: message-independent part of the signature that was used to compute the presignature
 
   """
-  def compute_presig_ecdsa(_apikey, _msg_hash, _curve), do: :erlang.nif_error(:nif_not_loaded)
+  def compute_presig(_apikey, _msg_hash, _curve), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc ~S"""
@@ -215,19 +215,19 @@ defmodule Server.MPCwallet do
 
 
   @doc ~S"""
-  Create ECDSA API childkey.
+  Create API childkey.
 
   ## Parameters
 
       - api_childkey_creator: ECDSA API childkey creation struct
-      - curve: Secp256k1 or Secp256r1 curve
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
       - api_childkey: API childkey struct
 
   """
-  def create_ecdsa_api_childkey(_api_childkey_creator, _curve), do: :erlang.nif_error(:nif_not_loaded)
+  def create_api_childkey(_api_childkey_creator, _curve), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc ~S"""
@@ -244,4 +244,19 @@ defmodule Server.MPCwallet do
 
   """
   def publickey_from_secretkey(_secret_key, _curve), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc ~S"""
+  Decrypt ciphertext using Paillier
+
+  ## Parameters
+
+      - paillier_sk: Paillier secret key
+      - ciphertext: encrypted server secret share
+
+  ## Returns
+
+      - clear text: server secret share
+
+  """
+  def decrypt(_paillier_sk, _ciphertext), do: :erlang.nif_error(:nif_not_loaded)
 end

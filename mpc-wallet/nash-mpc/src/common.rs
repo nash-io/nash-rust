@@ -2,6 +2,7 @@
  * Functions for MPC-based API keys used by both server and client
  */
 
+use crate::NashMPCError;
 use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar, EdwardsPoint};
 #[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
@@ -54,23 +55,17 @@ pub struct CorrectKeyProof {
 pub(crate) const CORRECT_KEY_M: usize = 11;
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve secp256r1)
-pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1Point>), ()> {
+pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1Point>), NashMPCError> {
     // don't allow creating too many values at once.
     if n > 100 {
-        return Err(());
+        return Err(NashMPCError::IntegerInvalid);
     }
     let base: Secp256r1Point = ECPoint::generator();
     let mut dh_secrets: Vec<Secp256r1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256r1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = match Secp256r1Scalar::new_random() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        let dh_public = match &base * &dh_secret {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let dh_secret = Secp256r1Scalar::new_random()?;
+        let dh_public = (&base * &dh_secret)?;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -78,23 +73,17 @@ pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r
 }
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve secp256k1)
-pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k1Point>), ()> {
+pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k1Point>), NashMPCError> {
     // don't allow creating too many values at once.
     if n > 100 {
-        return Err(());
+        return Err(NashMPCError::IntegerInvalid);
     }
     let base: Secp256k1Point = ECPoint::generator();
     let mut dh_secrets: Vec<Secp256k1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256k1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = match Secp256k1Scalar::new_random() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        let dh_public = match &base * &dh_secret {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let dh_secret = Secp256k1Scalar::new_random()?;
+        let dh_public = (&base * &dh_secret)?;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -102,23 +91,17 @@ pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k
 }
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve25519)
-pub fn dh_init_curve25519(n: usize) -> Result<(Vec<Ed25519Scalar>, Vec<Ed25519Point>), ()> {
+pub fn dh_init_curve25519(n: usize) -> Result<(Vec<Ed25519Scalar>, Vec<Ed25519Point>), NashMPCError> {
     // don't allow creating too many values at once.
     if n > 100 {
-        return Err(());
+        return Err(NashMPCError::IntegerInvalid);
     }
     let base: Ed25519Point = ECPoint::generator();
     let mut dh_secrets: Vec<Ed25519Scalar> = Vec::new();
     let mut dh_publics: Vec<Ed25519Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = match Ed25519Scalar::new_random() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        let dh_public = match &base * &dh_secret {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let dh_secret = Ed25519Scalar::new_random()?;
+        let dh_public = (base * &dh_secret)?;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -133,133 +116,78 @@ pub fn verify(
     msg: &BigInt,
     curve: Curve,
 ) -> bool {
+    // we want to hide the actual error and only return true | false
+    verify_wrapper(r, s, pubkey_str, msg, curve).is_ok()
+}
+
+fn verify_wrapper(
+    r: &BigInt,
+    s: &BigInt,
+    pubkey_str: &str,
+    msg: &BigInt,
+    curve: Curve,
+) -> Result<(), NashMPCError> {
     if curve == Curve::Secp256k1 {
         // convert pubkey string format as used by ME to bigint
-        let pk_int = match BigInt::from_hex(pubkey_str) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let pk = match Secp256k1Point::from_bytes(&BigInt::to_vec(&pk_int)) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let s_fe: Secp256k1Scalar = match ECScalar::from(&s) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let rx_fe: Secp256k1Scalar = match ECScalar::from(&r) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let s_inv_fe = match s_fe.invert() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let e_fe: Secp256k1Scalar = match ECScalar::from(&msg.mod_floor(&Secp256k1Scalar::q())) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1_ = match Secp256k1Point::generator() * &e_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1 = match u1_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2_ = match pk * &rx_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2 = match u2_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1_plus_u2 = match u1 + u2 {
-            Ok(v) => v.x_coor(),
-            Err(_) => return false,
-        };
+        let pk_int = BigInt::from_hex(pubkey_str)?;
+        let pk = Secp256k1Point::from_bytes(&BigInt::to_vec(&pk_int))?;
+        let s_fe: Secp256k1Scalar = ECScalar::from(&s)?;
+        let rx_fe: Secp256k1Scalar = ECScalar::from(&r)?;
+        let s_inv_fe = s_fe.invert()?;
+        let e_fe: Secp256k1Scalar = ECScalar::from(&msg.mod_floor(&Secp256k1Scalar::q()))?;
+        let u1_ = (Secp256k1Point::generator() * &e_fe)?;
+        let u1 = (u1_ * &s_inv_fe)?;
+        let u2_ = (pk * &rx_fe)?;
+        let u2 = (u2_ * &s_inv_fe)?;
+        let u1_plus_u2 = (u1 + u2)?;
         let rx_bytes = &BigInt::to_vec(&r)[..];
         // second condition is against malleability
-        rx_bytes.ct_eq(&BigInt::to_vec(&u1_plus_u2)[..]).unwrap_u8() == 1 && s < &(Secp256k1Scalar::q() - s.clone())
+        if rx_bytes.ct_eq(&BigInt::to_vec(&u1_plus_u2.x_coor())[..]).unwrap_u8() == 1 && s < &(Secp256k1Scalar::q() - s.clone()) {
+            Ok(())
+        } else {
+            Err(NashMPCError::SignatureVerification)
+        }
     } else if curve == Curve::Secp256r1 {
         // convert pubkey string format as used by ME to bigint
-        let pk_int = match BigInt::from_hex(pubkey_str) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let pk = match Secp256r1Point::from_bytes(&BigInt::to_vec(&pk_int)) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let s_fe: Secp256r1Scalar = match ECScalar::from(&s) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let rx_fe: Secp256r1Scalar = match ECScalar::from(&r) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let s_inv_fe = match s_fe.invert() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let e_fe: Secp256r1Scalar = match ECScalar::from(&msg.mod_floor(&Secp256r1Scalar::q())) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1_ = match Secp256r1Point::generator() * &e_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1 = match u1_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2_ = match pk * &rx_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2 = match u2_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1_plus_u2 = match u1 + u2 {
-            Ok(v) => v.x_coor(),
-            Err(_) => return false,
-        };
+        let pk_int = BigInt::from_hex(pubkey_str)?;
+        let pk = Secp256r1Point::from_bytes(&BigInt::to_vec(&pk_int))?;
+        let s_fe: Secp256r1Scalar = ECScalar::from(&s)?;
+        let rx_fe: Secp256r1Scalar = ECScalar::from(&r)?;
+        let s_inv_fe = s_fe.invert()?;
+        let e_fe: Secp256r1Scalar = ECScalar::from(&msg.mod_floor(&Secp256r1Scalar::q()))?;
+        let u1_ = (Secp256r1Point::generator() * &e_fe)?;
+        let u1 = (u1_ * &s_inv_fe)?;
+        let u2_ = (pk * &rx_fe)?;
+        let u2 = (u2_ * &s_inv_fe)?;
+        let u1_plus_u2 = (u1 + u2)?;
         let rx_bytes = &BigInt::to_vec(&r)[..];
         // second condition is against malleability
-        rx_bytes.ct_eq(&BigInt::to_vec(&u1_plus_u2)[..]).unwrap_u8() == 1 && s < &(Secp256r1Scalar::q() - s.clone())
+        if rx_bytes.ct_eq(&BigInt::to_vec(&u1_plus_u2.x_coor())[..]).unwrap_u8() == 1 && s < &(Secp256r1Scalar::q() - s.clone()) {
+            Ok(())
+        } else {
+            Err(NashMPCError::SignatureVerification)
+        }
     // verify EdDSA signature
     // strict version based on https://docs.rs/ed25519-dalek/1.0.1/src/ed25519_dalek/public.rs.html#283
     } else if curve == Curve::Curve25519 {
-        let r_point = match Ed25519Point::from_bigint(r) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
+        let r_point = Ed25519Point::from_bigint(r)?;
         let s_bytes: [u8; 32] = match s.to_bytes().try_into() {
             Ok(v) => v,
-            Err(_) => return false,
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
-        let s = match Ed25519Scalar::from_bytes32(s_bytes) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let pk = match Ed25519Point::from_hex(pubkey_str) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
+        let s_ = Ed25519Scalar::from_bytes32(s_bytes)?;
+        let pk = Ed25519Point::from_hex(pubkey_str)?;
         if r_point.ge.is_small_order() || pk.ge.is_small_order() {
-            return false;
-        }
-        let hash: Ed25519Scalar = match eddsa_s_hash(&r_point, &pk, msg) {
-            Ok(v) => v,
-            Err(_) => return false,
+            return Err(NashMPCError::SignatureVerification);
         };
-        r_point.ge == EdwardsPoint::vartime_double_scalar_mul_basepoint(&hash.fe, &(-&pk).ge, &s.fe)
+        let hash: Ed25519Scalar = eddsa_s_hash(&r_point, &pk, msg)?;
+        if r_point.ge == EdwardsPoint::vartime_double_scalar_mul_basepoint(&hash.fe, &(-&pk).ge, &s_.fe) {
+            Ok(())
+        } else {
+            Err(NashMPCError::SignatureVerification)
+        }
     } else {
-        return false;
+        Err(NashMPCError::CurveInvalid)
     }
 }
 
@@ -268,22 +196,17 @@ pub(crate) fn eddsa_s_hash(
     r_point: &Ed25519Point,
     pk: &Ed25519Point,
     msg: &BigInt,
-) -> Result<Ed25519Scalar, ()> {
+) -> Result<Ed25519Scalar, NashMPCError> {
     let mut h = Sha512::new();
     h.update(&r_point.ge.compress().as_bytes());
     h.update(&pk.ge.compress().as_bytes());
     h.update(&msg.to_bytes());
-    let hash_bytes: [u8; 64] = match h.finalize().as_slice().try_into() {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    let hash = match Ed25519Scalar::from_bytes64(&hash_bytes) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+    // unwrap is safe since sha512 output is always 64 byte
+    let hash_bytes: [u8; 64] = h.finalize().as_slice().try_into().unwrap();
+    let hash = Ed25519Scalar::from_bytes64(&hash_bytes)?;
     // check for hash == 0 as that might (theoretically) allow a brute-force attack on the secret key by the server
     if hash.to_bigint() == BigInt::zero() {
-        return Err(());
+        return Err(NashMPCError::ScalarInvalid);
     }
     Ok(hash)
 }
@@ -294,7 +217,7 @@ pub(crate) fn eddsa_s_hash(
 /// and we ignore the second half (which is usually used for generating nonces).
 pub(crate) fn eddsa_signingkey_from_secretkey(
     secret_key_int: &BigInt,
-) -> Result<Ed25519Scalar, ()> {
+) -> Result<Ed25519Scalar, NashMPCError> {
     let mut signing_key_bytes: [u8; 32] = [0u8; 32];
     signing_key_bytes.copy_from_slice(&Sha512::digest(&secret_key_int.to_bytes())[0..32]);
     // bit fiddling
@@ -305,41 +228,35 @@ pub(crate) fn eddsa_signingkey_from_secretkey(
 }
 
 #[cfg(feature = "secp256k1")]
-fn publickey_from_secretkey_k1(pk: &Secp256k1Point) -> Result<String, ()> {
-    Ok("0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_hex())
+fn publickey_from_secretkey_k1(pk: &Secp256k1Point) -> String {
+    "0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_hex()
 }
 #[cfg(feature = "k256")]
-fn publickey_from_secretkey_k1(pk: &Secp256k1Point) -> Result<String, ()> {
+fn publickey_from_secretkey_k1(pk: &Secp256k1Point) -> String {
     // unwrap() is safe because pk has been validated in publickey_from_secretkey()
     let tmp = AffinePoint_k256::from_encoded_point(&pk.ge.to_encoded_point(false)).unwrap();
-    Ok("0".to_string() + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes()).to_hex())
+    "0".to_string() + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes()).to_hex()
 }
 
 /// derive public key from secret key, in uncompressed format as expected by ME
-pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, ()> {
+pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, NashMPCError> {
     if curve == Curve::Secp256k1 {
         let secret_key = match ECScalar::from(secret_key_int) {
             Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
         let base: Secp256k1Point = ECPoint::generator();
-        let pk = match base * secret_key.deref() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        publickey_from_secretkey_k1(&pk)
+        let pk = (base * secret_key.deref())?;
+        Ok(publickey_from_secretkey_k1(&pk))
     } else if curve == Curve::Secp256r1 {
         let secret_key = match ECScalar::from(secret_key_int) {
             Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
-        let pk = match Secp256r1Point::generator() * secret_key.deref() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let pk = (Secp256r1Point::generator() * secret_key.deref())?;
         let tmp = AffinePoint_p256::from_encoded_point(&EncodedPoint_p256::from(&pk.ge));
-        if bool::from(tmp.is_none()) {
-            return Err(());
+        if tmp.is_none() {
+            return Err(NashMPCError::PointInvalid);
         }
         // add leading zeros if necessary
         Ok(format!(
@@ -349,16 +266,13 @@ pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result
     } else if curve == Curve::Curve25519 {
         let signing_key = match eddsa_signingkey_from_secretkey(secret_key_int) {
             Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
-        let pk = match Ed25519Point::generator() * signing_key.deref() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let pk = (Ed25519Point::generator() * signing_key.deref())?;
         // add leading zeros if necessary
         Ok(format!("{:0>64}", pk.to_hex()))
     } else {
-        Err(())
+        Err(NashMPCError::CurveInvalid)
     }
 }
 

@@ -13,6 +13,7 @@ use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
+use crate::NashMPCError;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
 use paillier_common::{
@@ -42,9 +43,9 @@ pub fn generate_paillier_proof(paillier_sk: &DecryptionKey) -> CorrectKeyProof {
 pub fn compute_rpool_secp256r1(
     server_dh_secrets: &[Secp256r1Scalar],
     client_dh_publics: &[Secp256r1Point],
-) -> Result<HashMap<String, Secp256r1Scalar>, ()> {
+) -> Result<HashMap<String, Secp256r1Scalar>, NashMPCError> {
     if server_dh_secrets.len() != client_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     let mut rpool_new = HashMap::new();
     let mut tmp = vec!["".to_string(); server_dh_secrets.len()];
@@ -63,7 +64,7 @@ pub fn compute_rpool_secp256r1(
     // check if any scalar multiplication failed during parallel execution
     for item in tmp.iter().take(server_dh_secrets.len()) {
         if item.is_empty() {
-            return Err(());
+            return Err(NashMPCError::PointArithmetic);
         }
     }
     for i in 0..server_dh_secrets.len() {
@@ -76,9 +77,9 @@ pub fn compute_rpool_secp256r1(
 pub fn compute_rpool_secp256k1(
     server_dh_secrets: &[Secp256k1Scalar],
     client_dh_publics: &[Secp256k1Point],
-) -> Result<HashMap<String, Secp256k1Scalar>, ()> {
+) -> Result<HashMap<String, Secp256k1Scalar>, NashMPCError> {
     if server_dh_secrets.len() != client_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     let mut rpool_new = HashMap::new();
     let mut tmp = vec!["".to_string(); server_dh_secrets.len()];
@@ -97,7 +98,7 @@ pub fn compute_rpool_secp256k1(
     // check if any scalar multiplication failed during parallel execution
     for item in tmp.iter().take(server_dh_secrets.len()) {
         if item.is_empty() {
-            return Err(());
+            return Err(NashMPCError::PointArithmetic);
         }
     }
     for i in 0..server_dh_secrets.len() {
@@ -110,9 +111,9 @@ pub fn compute_rpool_secp256k1(
 pub fn compute_rpool_curve25519(
     server_dh_secrets: &[Ed25519Scalar],
     client_dh_publics: &[Ed25519Point],
-) -> Result<HashMap<String, Ed25519Scalar>, ()> {
+) -> Result<HashMap<String, Ed25519Scalar>, NashMPCError> {
     if server_dh_secrets.len() != client_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     let mut rpool_new = HashMap::new();
     let mut tmp = vec!["".to_string(); server_dh_secrets.len()];
@@ -122,9 +123,9 @@ pub fn compute_rpool_curve25519(
     // execute scalar multiplication and point addition in parallel
     tmp.par_iter_mut().for_each(|i| {
         let server_dh_public =
-            match &Ed25519Point::generator() * &server_dh_secrets[i.parse::<usize>().unwrap()] {
+            match Ed25519Point::generator() * &server_dh_secrets[i.parse::<usize>().unwrap()] {
                 Ok(v) => v,
-                Err(_) => return (),
+                Err(_) => return,
             };
         *i = match server_dh_public + client_dh_publics[i.parse::<usize>().unwrap()] {
             Ok(v) => v.to_hex(),
@@ -134,7 +135,7 @@ pub fn compute_rpool_curve25519(
     // check if any parallel operation failed
     for item in tmp.iter().take(server_dh_secrets.len()) {
         if item.is_empty() {
-            return Err(());
+            return Err(NashMPCError::PointArithmetic);
         }
     }
     for i in 0..server_dh_secrets.len() {
@@ -152,35 +153,29 @@ pub fn complete_sig_ecdsa(
     curve: Curve,
     pubkey_str: &str,
     msg_hash: &BigInt,
-) -> Result<(BigInt, BigInt, u8), ()> {
+) -> Result<(BigInt, BigInt, u8), NashMPCError> {
     let q: BigInt;
     let rx: BigInt;
     let ry: BigInt;
     if curve == Curve::Secp256k1 {
-        let r_point = match Secp256k1Point::from_bigint(&r) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let r_point = Secp256k1Point::from_bigint(&r)?;
         q = Secp256k1Scalar::q();
         rx = r_point.x_coor().mod_floor(&q);
         ry = r_point.y_coor().mod_floor(&q);
     } else if curve == Curve::Secp256r1 {
-        let r_point = match Secp256r1Point::from_bigint(&r) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let r_point = Secp256r1Point::from_bigint(&r)?;
         q = Secp256r1Scalar::q();
         rx = r_point.x_coor().mod_floor(&q);
         ry = r_point.y_coor().mod_floor(&q);
     } else {
-        return Err(());
+        return Err(NashMPCError::CurveInvalid);
     }
     let (s, recid) = complete_sig_curveindependent(&paillier_sk, &presig, &k, &rx, &ry, &q);
     // verify that the resulting signature is indeed valid
     if verify(&rx, &s, pubkey_str, msg_hash, curve) {
         Ok((rx, s, recid))
     } else {
-        Err(())
+        Err(NashMPCError::SignatureVerification)
     }
 }
 
@@ -216,53 +211,29 @@ pub fn complete_sig_eddsa(
     mut r_server: Ed25519Scalar,
     pk_str: &str,
     msg: &BigInt,
-) -> Result<Ed25519Scalar, ()> {
-    let mut server_secret_share: Ed25519Scalar = match ECScalar::from(&server_secret_share_int) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+) -> Result<Ed25519Scalar, NashMPCError> {
+    let mut server_secret_share: Ed25519Scalar = ECScalar::from(&server_secret_share_int)?;
     server_secret_share_int.zeroize_bn();
-    let s_client: Ed25519Scalar = match ECScalar::from(&presig) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    let r = match Ed25519Point::from_bigint(&r_int) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    let pk = match Ed25519Point::from_hex(pk_str) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+    let s_client: Ed25519Scalar = ECScalar::from(&presig)?;
+    let r = Ed25519Point::from_bigint(&r_int)?;
+    let pk = Ed25519Point::from_hex(pk_str)?;
+    let hash: Ed25519Scalar = eddsa_s_hash(&r, &pk, msg)?;
 
     // compute server part of S
-    let mut tmp = match &hash * &server_secret_share {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+    let mut tmp = (&hash * &server_secret_share)?;
     server_secret_share.zeroize();
-    let s_server = match &r_server + &tmp {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+    let s_server = (&r_server + &tmp)?;
     tmp.zeroize();
     r_server.zeroize();
 
     // combine the two individual s values into one to get the full signature (R, S)
-    let s = match s_client + &s_server {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+    let s = (s_client + &s_server)?;
 
     // verify that the resulting signature is indeed valid
     if verify(&r.to_bigint(), &s.to_bigint_le(), pk_str, msg, Curve::Curve25519) {
         Ok(s)
     } else {
-        Err(())
+        Err(NashMPCError::SignatureVerification)
     }
 }
 

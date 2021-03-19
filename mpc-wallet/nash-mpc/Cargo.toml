@@ -31,6 +31,7 @@ sha2 = "0.9"
 subtle = "2.3"
 num-integer = { version = "0.1", optional = true }
 num-traits = { version = "0.2" }
+thiserror = "1.0"
 zeroize = { version = "1.1", default-features = false }
 rust-bigint = { version = "1.1", default-features = false }
 paillier-common = { version = "0.1", default-features = false }

@@ -723,7 +723,10 @@ fn publickey_from_secretkey<'a>(env: Env<'a>, args: &[Term<'a>]) -> Result<Term<
         Err(_) => return Ok((atoms::error(), &"error deserializing curve").encode(env)),
     };
 
-    let public_key = common::publickey_from_secretkey(&secret_key, curve);
+    let public_key = match common::publickey_from_secretkey(&secret_key, curve) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deriving public key from secret key").encode(env)),
+    };
     let public_key_json = serde_json::to_string(&public_key).unwrap();
     Ok((atoms::ok(), &public_key_json).encode(env))
 }

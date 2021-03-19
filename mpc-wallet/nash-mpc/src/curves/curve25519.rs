@@ -1,5 +1,6 @@
 // curve25519 utility functions
 
+use crate::NashMPCError;
 use super::traits::{ECPoint, ECScalar};
 use curve25519_dalek::constants::{BASEPOINT_ORDER, ED25519_BASEPOINT_COMPRESSED};
 use curve25519_dalek::edwards::CompressedEdwardsY;
@@ -39,15 +40,15 @@ impl Zeroize for Ed25519Scalar {
 }
 
 impl ECScalar<Scalar> for Ed25519Scalar {
-    fn new_random() -> Result<Ed25519Scalar, ()> {
+    fn new_random() -> Result<Ed25519Scalar, NashMPCError> {
         let mut arr = [0u8; 64];
         match getrandom(&mut arr) {
             Ok(_) => (),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::Random),
         };
         let scalar = Scalar::from_bytes_mod_order_wide(&arr);
         if scalar == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Ed25519Scalar {
             purpose: "random",
@@ -55,9 +56,9 @@ impl ECScalar<Scalar> for Ed25519Scalar {
         })
     }
 
-    fn from(n: &BigInt) -> Result<Ed25519Scalar, ()> {
+    fn from(n: &BigInt) -> Result<Ed25519Scalar, NashMPCError> {
         if n >= &Ed25519Scalar::q() || n <= &BigInt::zero() {
-            return Err(());
+            return Err(NashMPCError::IntegerInvalid);
         }
         let mut vec = vec![0; 32 - BigInt::to_vec(n).len()];
         vec.extend(&BigInt::to_vec(n));
@@ -86,10 +87,10 @@ impl ECScalar<Scalar> for Ed25519Scalar {
         BigInt::from_bytes(&bytes)
     }
 
-    fn add(&self, other: &Scalar) -> Result<Ed25519Scalar, ()> {
+    fn add(&self, other: &Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         let res = self.fe + other;
         if res == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Ed25519Scalar {
             purpose: "add",
@@ -97,10 +98,10 @@ impl ECScalar<Scalar> for Ed25519Scalar {
         })
     }
 
-    fn mul(&self, other: &Scalar) -> Result<Ed25519Scalar, ()> {
+    fn mul(&self, other: &Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         let res = self.fe * other;
         if res == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Ed25519Scalar {
             purpose: "add",
@@ -108,10 +109,10 @@ impl ECScalar<Scalar> for Ed25519Scalar {
         })
     }
 
-    fn sub(&self, other: &Scalar) -> Result<Ed25519Scalar, ()> {
+    fn sub(&self, other: &Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         let res = self.fe - other;
         if res == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Ed25519Scalar {
             purpose: "add",
@@ -119,10 +120,10 @@ impl ECScalar<Scalar> for Ed25519Scalar {
         })
     }
 
-    fn invert(&self) -> Result<Ed25519Scalar, ()> {
+    fn invert(&self) -> Result<Ed25519Scalar, NashMPCError> {
         let res = self.fe.invert();
         if self.fe == Scalar::zero() || res == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         };
         Ok(Ed25519Scalar {
             purpose: "invert",
@@ -140,10 +141,10 @@ impl ECScalar<Scalar> for Ed25519Scalar {
 
 impl Ed25519Scalar {
     /// derive Scalar from 64 bytes
-    pub(crate) fn from_bytes64(bytes: &[u8; 64]) -> Result<Ed25519Scalar, ()> {
+    pub(crate) fn from_bytes64(bytes: &[u8; 64]) -> Result<Ed25519Scalar, NashMPCError> {
         let scalar = Scalar::from_bytes_mod_order_wide(bytes);
         if scalar == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         };
         Ok(Ed25519Scalar {
             purpose: "from_bytes",
@@ -152,10 +153,10 @@ impl Ed25519Scalar {
     }
 
     /// derive Scalar from 32 bytes
-    pub(crate) fn from_bytes32(bytes: [u8; 32]) -> Result<Ed25519Scalar, ()> {
+    pub(crate) fn from_bytes32(bytes: [u8; 32]) -> Result<Ed25519Scalar, NashMPCError> {
         let scalar = Scalar::from_bytes_mod_order(bytes);
         if scalar == Scalar::zero() {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         };
         Ok(Ed25519Scalar {
             purpose: "from_bytes",
@@ -169,43 +170,43 @@ impl Ed25519Scalar {
 }
 
 impl Mul<Ed25519Scalar> for Ed25519Scalar {
-    type Output = Result<Ed25519Scalar, ()>;
-    fn mul(self, other: Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+    type Output = Result<Ed25519Scalar, NashMPCError>;
+    fn mul(self, other: Ed25519Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         ECScalar::mul(&(&self), &other.fe)
     }
 }
 
 impl<'o> Mul<&'o Ed25519Scalar> for Ed25519Scalar {
-    type Output = Result<Ed25519Scalar, ()>;
-    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+    type Output = Result<Ed25519Scalar, NashMPCError>;
+    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         ECScalar::mul(&(&self), &other.fe)
     }
 }
 
 impl<'o> Mul<&'o Ed25519Scalar> for &'o Ed25519Scalar {
-    type Output = Result<Ed25519Scalar, ()>;
-    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+    type Output = Result<Ed25519Scalar, NashMPCError>;
+    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         ECScalar::mul(&(&self), &other.fe)
     }
 }
 
 impl Add<Ed25519Scalar> for Ed25519Scalar {
-    type Output = Result<Ed25519Scalar, ()>;
-    fn add(self, other: Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+    type Output = Result<Ed25519Scalar, NashMPCError>;
+    fn add(self, other: Ed25519Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         ECScalar::add(&(&self), &other.fe)
     }
 }
 
 impl<'o> Add<&'o Ed25519Scalar> for Ed25519Scalar {
-    type Output = Result<Ed25519Scalar, ()>;
-    fn add(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+    type Output = Result<Ed25519Scalar, NashMPCError>;
+    fn add(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         ECScalar::add(&(&self), &other.fe)
     }
 }
 
 impl<'o> Add<&'o Ed25519Scalar> for &'o Ed25519Scalar {
-    type Output = Result<Ed25519Scalar, ()>;
-    fn add(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, ()> {
+    type Output = Result<Ed25519Scalar, NashMPCError>;
+    fn add(self, other: &'o Ed25519Scalar) -> Result<Ed25519Scalar, NashMPCError> {
         ECScalar::add(&(&self), &other.fe)
     }
 }
@@ -299,27 +300,26 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
 
         // based on https://github.com/ZenGo-X/curv/blob/master/src/elliptic/curves/ed25519.rs#L553
         // helper function, based on https://ed25519.cr.yp.to/python/ed25519.py
-        let q = BigInt::from(2u32).pow(255u32) - BigInt::from(19u32);
-        let d_n = -BigInt::from(121_665i32);
-        let d_d = expmod(&BigInt::from(121_666), &(q.clone() - BigInt::from(2)), &q);
+        let d_n = -BigInt::from(121_665);
+        let d_d = expmod(&BigInt::from(121_666), &(Ed25519Scalar::q() - BigInt::from(2)), &Ed25519Scalar::q());
 
         let d_bn = d_n * d_d;
         let y_sqr = self.y_coor() * self.y_coor();
         let u = y_sqr.clone() - BigInt::one();
         let v = y_sqr * d_bn + BigInt::one();
-        let v_inv = expmod(&v, &(q.clone() - BigInt::from(2)), &q);
+        let v_inv = expmod(&v, &(Ed25519Scalar::q() - BigInt::from(2)), &Ed25519Scalar::q());
 
         let x_sqr = u * v_inv;
-        let q_plus_3_div_8 = (q.clone() + BigInt::from(3i32)) / BigInt::from(8i32);
+        let q_plus_3_div_8 = (Ed25519Scalar::q() + BigInt::from(3)) / BigInt::from(8);
 
-        let mut x = expmod(&x_sqr, &q_plus_3_div_8, &q);
-        if BigInt::mod_sub(&(x.clone() * x.clone()), &x_sqr, &q) != BigInt::zero() {
-            let q_minus_1_div_4 = (q.clone() - BigInt::from(3i32)) / BigInt::from(4i32);
-            let i = expmod(&BigInt::from(2i32), &q_minus_1_div_4, &q);
-            x = BigInt::mod_mul(&x, &i, &q);
+        let mut x = expmod(&x_sqr, &q_plus_3_div_8, &Ed25519Scalar::q());
+        if BigInt::mod_sub(&(x.clone() * x.clone()), &x_sqr, &Ed25519Scalar::q()) != BigInt::zero() {
+            let q_minus_1_div_4 = (Ed25519Scalar::q() - BigInt::from(3)) / BigInt::from(4);
+            let i = expmod(&BigInt::from(2i32), &q_minus_1_div_4, &Ed25519Scalar::q());
+            x = BigInt::mod_mul(&x, &i, &Ed25519Scalar::q());
         }
-        if &x % &BigInt::from(2i32) != BigInt::zero() {
-            x = q - x.clone();
+        if &x % &BigInt::from(2) != BigInt::zero() {
+            x = Ed25519Scalar::q() - x.clone();
         }
         x
     }
@@ -331,10 +331,10 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
         BigInt::from_bytes(&bytes)
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Ed25519Point, ()> {
+    fn from_bytes(bytes: &[u8]) -> Result<Ed25519Point, NashMPCError> {
         // CompressedEdwardsY::from_slice() panics if slice does not have a length of 32
         if bytes.len() != 32 {
-            return Err(());
+            return Err(NashMPCError::IntegerInvalid);
         };
         let point = CompressedEdwardsY::from_slice(&bytes);
         match point.decompress() {
@@ -342,7 +342,7 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
                 purpose: "random",
                 ge: v,
             }),
-            None => Err(()),
+            None => Err(NashMPCError::PointInvalid),
         }
     }
 
@@ -350,28 +350,31 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
         self.ge.compress().as_bytes().to_vec()
     }
 
-    fn scalar_mul(&self, fe: &Scalar) -> Result<Ed25519Point, ()> {
+    fn scalar_mul(&self, fe: &Scalar) -> Result<Ed25519Point, NashMPCError> {
+        // it should not be possible to create invalid points with curve25519-dalek
         Ok(Ed25519Point {
             purpose: "mul",
             ge: self.ge * fe,
         })
     }
 
-    fn add_point(&self, other: &EdwardsPoint) -> Result<Ed25519Point, ()> {
+    fn add_point(&self, other: &EdwardsPoint) -> Result<Ed25519Point, NashMPCError> {
+        // it should not be possible to create invalid points with curve25519-dalek
         Ok(Ed25519Point {
             purpose: "combine",
             ge: self.ge + other,
         })
     }
 
-    fn sub_point(&self, other: &EdwardsPoint) -> Result<Ed25519Point, ()> {
+    fn sub_point(&self, other: &EdwardsPoint) -> Result<Ed25519Point, NashMPCError> {
+        // it should not be possible to create invalid points with curve25519-dalek
         Ok(Ed25519Point {
             purpose: "combine",
             ge: self.ge - other,
         })
     }
 
-    fn from_coor(_x: &BigInt, y: &BigInt) -> Result<Ed25519Point, ()> {
+    fn from_coor(_x: &BigInt, y: &BigInt) -> Result<Ed25519Point, NashMPCError> {
         let vec_y = BigInt::to_vec(y);
         let mut vec = vec![0; 32 - vec_y.len()];
         // pad with zeros if necessary
@@ -385,7 +388,7 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
                 purpose: "base_fe",
                 ge: v,
             }),
-            None => Err(()),
+            None => Err(NashMPCError::PointInvalid),
         }
     }
 
@@ -393,10 +396,10 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
         format!("{:0>64}", self.to_bigint().to_hex())
     }
 
-    fn from_hex(s: &str) -> Result<Ed25519Point, ()> {
+    fn from_hex(s: &str) -> Result<Ed25519Point, NashMPCError> {
         let v = match BigInt::from_hex(s) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
         Ed25519Point::from_bigint(&v)
     }
@@ -404,15 +407,12 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
 
 impl Ed25519Point {
     /// derive point from BigInt
-    pub fn from_bigint(i: &BigInt) -> Result<Ed25519Point, ()> {
+    pub fn from_bigint(i: &BigInt) -> Result<Ed25519Point, NashMPCError> {
         let vec_i = BigInt::to_vec(i);
         let mut vec = vec![0; 32 - vec_i.len()];
         // pad with zeros if necessary
         vec.extend_from_slice(&vec_i);
-        match Ed25519Point::from_bytes(&vec) {
-            Ok(v) => Ok(v),
-            Err(_) => Err(()),
-        }
+        Ed25519Point::from_bytes(&vec)
     }
 
     fn neg(&self) -> Ed25519Point {
@@ -431,43 +431,43 @@ impl<'o> Neg for &'o Ed25519Point {
 }
 
 impl Mul<Ed25519Scalar> for Ed25519Point {
-    type Output = Result<Ed25519Point, ()>;
-    fn mul(self, other: Ed25519Scalar) -> Result<Ed25519Point, ()> {
+    type Output = Result<Ed25519Point, NashMPCError>;
+    fn mul(self, other: Ed25519Scalar) -> Result<Ed25519Point, NashMPCError> {
         self.scalar_mul(&other.fe)
     }
 }
 
 impl<'o> Mul<&'o Ed25519Scalar> for Ed25519Point {
-    type Output = Result<Ed25519Point, ()>;
-    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Point, ()> {
+    type Output = Result<Ed25519Point, NashMPCError>;
+    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Point, NashMPCError> {
         self.scalar_mul(&other.fe)
     }
 }
 
 impl<'o> Mul<&'o Ed25519Scalar> for &'o Ed25519Point {
-    type Output = Result<Ed25519Point, ()>;
-    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Point, ()> {
+    type Output = Result<Ed25519Point, NashMPCError>;
+    fn mul(self, other: &'o Ed25519Scalar) -> Result<Ed25519Point, NashMPCError> {
         self.scalar_mul(&other.fe)
     }
 }
 
 impl Add<Ed25519Point> for Ed25519Point {
-    type Output = Result<Ed25519Point, ()>;
-    fn add(self, other: Ed25519Point) -> Result<Ed25519Point, ()> {
+    type Output = Result<Ed25519Point, NashMPCError>;
+    fn add(self, other: Ed25519Point) -> Result<Ed25519Point, NashMPCError> {
         self.add_point(&other.ge)
     }
 }
 
 impl<'o> Add<&'o Ed25519Point> for Ed25519Point {
-    type Output = Result<Ed25519Point, ()>;
-    fn add(self, other: &'o Ed25519Point) -> Result<Ed25519Point, ()> {
+    type Output = Result<Ed25519Point, NashMPCError>;
+    fn add(self, other: &'o Ed25519Point) -> Result<Ed25519Point, NashMPCError> {
         self.add_point(&other.ge)
     }
 }
 
 impl<'o> Add<&'o Ed25519Point> for &'o Ed25519Point {
-    type Output = Result<Ed25519Point, ()>;
-    fn add(self, other: &'o Ed25519Point) -> Result<Ed25519Point, ()> {
+    type Output = Result<Ed25519Point, NashMPCError>;
+    fn add(self, other: &'o Ed25519Point) -> Result<Ed25519Point, NashMPCError> {
         self.add_point(&other.ge)
     }
 }

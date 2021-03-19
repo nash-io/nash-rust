@@ -1,5 +1,6 @@
 // NIST P-256/secp256r1 elliptic curve utility functions.
 
+use crate::NashMPCError;
 use super::traits::{ECPoint, ECScalar};
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
@@ -47,11 +48,11 @@ impl Zeroize for Secp256r1Scalar {
 }
 
 impl ECScalar<Scalar> for Secp256r1Scalar {
-    fn new_random() -> Result<Secp256r1Scalar, ()> {
+    fn new_random() -> Result<Secp256r1Scalar, NashMPCError> {
         let mut rand_arr_tmp = [0u8; 32];
         match getrandom(&mut rand_arr_tmp) {
             Ok(_) => (),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::Random),
         };
         let rand_arr: GenericArray<u8, U32> = *GenericArray::from_slice(&rand_arr_tmp);
         Ok(Secp256r1Scalar {
@@ -60,9 +61,9 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
         })
     }
 
-    fn from(n: &BigInt) -> Result<Secp256r1Scalar, ()> {
+    fn from(n: &BigInt) -> Result<Secp256r1Scalar, NashMPCError> {
         if n >= &Secp256r1Scalar::q() || n < &BigInt::zero() {
-            return Err(());
+            return Err(NashMPCError::IntegerInvalid);
         }
         let tmp = BigInt::to_vec(n);
         let mut vec = vec![0; 32 - tmp.len()];
@@ -87,10 +88,10 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
         BigInt::from_bytes(&CURVE_ORDER.as_ref())
     }
 
-    fn add(&self, other: &Scalar) -> Result<Secp256r1Scalar, ()> {
+    fn add(&self, other: &Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         let res = self.fe + other;
         if bool::from(res.is_zero()) {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Secp256r1Scalar {
             purpose: "add",
@@ -98,10 +99,10 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
         })
     }
 
-    fn mul(&self, other: &Scalar) -> Result<Secp256r1Scalar, ()> {
+    fn mul(&self, other: &Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         let res = self.fe * other;
         if bool::from(res.is_zero()) {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Secp256r1Scalar {
             purpose: "mul",
@@ -109,10 +110,10 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
         })
     }
 
-    fn sub(&self, other: &Scalar) -> Result<Secp256r1Scalar, ()> {
+    fn sub(&self, other: &Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         let res = self.fe - other;
         if bool::from(res.is_zero()) {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Secp256r1Scalar {
             purpose: "sub",
@@ -120,10 +121,10 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
         })
     }
 
-    fn invert(&self) -> Result<Secp256r1Scalar, ()> {
+    fn invert(&self) -> Result<Secp256r1Scalar, NashMPCError> {
         let res = self.fe.invert();
         if bool::from(res.is_none()) {
-            return Err(());
+            return Err(NashMPCError::ScalarInvalid);
         }
         Ok(Secp256r1Scalar {
             purpose: "invert",
@@ -141,43 +142,43 @@ impl ECScalar<Scalar> for Secp256r1Scalar {
 }
 
 impl Mul<Secp256r1Scalar> for Secp256r1Scalar {
-    type Output = Result<Secp256r1Scalar, ()>;
-    fn mul(self, other: Secp256r1Scalar) -> Result<Secp256r1Scalar, ()> {
+    type Output = Result<Secp256r1Scalar, NashMPCError>;
+    fn mul(self, other: Secp256r1Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         (&self).mul(&other.fe)
     }
 }
 
 impl<'o> Mul<&'o Secp256r1Scalar> for Secp256r1Scalar {
-    type Output = Result<Secp256r1Scalar, ()>;
-    fn mul(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Scalar, ()> {
+    type Output = Result<Secp256r1Scalar, NashMPCError>;
+    fn mul(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         (&self).mul(&other.fe)
     }
 }
 
 impl Add<Secp256r1Scalar> for Secp256r1Scalar {
-    type Output = Result<Secp256r1Scalar, ()>;
-    fn add(self, other: Secp256r1Scalar) -> Result<Secp256r1Scalar, ()> {
+    type Output = Result<Secp256r1Scalar, NashMPCError>;
+    fn add(self, other: Secp256r1Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         (&self).add(&other.fe)
     }
 }
 
 impl<'o> Add<&'o Secp256r1Scalar> for Secp256r1Scalar {
-    type Output = Result<Secp256r1Scalar, ()>;
-    fn add(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Scalar, ()> {
+    type Output = Result<Secp256r1Scalar, NashMPCError>;
+    fn add(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         (&self).add(&other.fe)
     }
 }
 
 impl Sub<Secp256r1Scalar> for Secp256r1Scalar {
-    type Output = Result<Secp256r1Scalar, ()>;
-    fn sub(self, other: Secp256r1Scalar) -> Result<Secp256r1Scalar, ()> {
+    type Output = Result<Secp256r1Scalar, NashMPCError>;
+    fn sub(self, other: Secp256r1Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         (&self).sub(&other.fe)
     }
 }
 
 impl<'o> Sub<&'o Secp256r1Scalar> for Secp256r1Scalar {
-    type Output = Result<Secp256r1Scalar, ()>;
-    fn sub(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Scalar, ()> {
+    type Output = Result<Secp256r1Scalar, NashMPCError>;
+    fn sub(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Scalar, NashMPCError> {
         (&self).sub(&other.fe)
     }
 }
@@ -253,13 +254,13 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
         BigInt::from_bytes(&tmp.to_encoded_point(false).y().unwrap())
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Secp256r1Point, ()> {
+    fn from_bytes(bytes: &[u8]) -> Result<Secp256r1Point, NashMPCError> {
         match VerifyingKey::from_sec1_bytes(&bytes) {
             Ok(v) => Ok(Secp256r1Point {
                 purpose: "random",
                 ge: v,
             }),
-            Err(_) => Err(()),
+            Err(_) => Err(NashMPCError::PointInvalid),
         }
     }
 
@@ -269,10 +270,10 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
         tmp.to_encoded_point(false).as_ref().to_vec()
     }
 
-    fn scalar_mul(&self, fe: &Scalar) -> Result<Secp256r1Point, ()> {
+    fn scalar_mul(&self, fe: &Scalar) -> Result<Secp256r1Point, NashMPCError> {
         let point = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
-        if bool::from(point.is_none()) {
-            return Err(());
+        if point.is_none() {
+            return Err(NashMPCError::PointInvalid);
         }
         match VerifyingKey::from_encoded_point(
             &(ProjectivePoint::from(point.unwrap()) * fe)
@@ -283,15 +284,15 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
                 purpose: "mul",
                 ge: v,
             }),
-            Err(_) => Err(()),
+            Err(_) => Err(NashMPCError::PointArithmetic),
         }
     }
 
-    fn add_point(&self, other: &VerifyingKey) -> Result<Secp256r1Point, ()> {
+    fn add_point(&self, other: &VerifyingKey) -> Result<Secp256r1Point, NashMPCError> {
         let point1 = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
         let point2 = AffinePoint::from_encoded_point(&EncodedPoint::from(other));
-        if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
-            return Err(());
+        if point1.is_none() || point2.is_none() {
+            return Err(NashMPCError::PointInvalid);
         }
         match VerifyingKey::from_encoded_point(
             &(ProjectivePoint::from(point1.unwrap()) + ProjectivePoint::from(point2.unwrap()))
@@ -302,15 +303,15 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
                 purpose: "combine",
                 ge: v,
             }),
-            Err(_) => Err(()),
+            Err(_) => Err(NashMPCError::PointArithmetic),
         }
     }
 
-    fn sub_point(&self, other: &VerifyingKey) -> Result<Secp256r1Point, ()> {
+    fn sub_point(&self, other: &VerifyingKey) -> Result<Secp256r1Point, NashMPCError> {
         let point1 = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge));
         let point2 = AffinePoint::from_encoded_point(&EncodedPoint::from(other));
-        if bool::from(point1.is_none()) || bool::from(point2.is_none()) {
-            return Err(());
+        if point1.is_none() || point2.is_none() {
+            return Err(NashMPCError::PointInvalid);
         }
         match VerifyingKey::from_encoded_point(
             &(ProjectivePoint::from(point1.unwrap()) - ProjectivePoint::from(point2.unwrap()))
@@ -321,11 +322,11 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
                 purpose: "sub",
                 ge: v,
             }),
-            Err(_) => Err(()),
+            Err(_) => Err(NashMPCError::PointArithmetic),
         }
     }
 
-    fn from_coor(x: &BigInt, y: &BigInt) -> Result<Secp256r1Point, ()> {
+    fn from_coor(x: &BigInt, y: &BigInt) -> Result<Secp256r1Point, NashMPCError> {
         const COOR_SIZE: usize = 32;
         let vec_x_tmp = BigInt::to_vec(x);
         // pad with zeros if necessary
@@ -345,7 +346,7 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
                 purpose: "base_fe",
                 ge: v,
             }),
-            Err(_) => Err(()),
+            Err(_) => Err(NashMPCError::PointInvalid),
         }
     }
 
@@ -353,14 +354,14 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
         format!("{:0>66}", self.to_bigint().to_hex())
     }
 
-    fn from_hex(s: &str) -> Result<Secp256r1Point, ()> {
+    fn from_hex(s: &str) -> Result<Secp256r1Point, NashMPCError> {
         let v = match BigInt::from_hex(s) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
         let point = match Secp256r1Point::from_bigint(&v) {
             Ok(v) => v,
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::PointInvalid),
         };
         Ok(point)
     }
@@ -368,73 +369,73 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
 
 impl Secp256r1Point {
     // derive point from BigInt
-    pub fn from_bigint(i: &BigInt) -> Result<Secp256r1Point, ()> {
+    pub fn from_bigint(i: &BigInt) -> Result<Secp256r1Point, NashMPCError> {
         match Secp256r1Point::from_bytes(&BigInt::to_vec(i)) {
             Ok(v) => Ok(v),
-            Err(_) => Err(()),
+            Err(_) => Err(NashMPCError::IntegerInvalid),
         }
     }
 }
 
 impl Mul<Secp256r1Scalar> for Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn mul(self, other: Secp256r1Scalar) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn mul(self, other: Secp256r1Scalar) -> Result<Secp256r1Point, NashMPCError> {
         self.scalar_mul(&other.fe)
     }
 }
 
 impl<'o> Mul<&'o Secp256r1Scalar> for Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn mul(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn mul(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Point, NashMPCError> {
         self.scalar_mul(&other.fe)
     }
 }
 
 impl<'o> Mul<&'o Secp256r1Scalar> for &'o Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn mul(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn mul(self, other: &'o Secp256r1Scalar) -> Result<Secp256r1Point, NashMPCError> {
         self.scalar_mul(&other.fe)
     }
 }
 
 impl Add<Secp256r1Point> for Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn add(self, other: Secp256r1Point) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn add(self, other: Secp256r1Point) -> Result<Secp256r1Point, NashMPCError> {
         self.add_point(&other.ge)
     }
 }
 
 impl<'o> Add<&'o Secp256r1Point> for Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn add(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn add(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, NashMPCError> {
         self.add_point(&other.ge)
     }
 }
 
 impl<'o> Add<&'o Secp256r1Point> for &'o Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn add(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn add(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, NashMPCError> {
         self.add_point(&other.ge)
     }
 }
 
 impl Sub<Secp256r1Point> for Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn sub(self, other: Secp256r1Point) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn sub(self, other: Secp256r1Point) -> Result<Secp256r1Point, NashMPCError> {
         self.sub_point(&other.ge)
     }
 }
 
 impl<'o> Sub<&'o Secp256r1Point> for Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn sub(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn sub(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, NashMPCError> {
         self.sub_point(&other.ge)
     }
 }
 
 impl<'o> Sub<&'o Secp256r1Point> for &'o Secp256r1Point {
-    type Output = Result<Secp256r1Point, ()>;
-    fn sub(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, ()> {
+    type Output = Result<Secp256r1Point, NashMPCError>;
+    fn sub(self, other: &'o Secp256r1Point) -> Result<Secp256r1Point, NashMPCError> {
         self.sub_point(&other.ge)
     }
 }

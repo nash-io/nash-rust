@@ -13,6 +13,7 @@ use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
+use crate::NashMPCError;
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use indexmap::{IndexMap, IndexSet};
@@ -75,7 +76,7 @@ impl APIchildkeyCreator {
         self,
         paillier_pk: &EncryptionKey,
         correct_key_proof: &CorrectKeyProof,
-    ) -> Result<APIchildkeyCreator, ()> {
+    ) -> Result<APIchildkeyCreator, NashMPCError> {
         verify_correct_key_proof(correct_key_proof, &paillier_pk.n)?;
         Ok(APIchildkeyCreator {
             secret_key: self.secret_key,
@@ -88,28 +89,24 @@ impl APIchildkeyCreator {
     ///        - the client is trusted, and
     ///        - we don't allow rekeying.
     /// we do this to facilitate fast api childkey creation (as we can skip the range proof entirely).
-    pub fn create_api_childkey(self, curve: Curve) -> Result<APIchildkey, ()> {
-        match self.paillier_pk.clone() {
-            Some(val) => val,
-            None => return Err(()),
+    pub fn create_api_childkey(self, curve: Curve) -> Result<APIchildkey, NashMPCError> {
+        if self.paillier_pk.is_none() {
+            return Err(NashMPCError::PaillierVerification);
         };
         if curve == Curve::Secp256k1 {
             let random = match Secp256k1Scalar::new_random() {
                 Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::Random),
             };
             // client's secret share is set to the full secret key
             let secret_key = match ECScalar::from(&self.secret_key) {
                 Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarInvalid),
             };
-            let rand_inv = match random.invert() {
-                Ok(v) => v,
-                Err(_) => return Err(()),
-            };
+            let rand_inv = random.invert()?;
             let client_secret_share = match rand_inv * secret_key.deref() {
                 Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarArithmetic),
             };
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_bigint();
@@ -127,20 +124,17 @@ impl APIchildkeyCreator {
         } else if curve == Curve::Secp256r1 {
             let random = match Secp256r1Scalar::new_random() {
                 Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::Random),
             };
             // client's secret share is set to the full secret key
             let secret_key = match ECScalar::from(&self.secret_key) {
                 Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarInvalid),
             };
-            let rand_inv = match random.invert() {
-                Ok(v) => v,
-                Err(_) => return Err(()),
-            };
+            let rand_inv = random.invert()?;
             let client_secret_share = match rand_inv * secret_key.deref() {
                 Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarArithmetic),
             };
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_bigint();
@@ -162,17 +156,17 @@ impl APIchildkeyCreator {
         } else if curve == Curve::Curve25519 {
             let signing_key = match eddsa_signingkey_from_secretkey(&self.secret_key) {
                 Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarInvalid),
             };
             let public_key =
                 publickey_from_secretkey(&self.secret_key, Curve::Curve25519).expect("Invalid curve");
             // client's secret share is just some random value
             let client_secret_share = match Ed25519Scalar::new_random() {
                 Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::Random),
             };
             // compute additive server secret share, i.e., full secret = client secret share + server secret share % L
-            let mut server_secret_share_bytes = *(&signing_key.fe - &client_secret_share.fe).as_bytes();
+            let mut server_secret_share_bytes = *(signing_key.fe - client_secret_share.fe).as_bytes();
             server_secret_share_bytes.reverse();
             let server_secret_share_encrypted =
                 encrypt_secret_share(&self.paillier_pk.as_ref().unwrap(), &BigInt::from_bytes(&server_secret_share_bytes));
@@ -185,7 +179,7 @@ impl APIchildkeyCreator {
                 server_secret_share_encrypted,
             })
         } else {
-            Err(())
+            Err(NashMPCError::CurveInvalid)
         }
     }
 }
@@ -195,92 +189,58 @@ pub fn compute_presig(
     api_childkey: &APIchildkey,
     msg: &BigInt,
     curve: Curve,
-) -> Result<(BigInt, BigInt), ()> {
+) -> Result<(BigInt, BigInt), NashMPCError> {
     if curve == Curve::Secp256k1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256K1.lock().unwrap().pop() {
             Option::Some(val) => val,
-            Option::None => return Err(()),
+            Option::None => return Err(NashMPCError::Pool),
         };
         let k = (pool_entry.1).1.clone();
         (pool_entry.1).1.zeroize_bn();
         let r = pool_entry.0;
-        let r_point = match Secp256k1Point::from_bigint(&r) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let r_point = Secp256k1Point::from_bigint(&r)?;
         let q = Secp256k1Scalar::q();
         let rx = r_point.x_coor().mod_floor(&q);
-        let c3 = match compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let c3 = compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k)?;
         Ok((c3, r))
     } else if curve == Curve::Secp256r1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256R1.lock().unwrap().pop() {
             Option::Some(val) => val,
-            Option::None => return Err(()),
+            Option::None => return Err(NashMPCError::Pool),
         };
         let k = (pool_entry.1).1.clone();
         (pool_entry.1).1.zeroize_bn();
         let r = pool_entry.0;
-        let r_point = match Secp256r1Point::from_bigint(&r) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let r_point = Secp256r1Point::from_bigint(&r)?;
         let q = Secp256r1Scalar::q();
         let rx = r_point.x_coor().mod_floor(&q);
-        let c3 = match compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let c3 = compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k)?;
         Ok((c3, r))
     } else if curve == Curve::Curve25519 {
         // fetch and remove random value R and r_client from pool
         let mut pool_entry = match RPOOL_CURVE25519.lock().unwrap().pop() {
             Option::Some(val) => val,
-            Option::None => return Err(()),
+            Option::None => return Err(NashMPCError::Pool),
         };
-        let mut r_client: Ed25519Scalar = match ECScalar::from(&(pool_entry.1).1) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let mut r_client: Ed25519Scalar = ECScalar::from(&(pool_entry.1).1)?;
         (pool_entry.1).1.zeroize_bn();
-        let r = match Ed25519Point::from_bigint(&pool_entry.0) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let r = Ed25519Point::from_bigint(&pool_entry.0)?;
 
-        let pk = match Ed25519Point::from_hex(&api_childkey.public_key) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        let mut client_secret_share: Ed25519Scalar =
-            match ECScalar::from(&api_childkey.client_secret_share) {
-                Ok(v) => v,
-                Err(_) => return Err(()),
-            };
-        let hash: Ed25519Scalar = match eddsa_s_hash(&r, &pk, msg) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let pk = Ed25519Point::from_hex(&api_childkey.public_key)?;
+        let mut client_secret_share: Ed25519Scalar = ECScalar::from(&api_childkey.client_secret_share)?;
+        let hash: Ed25519Scalar = eddsa_s_hash(&r, &pk, msg)?;
 
         // compute client part of S
-        let mut tmp = match &hash * &client_secret_share {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let mut tmp = (&hash * &client_secret_share)?;
         client_secret_share.zeroize();
-        let s_client = match &r_client + &tmp {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let s_client = (&r_client + &tmp)?;
         tmp.zeroize();
         r_client.zeroize();
         Ok((s_client.to_bigint(), r.to_bigint()))
     } else {
-        return Err(());
+        Err(NashMPCError::CurveInvalid)
     }
 }
 
@@ -290,7 +250,7 @@ fn compute_ecdsa_presig_curveindependent(
     rx: &BigInt,
     q: &BigInt,
     mut k: BigInt,
-) -> Result<BigInt, ()> {
+) -> Result<BigInt, NashMPCError> {
     let rho = BigInt::sample_below(&q.pow(2u32));
     let mut k_inv = BigInt::mod_inv(&k, q);
     k.zeroize_bn();
@@ -298,7 +258,7 @@ fn compute_ecdsa_presig_curveindependent(
     // get and remove random value for Paillier from pool
     let mut rn = match POOL_PAILLIER.lock().unwrap().pop() {
         Option::Some(val) => val,
-        Option::None => return Err(()),
+        Option::None => return Err(NashMPCError::Pool),
     };
     let mut rn_ = PrecomputedRandomness(rn.clone());
     rn.zeroize_bn();
@@ -360,9 +320,9 @@ pub fn fill_rpool_secp256r1(
     mut own_dh_secrets: Vec<Secp256r1Scalar>,
     other_dh_publics: &[Secp256r1Point],
     paillier_pk: &EncryptionKey,
-) -> Result<(), ()> {
+) -> Result<(), NashMPCError> {
     if own_dh_secrets.len() != other_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
@@ -397,9 +357,9 @@ pub fn fill_rpool_secp256k1(
     mut own_dh_secrets: Vec<Secp256k1Scalar>,
     other_dh_publics: &[Secp256k1Point],
     paillier_pk: &EncryptionKey,
-) -> Result<(), ()> {
+) -> Result<(), NashMPCError> {
     if own_dh_secrets.len() != other_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
@@ -433,17 +393,14 @@ pub fn fill_rpool_secp256k1(
 pub fn fill_rpool_curve25519(
     mut own_dh_secrets: Vec<Ed25519Scalar>,
     other_dh_publics: &[Ed25519Point],
-) -> Result<(), ()> {
+) -> Result<(), NashMPCError> {
     if own_dh_secrets.len() != other_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
-        let own_dh_public = match &Ed25519Point::generator() * &own_dh_secrets[i] {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let own_dh_public = (&Ed25519Point::generator() * &own_dh_secrets[i])?;
         match own_dh_public + other_dh_publics[i] {
             Ok(r) => RPOOL_CURVE25519
                 .lock()
@@ -454,7 +411,7 @@ pub fn fill_rpool_curve25519(
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        match &Ed25519Point::generator() * &own_dh_secrets[i] {
+        match Ed25519Point::generator() * &own_dh_secrets[i] {
             Ok(v) => match v + other_dh_publics[i] {
                 Ok(r) => RPOOL_CURVE25519
                     .lock()
@@ -472,7 +429,7 @@ pub fn fill_rpool_curve25519(
 }
 
 /// get number of r-values in pool
-pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
+pub fn get_rpool_size(curve: Curve) -> Result<usize, NashMPCError> {
     if curve == Curve::Secp256k1 {
         // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
         RPOOL_SECP256K1
@@ -495,7 +452,7 @@ pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
             .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
         Ok(RPOOL_CURVE25519.lock().unwrap().len())
     } else {
-        Err(())
+        Err(NashMPCError::CurveInvalid)
     }
 }
 
@@ -515,26 +472,26 @@ pub fn encrypt_secret_share(paillier_pk: &EncryptionKey, server_secret_share: &B
 
 /// verify proof of correct paillier key generation
 /// see paper "Efficient Noninteractive Certification of RSA Moduli and Beyond" by Goldberg et al. 2019 Section 3.2 and Appendix C.4
-fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> Result<(), ()> {
+fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> Result<(), NashMPCError> {
     let sigma = &correct_key_proof.sigma_vec;
     // product of all primes < 6370 (alpha)
     let primorial = BigInt::from_hex("4ddec772c2ee9fb11e7b9ed0e5f6b7de5b83a0f20cfad9f37ec2ad151341ebbe75cb190441855d0d9014efd683716ac93e5e5369e8f72854979e198ba184ad4e7a4ff76b9eff3cd6533e8c5b2c2a5d8bb62ed86d280d2f0fa1666a5454d0e10b5e67c96e809fd3daddab1f77ba6d5dace62a1939d3c729e9f131f84190aa3407d5f02cf23a90a6c50acefbd123c66c5cc78c935883c0cee1435437811496b10a13900f4f59794d67b494c52279e3159330f1d076d623a8b0b59322559d16c68dc6f3d1d377a1668b7f80f945e7407cee358e9a02bb6b983a56e3199156eb40214b098bf3d301bdd132487f1354db3771885772f49fe86f8890668dfb5e5f9b1b677431081875f91cc019461b9cae2825226ae7ffe870658e573401005f331db99eb66ca6c7fa31b6e2838f1a7da59fb7935a619ffab6d0586431993b6a4c32861141d3139015562ea824550e1a26dfcc53085ebd0885742832c4542fc6436591b3f973d6f9cd7235094738734d082ef51af29824940809d660c8d322d4a44fcf43071b8b473d12d36019fee110aa59aaee6ab7426889bfd07073d9ce03476fdbd04cc6479f73500676f2832c6a0a00ad6c832f5309e9803598e41ffb325e6c403f35730887ef0f6e5a91fdc147ce022ef9ab1851550f9ff93115a626b4f9af82c4eabebafe3b52380d0f9f28f2f5961689807934b9e58d1956314334dc71088a6bd907712a38104fd5ad523efcb10d02c76fdb846594e094b3200b3c3956b17d2d555b6375c1c65c3b19fee9f1e8726f9f6f0c4128f2dd4d5fdd7be1261371bc538b2015e4d3d0ce147bcdc0cd561d5fe21a9f0bf91b5804fca0e41d17f5e5bc6d53e94220ebec6816b020306b7dbd9c6320859de0771f89e76c5af81f45aa29086e82148cbbbc6fbe69929288daa640bbb8d01d995e0218b12d70f83b556f0584fb17740a21f12bbd7894790b7d4bbc58f01844c40cb887e6d1817e8254243884a82443fcb9d9c95e3422e2a8b9810c1309d743e8ff2d82de816fea1e13744a40b54da01035e426405cecb4ba960d60ccb2529ae6627f1fe98ce9307eadae3b74f90c57a6a6b0779be0a1fd953a780c46ba19a09a6bdfbb659d42cb7ec1e9917dfbe7da508db6924a0c99acc7b3b40763d7207ebb07f25f21c410726ed1d0a1244346687bbb310a14a6a68edb3843069a987699f9f20a6da72576fa14fbe8f4ed35a6cd8475bed9c70b51a5fd99bbbe1a2ab43df1e51fda1c701e7823db06544545752b927f16fef58b1109ff0c945dfce0a3e7111896eb49b470f37a3326f3a985b00b747bdce7fb5f38812c2973bac4d75218e0fcb1bb8be4ecdf099fb09741e3171ef4ef3ac9f5a05e4fa2baa6b440c99b433ca98afca73b58d9e4088aafc4f95c2277605d172471fd3f745315ef1ab8a17b52b48bad7d28b08081560a6d06fc558c96f3f70694ce26f81a41786b12cfbd79c5e3f99a879ada2d4e79480de14e8b15924777246ef90d210bfec6941a430827d05a0a66b3d6ef95521f114ad7054f369724de2ac44976136285b6f99348cfe802ca6e70470e2d21b3f6645eb6a23b0b98a177201fa3fb87b89312247e").unwrap();
     // check that N is > 0 and not divisable by all the primes < alpha
     if n <= &BigInt::zero() || primorial.gcd(n) != BigInt::one() {
-        return Err(());
+        return Err(NashMPCError::CorrectKeyVerification);
     }
     // check that sigma indeed consists of m elements
     if sigma.len() != CORRECT_KEY_M {
-        return Err(());
+        return Err(NashMPCError::CorrectKeyVerification);
     }
     // check that each sigma element is > 0 and that rho_i == sigma_i ^ N mod N
     let rho = correct_key_proof_rho(n);
     for i in 0..sigma.len() {
         if sigma[i] <= BigInt::zero() {
-            return Err(());
+            return Err(NashMPCError::CorrectKeyVerification);
         }
         if rho[i] != BigInt::mod_pow(&sigma[i], n, n) {
-            return Err(());
+            return Err(NashMPCError::CorrectKeyVerification);
         }
     }
     Ok(())

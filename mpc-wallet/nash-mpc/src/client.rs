@@ -381,7 +381,7 @@ pub fn fill_rpool_curve25519(
         let own_dh_public = (&Ed25519Point::generator() * &own_dh_secrets[i])?;
         match own_dh_public + other_dh_publics[i] {
             Ok(r) => RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint())),
-            Err(_) => None,
+            Err(_) => (),
         };
     }
     #[cfg(not(feature = "wasm"))]

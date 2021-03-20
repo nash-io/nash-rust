@@ -238,7 +238,7 @@ impl PublicKey {
 
     /// Get Secp256r1 point associated with NEO public key
     pub fn to_point(&self) -> Secp256r1Point {
-        self.inner
+        self.inner.clone()
     }
 
     /// Conver NEO public key to hex string

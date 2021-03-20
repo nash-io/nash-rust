@@ -9,10 +9,7 @@ use super::super::signer::Signer;
 use graphql_client::GraphQLQuery;
 
 impl CancelOrderRequest {
-    pub fn make_query(
-        &self,
-        signer: &Signer,
-    ) -> graphql_client::QueryBody<cancel_order::Variables> {
+    pub fn make_variables(&self, signer: &Signer) -> cancel_order::Variables {
         let mut cancel_args = cancel_order::Variables {
             payload: cancel_order::CancelOrderParams {
                 market_name: self.market.clone(),
@@ -24,7 +21,15 @@ impl CancelOrderRequest {
         let sig_payload = cancel_all_canonical_string(&cancel_args);
         let sig = signer.sign_canonical_string(&sig_payload);
         cancel_args.signature = sig.into();
-        graphql::CancelOrder::build_query(cancel_args)
+        cancel_args
+    }
+
+    pub fn make_query(
+        &self,
+        signer: &Signer,
+    ) -> graphql_client::QueryBody<cancel_order::Variables> {
+        let variables = self.make_variables(signer);
+        graphql::CancelOrder::build_query(variables)
     }
 }
 

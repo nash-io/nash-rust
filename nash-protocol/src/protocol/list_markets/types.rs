@@ -36,7 +36,6 @@ impl NashProtocol for ListMarketsRequest {
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        let mut state = state.write().await;
         let markets: Vec<Market> = response.markets.iter().map(|(_k, v)| v.clone()).collect();
         let mut assets = HashSet::new();
         let mut market_map = HashMap::new();
@@ -46,6 +45,7 @@ impl NashProtocol for ListMarketsRequest {
             market_map.insert(market.market_name(), market.clone());
         }
         // store market and asset list in the client
+        let mut state = state.write().await;
         state.markets = Some(market_map);
         state.assets = Some(assets.into_iter().collect());
         Ok(())

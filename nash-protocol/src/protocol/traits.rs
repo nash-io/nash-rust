@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 use std::fmt::Debug;
 use std::sync::Arc;
+use crate::protocol::ErrorResponse;
 
 //****************************************//
 //  Nash protocol trait                   //
@@ -19,7 +20,7 @@ use std::sync::Arc;
 pub trait NashProtocol: Debug + Send + Sync {
     type Response: Send + Sync;
     /// If you want to limit the amount of concurrency of a protocol return a Semaphore here
-    async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+    async fn acquire_permit(&self, _state: Arc<RwLock<State>>) -> Option<tokio::sync::OwnedSemaphorePermit> {
         None
     }
     /// Convert the protocol request to GraphQL from communication with Nash server
@@ -36,6 +37,15 @@ pub trait NashProtocol: Debug + Send + Sync {
     async fn process_response(
         &self,
         _response: &Self::Response,
+        _state: Arc<RwLock<State>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+    /// Any errors that result from execution of the protocol request
+    /// The default implementation does nothing to state
+    async fn process_error(
+        &self,
+        _response: &ErrorResponse,
         _state: Arc<RwLock<State>>,
     ) -> Result<()> {
         Ok(())
@@ -64,7 +74,7 @@ pub trait NashProtocolPipeline: Debug + Send + Sync {
     /// Wrapper type for all actions this pipeline can take
     type ActionType: NashProtocol;
     /// If you want to limit the amount of concurrency of a pipeline return a Semaphore here
-    async fn get_semaphore(&self, _state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+    async fn acquire_permit(&self, _state: Arc<RwLock<State>>) -> Option<tokio::sync::OwnedSemaphorePermit> {
         None
     }
     /// Create initial state for the pipeline
@@ -110,8 +120,8 @@ where
     type PipelineState = Option<ResponseOrError<T::Response>>;
     type ActionType = T;
     // Here we just delegate this to underlying protocol request
-    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
-        self.get_semaphore(state).await
+    async fn acquire_permit(&self, state: Arc<RwLock<State>>) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        self.acquire_permit(state).await
     }
     // This begins as `None` but will be set to a wrapped T::Response
     async fn init_state(&self, _state: Arc<RwLock<State>>) -> Self::PipelineState {

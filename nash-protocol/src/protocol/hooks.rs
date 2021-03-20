@@ -2,6 +2,14 @@
 //! requests and piplines via before and after hooks. These need to be explicity encoded
 //! in enum types to make the compiler happy.
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use tokio::sync::{Mutex, RwLock};
+
+use crate::errors::{ProtocolError, Result};
+use crate::protocol::ErrorResponse;
+
 use super::asset_nonces::{AssetNoncesRequest, AssetNoncesResponse};
 use super::cancel_all_orders::{CancelAllOrders, CancelAllOrdersResponse};
 use super::dh_fill_pool::{DhFillPoolRequest, DhFillPoolResponse};
@@ -13,17 +21,14 @@ use super::sign_states::{SignStatesRequest, SignStatesResponse};
 use super::traits::{NashProtocol, NashProtocolPipeline};
 use super::{ResponseOrError, State};
 
-use crate::errors::{ProtocolError, Result};
-use async_trait::async_trait;
-
-use tokio::sync::RwLock;
-use std::sync::Arc;
-
 /// An enum wrapping all the different protocol requests
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum NashProtocolRequest {
     AssetNonces(AssetNoncesRequest),
-    DhFill(DhFillPoolRequest),
+    DhFill(
+        DhFillPoolRequest,
+        Option<Arc<Mutex<Option<tokio::sync::OwnedSemaphorePermit>>>>,
+    ),
     LimitOrder(LimitOrderRequest),
     Orderbook(OrderbookRequest),
     CancelOrders(CancelAllOrders),
@@ -49,22 +54,30 @@ pub enum NashProtocolResponse {
 impl NashProtocol for NashProtocolRequest {
     type Response = NashProtocolResponse;
 
-    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+    async fn acquire_permit(
+        &self,
+        state: Arc<RwLock<State>>,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
         match self {
-            Self::AssetNonces(nonces) => NashProtocol::get_semaphore(nonces, state).await,
-            Self::DhFill(dh_req) => NashProtocol::get_semaphore(dh_req, state).await,
-            Self::LimitOrder(limit_order) => NashProtocol::get_semaphore(limit_order, state).await,
-            Self::Orderbook(orderbook) => NashProtocol::get_semaphore(orderbook, state).await,
-            Self::SignState(sign_state) => NashProtocol::get_semaphore(sign_state, state).await,
-            Self::CancelOrders(cancel_all) => NashProtocol::get_semaphore(cancel_all, state).await,
-            Self::ListMarkets(list_markets) => NashProtocol::get_semaphore(list_markets, state).await,
+            Self::AssetNonces(nonces) => NashProtocol::acquire_permit(nonces, state).await,
+            Self::DhFill(dh_fill, permit) => match permit {
+                Some(permit) => permit.lock().await.take(),
+                None => NashProtocol::acquire_permit(dh_fill, state).await,
+            },
+            Self::LimitOrder(limit_order) => NashProtocol::acquire_permit(limit_order, state).await,
+            Self::Orderbook(orderbook) => NashProtocol::acquire_permit(orderbook, state).await,
+            Self::SignState(sign_state) => NashProtocol::acquire_permit(sign_state, state).await,
+            Self::CancelOrders(cancel_all) => NashProtocol::acquire_permit(cancel_all, state).await,
+            Self::ListMarkets(list_markets) => {
+                NashProtocol::acquire_permit(list_markets, state).await
+            }
         }
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
         match self {
             Self::AssetNonces(nonces) => nonces.graphql(state).await,
-            Self::DhFill(dh_req) => dh_req.graphql(state).await,
+            Self::DhFill(dh_fill, _permit) => dh_fill.graphql(state).await,
             Self::LimitOrder(limit_order) => limit_order.graphql(state).await,
             Self::Orderbook(orderbook) => orderbook.graphql(state).await,
             Self::SignState(sign_state) => sign_state.graphql(state).await,
@@ -76,29 +89,36 @@ impl NashProtocol for NashProtocolRequest {
     async fn response_from_json(
         &self,
         response: serde_json::Value,
-        state: Arc<RwLock<State>>
+        state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
         match self {
             Self::AssetNonces(nonces) => Ok(nonces
-                .response_from_json(response, state).await?
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::AssetNonces(res)))),
-            Self::DhFill(dh_req) => Ok(dh_req
-                .response_from_json(response, state).await?
+            Self::DhFill(dh_fill, _permit) => Ok(dh_fill
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::DhFill(res)))),
             Self::LimitOrder(limit_order) => Ok(limit_order
-                .response_from_json(response, state).await?
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::LimitOrder(res)))),
             Self::Orderbook(orderbook) => Ok(orderbook
-                .response_from_json(response, state).await?
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::Orderbook(res)))),
             Self::SignState(sign_state) => Ok(sign_state
-                .response_from_json(response, state).await?
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::SignState(res)))),
             Self::CancelOrders(cancel_all) => Ok(cancel_all
-                .response_from_json(response, state).await?
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::CancelOrders(res)))),
             Self::ListMarkets(list_markets) => Ok(list_markets
-                .response_from_json(response, state).await?
+                .response_from_json(response, state)
+                .await?
                 .map(Box::new(|res| NashProtocolResponse::ListMarkets(res)))),
         }
     }
@@ -112,8 +132,8 @@ impl NashProtocol for NashProtocolRequest {
             (Self::AssetNonces(nonces), NashProtocolResponse::AssetNonces(response)) => {
                 nonces.process_response(response, state).await?
             }
-            (Self::DhFill(dh_req), NashProtocolResponse::DhFill(response)) => {
-                dh_req.process_response(response, state).await?
+            (Self::DhFill(dh_fill, _permit), NashProtocolResponse::DhFill(response)) => {
+                dh_fill.process_response(response, state).await?
             }
             (Self::SignState(sign_req), NashProtocolResponse::SignState(response)) => {
                 sign_req.process_response(response, state).await?
@@ -138,10 +158,26 @@ impl NashProtocol for NashProtocolRequest {
         Ok(())
     }
 
+    async fn process_error(
+        &self,
+        response: &ErrorResponse,
+        state: Arc<RwLock<State>>,
+    ) -> Result<()> {
+        match self {
+            Self::AssetNonces(nonces) => nonces.process_error(response, state).await,
+            Self::DhFill(dh_fill, _permit) => dh_fill.process_error(response, state).await,
+            Self::LimitOrder(limit_order) => limit_order.process_error(response, state).await,
+            Self::Orderbook(orderbook) => orderbook.process_error(response, state).await,
+            Self::SignState(sign_state) => sign_state.process_error(response, state).await,
+            Self::CancelOrders(cancel_all) => cancel_all.process_error(response, state).await,
+            Self::ListMarkets(list_markets) => list_markets.process_error(response, state).await,
+        }
+    }
+
     async fn run_before(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         match self {
             Self::AssetNonces(nonces) => NashProtocol::run_before(nonces, state).await,
-            Self::DhFill(dh_req) => NashProtocol::run_before(dh_req, state).await,
+            Self::DhFill(dh_fill, _permit) => NashProtocol::run_before(dh_fill, state).await,
             Self::LimitOrder(limit_order) => NashProtocol::run_before(limit_order, state).await,
             Self::Orderbook(orderbook) => NashProtocol::run_before(orderbook, state).await,
             Self::SignState(sign_state) => NashProtocol::run_before(sign_state, state).await,
@@ -153,7 +189,7 @@ impl NashProtocol for NashProtocolRequest {
     async fn run_after(&self, state: Arc<RwLock<State>>) -> Result<Option<Vec<ProtocolHook>>> {
         match self {
             Self::AssetNonces(nonces) => NashProtocol::run_after(nonces, state).await,
-            Self::DhFill(dh_req) => NashProtocol::run_after(dh_req, state).await,
+            Self::DhFill(dh_fill, _permit) => NashProtocol::run_after(dh_fill, state).await,
             Self::LimitOrder(limit_order) => NashProtocol::run_after(limit_order, state).await,
             Self::Orderbook(orderbook) => NashProtocol::run_after(orderbook, state).await,
             Self::SignState(sign_state) => NashProtocol::run_after(sign_state, state).await,
@@ -183,10 +219,15 @@ impl NashProtocolPipeline for ProtocolHook {
     type PipelineState = ProtocolHookState;
     type ActionType = NashProtocolRequest;
 
-    async fn get_semaphore(&self, state: Arc<RwLock<State>>) -> Option<Arc<tokio::sync::Semaphore>> {
+    async fn acquire_permit(
+        &self,
+        state: Arc<RwLock<State>>,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
         match self {
-            Self::SignAllState(sign_all) => NashProtocolPipeline::get_semaphore(sign_all, state).await,
-            Self::Protocol(protocol) => NashProtocol::get_semaphore(protocol, state).await,
+            Self::SignAllState(sign_all) => {
+                NashProtocolPipeline::acquire_permit(sign_all, state).await
+            }
+            Self::Protocol(protocol) => NashProtocol::acquire_permit(protocol, state).await,
         }
     }
 

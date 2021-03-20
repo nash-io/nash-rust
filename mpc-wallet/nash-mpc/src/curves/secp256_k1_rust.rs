@@ -244,7 +244,10 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256k1Point {
     }
 
     fn x_coor(&self) -> BigInt {
-        BigInt::from_bytes(&EncodedPoint::from(&self.ge).x().unwrap())
+        // unwrap() is safe because self has been validated on creation
+        let tmp = AffinePoint::from_encoded_point(&self.ge.to_encoded_point(false)).unwrap();
+        // unwrap() is safe because EncodedPoint is uncompressed (see previous line)
+        BigInt::from_bytes(&tmp.to_encoded_point(false).x().unwrap())
     }
 
     fn y_coor(&self) -> BigInt {

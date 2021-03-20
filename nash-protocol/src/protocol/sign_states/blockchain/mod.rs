@@ -61,7 +61,7 @@ impl RecycledOrder {
 
 /// Sign off on a piece of state data such as an account balance or a recycled open order
 /// with a higher nonce. These states can be submitted by the ME to the settlement contract
-pub fn sign_state_data(state_data: &StateData, signer: &mut Signer) -> Result<ClientSignedState> {
+pub fn sign_state_data(state_data: &StateData, signer: &Signer) -> Result<ClientSignedState> {
     let (message, hash) = match state_data.blockchain {
         // Recycled orders should not be double hashed, but that is what we are doing here
         Blockchain::Ethereum => { 

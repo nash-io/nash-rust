@@ -3,7 +3,7 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::common::{
-    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify_ecdsa, verify_eddsa, Curve,
+    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify, Curve,
 };
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;
@@ -56,7 +56,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             .unwrap();
     c.bench_function("verify_k1", |b| {
         b.iter(|| {
-            verify_ecdsa(
+            verify(
                 black_box(&r_k1),
                 black_box(&s_k1),
                 black_box(&pk_k1),
@@ -73,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let pk_r1 = publickey_from_secretkey(&secret_key, Curve::Secp256r1).unwrap();
     c.bench_function("verify_r1", |b| {
         b.iter(|| {
-            verify_ecdsa(
+            verify(
                 black_box(&r_r1),
                 black_box(&s_r1),
                 black_box(&pk_r1),
@@ -89,11 +89,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     let msg_ed = BigInt::from_hex("72").unwrap();
     c.bench_function("verify_ed", |b| {
         b.iter(|| {
-            verify_eddsa(
+            verify(
                 black_box(&r_ed),
                 black_box(&s_ed),
                 black_box(&pk_ed),
                 black_box(&msg_ed),
+                black_box(Curve::Curve25519),
             );
         })
     });

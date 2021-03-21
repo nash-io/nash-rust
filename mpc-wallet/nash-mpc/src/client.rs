@@ -383,20 +383,17 @@ pub fn fill_rpool_curve25519(
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
         let own_dh_public = (&Ed25519Point::generator() * &own_dh_secrets[i])?;
-        match own_dh_public + other_dh_publics[i] {
-            Ok(r) => RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint())),
-            Err(_) => (),
+        if let Ok(r) = own_dh_public + other_dh_publics[i] {
+            RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint()))
         };
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
-        match Ed25519Point::generator() * &own_dh_secrets[i] {
-            Ok(v) => match v + other_dh_publics[i] {
-                Ok(r) => RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint())),
-                Err(_) => (),
-            },
-            Err(_) => (),
-        };
+        if let Ok(v) = Ed25519Point::generator() * &own_dh_secrets[i] {
+            if let Ok(r) = v + other_dh_publics[i] {
+                RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint()))
+            }
+        }
     });
     for i in &mut own_dh_secrets {
         i.zeroize();

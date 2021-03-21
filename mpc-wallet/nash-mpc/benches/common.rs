@@ -3,7 +3,8 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::common::{
-    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify, Curve,
+    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, verify,
+    Curve,
 };
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;
@@ -83,8 +84,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let r_ed = BigInt::from_hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da").unwrap();
-    let s_ed = BigInt::from_hex("085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00").unwrap();
+    let r_ed = BigInt::from_hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da")
+        .unwrap();
+    let s_ed = BigInt::from_hex("085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+        .unwrap();
     let pk_ed = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string();
     let msg_ed = BigInt::from_hex("72").unwrap();
     c.bench_function("verify_ed", |b| {

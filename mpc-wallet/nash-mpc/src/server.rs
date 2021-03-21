@@ -3,8 +3,7 @@
  */
 
 use crate::common::{
-    correct_key_proof_rho, eddsa_s_hash, verify, CorrectKeyProof, Curve,
-    PAILLIER_KEY_SIZE,
+    correct_key_proof_rho, eddsa_s_hash, verify, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE,
 };
 use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
@@ -230,7 +229,13 @@ pub fn complete_sig_eddsa(
     let s = (s_client + &s_server)?;
 
     // verify that the resulting signature is indeed valid
-    if verify(&r.to_bigint(), &s.to_bigint_le(), pk_str, msg, Curve::Curve25519) {
+    if verify(
+        &r.to_bigint(),
+        &s.to_bigint_le(),
+        pk_str,
+        msg,
+        Curve::Curve25519,
+    ) {
         Ok(s)
     } else {
         Err(NashMPCError::SignatureVerification)
@@ -249,7 +254,9 @@ fn correct_key_proof_sigma(paillier_sk: &DecryptionKey, rho: &[BigInt]) -> Vec<B
 
 /// decrypt ciphertext using Paillier
 pub fn decrypt(paillier_sk: &DecryptionKey, ciphertext: &BigInt) -> BigInt {
-    Paillier::decrypt(paillier_sk, &RawCiphertext::from(ciphertext)).0.into_owned()
+    Paillier::decrypt(paillier_sk, &RawCiphertext::from(ciphertext))
+        .0
+        .into_owned()
 }
 
 #[cfg(test)]
@@ -464,8 +471,16 @@ mod tests {
 
     #[test]
     fn test_rpool_ed_ok2() {
-        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
-        let dh_public = Ed25519Point::from_bigint(&BigInt::from_hex("1faf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163").unwrap()).unwrap();
+        let dh_secret: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
+                .unwrap(),
+        )
+        .unwrap();
+        let dh_public = Ed25519Point::from_bigint(
+            &BigInt::from_hex("1faf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163")
+                .unwrap(),
+        )
+        .unwrap();
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();
@@ -479,8 +494,16 @@ mod tests {
 
     #[test]
     fn test_rpool_ed_wrong_secret() {
-        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("0545c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
-        let dh_public = Ed25519Point::from_bigint(&BigInt::from_hex("1faf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163").unwrap()).unwrap();
+        let dh_secret: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("0545c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
+                .unwrap(),
+        )
+        .unwrap();
+        let dh_public = Ed25519Point::from_bigint(
+            &BigInt::from_hex("1faf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163")
+                .unwrap(),
+        )
+        .unwrap();
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();
@@ -494,8 +517,16 @@ mod tests {
 
     #[test]
     fn test_rpool_ed_wrong_public() {
-        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap()).unwrap();
-        let dh_public = Ed25519Point::from_bigint(&BigInt::from_hex("1eaf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163").unwrap()).unwrap();
+        let dh_secret: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("0445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
+                .unwrap(),
+        )
+        .unwrap();
+        let dh_public = Ed25519Point::from_bigint(
+            &BigInt::from_hex("1eaf3aeeb97fd19a65cab98ff5a4cf05d1189d92a42c6b385211ea3ae902c163")
+                .unwrap(),
+        )
+        .unwrap();
         let dh_secret_vec = vec![dh_secret.clone()];
         let dh_public_vec = vec![dh_public];
         let computed = compute_rpool_curve25519(&dh_secret_vec, &dh_public_vec).unwrap();

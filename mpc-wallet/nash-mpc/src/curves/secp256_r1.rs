@@ -1,7 +1,7 @@
 // NIST P-256/secp256r1 elliptic curve utility functions.
 
-use crate::NashMPCError;
 use super::traits::{ECPoint, ECScalar};
+use crate::NashMPCError;
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;

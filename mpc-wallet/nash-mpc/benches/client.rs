@@ -3,10 +3,12 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::client::{
-    compute_presig, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1, fill_rpool_secp256r1,
-    get_rpool_size, APIchildkeyCreator,
+    compute_presig, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1,
+    fill_rpool_secp256r1, get_rpool_size, APIchildkeyCreator,
 };
-use nash_mpc::common::{dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve};
+use nash_mpc::common::{
+    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, CorrectKeyProof, Curve,
+};
 use paillier_common::{EncryptionKey, MinimalEncryptionKey};
 use rust_bigint::traits::Converter;
 use rust_bigint::BigInt;
@@ -115,11 +117,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let (dh_secrets_ed, dh_publics_ed) = dh_init_curve25519(10).unwrap();
     c.bench_function("fill_rpool_curve25519", |b| {
         b.iter(|| {
-            fill_rpool_curve25519(
-                black_box(dh_secrets_ed.clone()),
-                black_box(&dh_publics_ed),
-            )
-            .unwrap();
+            fill_rpool_curve25519(black_box(dh_secrets_ed.clone()), black_box(&dh_publics_ed))
+                .unwrap();
         })
     });
 
@@ -128,7 +127,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             get_rpool_size(black_box(black_box(Curve::Curve25519))).unwrap();
         })
     });
-
 
     let msg_hash =
         BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
@@ -171,8 +169,11 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let api_childkey_creator3 =
-        APIchildkeyCreator::init_with_verified_paillier(&BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f").unwrap(), &paillier_pk);
+    let api_childkey_creator3 = APIchildkeyCreator::init_with_verified_paillier(
+        &BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
+            .unwrap(),
+        &paillier_pk,
+    );
     let api_childkey_ed = api_childkey_creator3
         .create_api_childkey(Curve::Curve25519)
         .unwrap();

@@ -1,8 +1,8 @@
 // secp256k1 elliptic curve utility functions.
 // based on MIT/Apache-licensed https://github.com/KZen-networks/curv/blob/master/src/elliptic/curves/secp256_k1.rs
 
-use crate::NashMPCError;
 use super::traits::{ECPoint, ECScalar};
+use crate::NashMPCError;
 use getrandom::getrandom;
 use rust_bigint::traits::{Converter, Modulo};
 use rust_bigint::BigInt;
@@ -120,10 +120,11 @@ impl ECScalar<SecretKey> for Secp256k1Scalar {
 
     fn invert(&self) -> Result<Secp256k1Scalar, NashMPCError> {
         // rust-secp256k1 does not support inverse (yet?). see https://github.com/rust-bitcoin/rust-secp256k1/issues/181
-        let scalar: Secp256k1Scalar = match ECScalar::from(&BigInt::mod_inv(&self.to_bigint(), &Secp256k1Scalar::q())) {
-            Ok(v) => v,
-            Err(_) => return Err(NashMPCError::ScalarArithmetic),
-        };
+        let scalar: Secp256k1Scalar =
+            match ECScalar::from(&BigInt::mod_inv(&self.to_bigint(), &Secp256k1Scalar::q())) {
+                Ok(v) => v,
+                Err(_) => return Err(NashMPCError::ScalarArithmetic),
+            };
         Ok(scalar)
     }
 

@@ -1,7 +1,7 @@
 // curve25519 utility functions
 
-use crate::NashMPCError;
 use super::traits::{ECPoint, ECScalar};
+use crate::NashMPCError;
 use curve25519_dalek::constants::{BASEPOINT_ORDER, ED25519_BASEPOINT_COMPRESSED};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 pub(crate) use curve25519_dalek::edwards::EdwardsPoint;
@@ -301,19 +301,28 @@ impl ECPoint<EdwardsPoint, Scalar> for Ed25519Point {
         // based on https://github.com/ZenGo-X/curv/blob/master/src/elliptic/curves/ed25519.rs#L553
         // helper function, based on https://ed25519.cr.yp.to/python/ed25519.py
         let d_n = -BigInt::from(121_665);
-        let d_d = expmod(&BigInt::from(121_666), &(Ed25519Scalar::q() - BigInt::from(2)), &Ed25519Scalar::q());
+        let d_d = expmod(
+            &BigInt::from(121_666),
+            &(Ed25519Scalar::q() - BigInt::from(2)),
+            &Ed25519Scalar::q(),
+        );
 
         let d_bn = d_n * d_d;
         let y_sqr = self.y_coor() * self.y_coor();
         let u = y_sqr.clone() - BigInt::one();
         let v = y_sqr * d_bn + BigInt::one();
-        let v_inv = expmod(&v, &(Ed25519Scalar::q() - BigInt::from(2)), &Ed25519Scalar::q());
+        let v_inv = expmod(
+            &v,
+            &(Ed25519Scalar::q() - BigInt::from(2)),
+            &Ed25519Scalar::q(),
+        );
 
         let x_sqr = u * v_inv;
         let q_plus_3_div_8 = (Ed25519Scalar::q() + BigInt::from(3)) / BigInt::from(8);
 
         let mut x = expmod(&x_sqr, &q_plus_3_div_8, &Ed25519Scalar::q());
-        if BigInt::mod_sub(&(x.clone() * x.clone()), &x_sqr, &Ed25519Scalar::q()) != BigInt::zero() {
+        if BigInt::mod_sub(&(x.clone() * x.clone()), &x_sqr, &Ed25519Scalar::q()) != BigInt::zero()
+        {
             let q_minus_1_div_4 = (Ed25519Scalar::q() - BigInt::from(3)) / BigInt::from(4);
             let i = expmod(&BigInt::from(2i32), &q_minus_1_div_4, &Ed25519Scalar::q());
             x = BigInt::mod_mul(&x, &i, &Ed25519Scalar::q());

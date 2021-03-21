@@ -261,6 +261,7 @@ pub fn decrypt(paillier_sk: &DecryptionKey, ciphertext: &BigInt) -> BigInt {
 
 #[cfg(test)]
 mod tests {
+    use crate::client::encrypt_secret_share;
     use crate::common::{publickey_from_secretkey, CorrectKeyProof, Curve, PAILLIER_KEY_SIZE};
     use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
     #[cfg(feature = "secp256k1")]
@@ -270,12 +271,14 @@ mod tests {
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
     use crate::curves::traits::{ECPoint, ECScalar};
     use crate::server::{
-        complete_sig_ecdsa, compute_rpool_curve25519, compute_rpool_secp256k1,
-        compute_rpool_secp256r1, correct_key_proof_sigma, generate_paillier_keypair,
+        complete_sig_ecdsa, complete_sig_eddsa, compute_rpool_curve25519, compute_rpool_secp256k1,
+        compute_rpool_secp256r1, correct_key_proof_sigma, decrypt, generate_paillier_keypair,
         generate_paillier_proof,
     };
-    use paillier_common::{DecryptionKey, MinimalDecryptionKey};
-    use rust_bigint::traits::{Converter, NumberTests};
+    use paillier_common::{
+        DecryptionKey, EncryptionKey, MinimalDecryptionKey, MinimalEncryptionKey,
+    };
+    use rust_bigint::traits::{Converter, NumberTests, Samplable};
     use rust_bigint::BigInt;
     use std::collections::HashMap;
 
@@ -827,7 +830,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_complete_sig_r1_wrong_curve() {
-        let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("d3542d07cda6034cf8568b68d69f07b716c98dcc466d7fb89d2a40db4addfe1402ac6007b609734c80fa4dd24f005cc2d404651f724561391fd2c714c054c5ecb98c0d367d5d99cddbd788489151daa247feef546ba173db02576793f2386c89a78e1cf0b1b5e3882efb709663c8fb50f3b973e87447bc0a473b792eeb9720ef").unwrap(), q: BigInt::from_hex("bf9f1abdcfd5f3e30a609ad469637eeadf068f67735c319cd0bfe3cb7ed915d93c33c77078762c3deab68fd66a46903a3241f84ccf827ac27faa339d12f4cf818732220b2a899660765a8554d8bc6490bc7490b7874fe1651dccd25b74bcdb5481e1d09bfe3ec6143c2f9bb2cf3658d514fc8c1e48a8e095b8a0f9fe94891f67").unwrap()});
+        let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("f5224238eb58e7e9110137d15753a98227098946c4718c59abcaf605a75f7ba25be1d54e8d8148ccdf065fb983333cd8c50d1b15f02b9ff23dc2b9eb252e1c2d85b92bfc60f7d66bd90401526c41e667ee13fd091ae5494e400b69102e9b89a7381df173d405d639d9ca8bf65f4ef78816d49557b65b3454835b5aca4effde3f").unwrap(), q: BigInt::from_hex("de71f3c03b667175de7e02d020a662819b269f5521a8aae5b75e9c28d1caf04cd3c1eb0db647ebb2521b001c6e6e477632d0647990f95cb7fdf669c12893f21c2253a3fdd1e47055d5ea364fa52fe9f951f7242354cae0748f1eeb3047325d8422db9d54d5da0f7e19be20612576c598fc763103e6be2e3b6d8e5fb0874c402f").unwrap()});
         let presig = BigInt::from_hex("3a4f82ec76b17ddfc10b15878713cc31fe914674a36b834da70215670d19997a56db6fa8b38fbdb2672a73aafcb4ba7162f35b1ccc0474622f2d2a50406fcd8cfbbca0ad6adaf3bd6c8d574393a8cca548e88f93383d426bb634a390f21014562ca45c2b739b270e65760ef43fc28fa207bfe6e7e159f8f943e66606037814586d512057c0036e98e6b9e2432723c9b86eb6ecc43def1fd8d608ba8334872be86659690bb10e7da72dcc18df5f316b2e6fc0ff37b351cca3510f48b50053c7de638ebbded1a2bc34ff130ad8df98e7353fb6c9be6893bd6d6fa1b07eb79a0bf815fe6e611ec7c99564b7acca2d7266d7de64b3e7fb4911638c0cda8b5c7896f261971e7a6bb04bca5ff6bb80153aed189d62d899d88727778b12e6d9b6d49b0af2dd5bbcc57a8950cd02a5f993bebcf85eeb3ca36179166b52a188870777dcb6d67d707c07f013c035e33c49e76b91389dabc681d04928bfc27be1acea29c61087caf6f8675c1ef572275d5e724e8ed7dea616d2058ba07a7f261622a7479c2bb63bea79956f7b84202e740a1ff0ddaff3500dfa6ab2dfafd2aa0a3a20629f71ebdeb1328d71ecb4301a95f98ee3b82c87eb286138f30f947ccaa9a1bf042ed829b89550455e2fae3fbc8d7803dc53e6565dc3999d2c739c568e80175e15e4d7e5679cce42fd86f44c7b5c87cccceb7a4f8cbda1ce87f3e3f38beb516f2cf737").unwrap();
         let r =
             BigInt::from_hex("030a3ec2711ae5dc9e71711dc4d6bf2beb755be5639a9ce1854e258c4c44921fff")
@@ -846,5 +849,209 @@ mod tests {
             BigInt::from_hex("000000000000000fffffffffffffffffff00000000000000ffffffffff000000")
                 .unwrap();
         complete_sig_ecdsa(&paillier_sk, &presig, &r, &k, curve, &pk, &msg_hash).unwrap();
+    }
+
+    #[test]
+    fn test_complete_sig_ed_ok() {
+        let presig =
+            BigInt::from_hex("2740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("62b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("e87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("7bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+
+        let s = complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+        assert_eq!(
+            s.to_bigint(),
+            BigInt::from_hex("9ecd92333ecb5a583ed29c5d0f2edc0edcf4f764c3e3052aca38e47fa58d254")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_complete_sig_ed_wrong_presig() {
+        let presig =
+            BigInt::from_hex("3740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("62b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("e87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("7bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+        complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_complete_sig_ed_wrong_r() {
+        let presig =
+            BigInt::from_hex("2740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("72b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("e87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("7bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+        complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_complete_sig_ed_wrong_rserver() {
+        let presig =
+            BigInt::from_hex("2740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("62b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("f87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("7bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+        complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_complete_sig_ed_wrong_pk() {
+        let presig =
+            BigInt::from_hex("2740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("62b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("e87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("5794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("7bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+        complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_complete_sig_ed_wrong_msg() {
+        let presig =
+            BigInt::from_hex("2740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("62b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("e87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("78656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("7bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+        complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_complete_sig_ed_wrong_server_secret_share() {
+        let presig =
+            BigInt::from_hex("2740195192ba947a62b37be9525003c6a385e69c35ef91b8b86941bc37444b1")
+                .unwrap();
+        let r =
+            BigInt::from_hex("62b0f78af06ffd806f67ea5ea3343d911b64867c742414e8392828fbad916d4a")
+                .unwrap();
+        let r_server: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("e87ec7328517faca931a92d09e551db14911a6c5115ef63e7492fac252c9996")
+                .unwrap(),
+        )
+        .unwrap();
+        let pk = publickey_from_secretkey(
+            &BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap(),
+            Curve::Curve25519,
+        )
+        .unwrap();
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let server_secret_share =
+            BigInt::from_hex("8bb318b1591d8c740278482177a80505c1f9f0ffed7cc4df11bbc2b3402ebdd")
+                .unwrap();
+        complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
+    }
+
+    #[test]
+    fn test_decrypt() {
+        let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("aaf5dec1e72c1515d8ca94a707f7e4fba2907dd555705258ea6c44bab8652106a2ad88d46ac93a686a69c44e94c1e8a280569f5209c809ebafbc089dc248559fb142d7813e6c855623775001f331173bd839371210089c81beb1aba7373a34fe61c58252efcd385393aa1ce4ce8652032337b1da1df407b53a97da8430d74d2746d18692c123359606722ef5ee85f0bf64c4d9f9a88aea4e9cb43fb6daf642b655d987dd5060179edb08d70bce97e3d3aacd5ce769e3aa15c0e5e2d07b3a49e358979dfeb9f2429892365379c9a6e4bec7364677026f69bcdcf9fd71d1e724756e1dc039bf1c7be41deaa4a0acc1f7940f5d95b6ee3e23dd17167806cd692ec9").unwrap()});
+        let paillier_sk = DecryptionKey::from(MinimalDecryptionKey{p: BigInt::from_hex("c47e071f38e0872003bb84cdda7438d00763b58aebf3ba5140f7b24a040fb277ec891da048eb25c967565eeb9d04da4ca208252538da40d63b7bd26c68c6c3d46b0f4acdb7ba02c075234d6d78b385096c6228f0c2b71837251957a6254fc95e9875ca062082ef56808a744f0a106d78497f301dc658619db72f764493397d4f").unwrap(), q: BigInt::from_hex("debc5dd807d034a97145c758e4f1c7c708a630dc32b76533669884e8672e6133104a65822a744037051e1896bf4db7bd1f00a9c87fe7a4f6674d5f11817c001ccd87601a01cd36113834798fe7daf1b90a6d34295818313ace5e67a2f19bd6c28fa8d6b3045e9c539e655a7a52718e1ccbf3b351ca7b19f6b018b1cc57b2fc67").unwrap()});
+        let secret = BigInt::sample(256);
+        let secret_encrypted = encrypt_secret_share(&paillier_pk, &secret);
+        assert_ne!(secret, secret_encrypted);
+        assert_eq!(secret, decrypt(&paillier_sk, &secret_encrypted));
     }
 }

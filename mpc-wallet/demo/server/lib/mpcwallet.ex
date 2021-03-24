@@ -167,6 +167,20 @@ defmodule Server.MPCwallet do
 
 
   @doc ~S"""
+  Retrieve number of values in an rpool.
+
+  ## Parameters
+
+      - curve: Secp256k1, Secp256r1, or Curve25519
+
+  ## Returns
+
+      - size: number of values in the rpool.
+
+  """
+  def get_rpool_size(_curve), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc ~S"""
   Initialize API childkey creation by setting the full secret key.
 
   ## Parameters

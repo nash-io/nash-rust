@@ -404,12 +404,12 @@ pub fn fill_rpool_curve25519(
 /// get number of r-values in pool
 pub fn get_rpool_size(curve: Curve) -> Result<usize, NashMPCError> {
     // We decided to use crossbeam-queue instead of IndexMap/IndexSet for performance reasons.
-    // The server expires pool values after 72 hours. IndexMap/IndexSet provides a retain()
+    // The server expires pool values after some time. IndexMap/IndexSet provides a retain()
     // function that allows the client to delete old values as well. Unfortunately, crossbeam-queue
-    // does not provide such functionality. So long-time (>72h) idling clients, if those exist,
-    // may try to use invalid pool values if they decided to wake up. In that case the server
-    // would fail to complete a signature (because it cannot find the pool value because it has
-    // deleted it already).
+    // does not provide such functionality. So long-time idling clients, if those exist at all,
+    // may try to use invalid pool values if they decided to wake up at some point. In that case
+    // the server would fail to complete a signature (because it cannot find the pool value
+    // because it has deleted it already).
     if curve == Curve::Secp256k1 {
         Ok(RPOOL_SECP256K1.len())
     } else if curve == Curve::Secp256r1 {
@@ -422,7 +422,10 @@ pub fn get_rpool_size(curve: Curve) -> Result<usize, NashMPCError> {
 }
 
 /// encrypt server secret share under paillier public key
-pub fn encrypt_secret_share(paillier_pk: &EncryptionKey, server_secret_share: &BigInt) -> BigInt {
+pub(crate) fn encrypt_secret_share(
+    paillier_pk: &EncryptionKey,
+    server_secret_share: &BigInt,
+) -> BigInt {
     let mut paillier_randomness = Randomness::sample(paillier_pk);
     let server_encrypted_secret_share = Paillier::encrypt_with_chosen_randomness(
         paillier_pk,

@@ -135,5 +135,5 @@ fn test_integration_ed() {
         &msg,
     )
     .unwrap();
-    assert!(verify(&r, &s.to_bigint_le(), &pk, &msg, Curve::Curve25519));
+    assert!(verify(&r, &s, &pk, &msg, Curve::Curve25519));
 }

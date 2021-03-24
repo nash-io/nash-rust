@@ -210,7 +210,7 @@ pub fn complete_sig_eddsa(
     mut r_server: Ed25519Scalar,
     pk_str: &str,
     msg: &BigInt,
-) -> Result<Ed25519Scalar, NashMPCError> {
+) -> Result<BigInt, NashMPCError> {
     let mut server_secret_share: Ed25519Scalar = ECScalar::from(&server_secret_share_int)?;
     server_secret_share_int.zeroize_bn();
     let s_client: Ed25519Scalar = ECScalar::from(&presig)?;
@@ -226,16 +226,11 @@ pub fn complete_sig_eddsa(
     r_server.zeroize();
 
     // combine the two individual s values into one to get the full signature (R, S)
-    let s = (s_client + &s_server)?;
+    let s_scalar = (s_client + &s_server)?;
+    let s = s_scalar.to_bigint_le();
 
     // verify that the resulting signature is indeed valid
-    if verify(
-        &r.to_bigint(),
-        &s.to_bigint_le(),
-        pk_str,
-        msg,
-        Curve::Curve25519,
-    ) {
+    if verify(&r.to_bigint(), &s, pk_str, msg, Curve::Curve25519) {
         Ok(s)
     } else {
         Err(NashMPCError::SignatureVerification)
@@ -877,8 +872,8 @@ mod tests {
 
         let s = complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pk, &msg).unwrap();
         assert_eq!(
-            s.to_bigint(),
-            BigInt::from_hex("9ecd92333ecb5a583ed29c5d0f2edc0edcf4f764c3e3052aca38e47fa58d254")
+            s,
+            BigInt::from_hex("54d258fa478ea3ac52303e4c764fcfedc0edf2d0c529ed83a5b5ec3323d9ec09")
                 .unwrap()
         );
     }

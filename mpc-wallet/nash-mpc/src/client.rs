@@ -422,7 +422,7 @@ pub fn get_rpool_size(curve: Curve) -> Result<usize, NashMPCError> {
 }
 
 /// encrypt server secret share under paillier public key
-pub(crate) fn encrypt_secret_share(
+pub fn encrypt_secret_share(
     paillier_pk: &EncryptionKey,
     server_secret_share: &BigInt,
 ) -> BigInt {

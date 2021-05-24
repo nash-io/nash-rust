@@ -1,6 +1,7 @@
 //! Share protocol logic for structuring GraphQL requests and parsing responses
 
 use crate::errors::{ProtocolError, Result};
+use thiserror::Error;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
@@ -166,12 +167,13 @@ impl<T> DataResponse<T> {
 }
 
 /// Inner wrapper on error GraphQL response data
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, Error)]
+#[error("")]
 pub struct ErrorResponse {
     pub errors: Vec<Error>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Error {
     pub message: String,
 }

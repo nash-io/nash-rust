@@ -5,7 +5,7 @@ pub mod exchange;
 pub mod keys;
 
 pub use blockchain::{eth, neo, AssetOrCrosschain, Prefix, PublicKey};
-pub use exchange::{
+pub use self::exchange::{
     AccountTradeSide,
     Amount,
     Asset,

@@ -8,3 +8,5 @@ pub mod graphql;
 pub mod protocol;
 pub mod types;
 pub mod utils;
+
+mod convert;

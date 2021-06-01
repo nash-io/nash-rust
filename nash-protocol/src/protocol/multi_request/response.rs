@@ -4,20 +4,34 @@ use serde::de::{self, MapAccess, Visitor};
 use serde_json::{Value, Map};
 use serde::Deserialize;
 use crate::protocol::multi_request::MultiResponse;
+use crate::errors::Result;
 
 pub struct ResponseData<T> {
-    pub responses: Vec<T>
+    pub responses: Vec<Result<T>>
+}
+
+impl<T> From<Vec<T>> for ResponseData<T> {
+    fn from(from: Vec<T>) -> Self {
+        Self { responses: from.into_iter().map(|x| Ok(x)).collect() }
+    }
 }
 
 impl<T, U: From<T>> From<ResponseData<T>> for MultiResponse<U> {
     fn from(response: ResponseData<T>) -> Self {
-        let responses = response.responses.into_iter().map(|x| x.into()).collect();
+        let responses = response
+            .responses
+            .into_iter()
+            .map(|r|
+                r.map(|x|
+                    x.into()
+                )
+            ).collect();
         Self { responses }
     }
 }
 
-impl<T> From<Vec<T>> for ResponseData<T> {
-    fn from(responses: Vec<T>) -> Self {
+impl<T> From<Vec<Result<T>>> for ResponseData<T> {
+    fn from(responses: Vec<Result<T>>) -> Self {
         Self { responses }
     }
 }
@@ -45,7 +59,7 @@ impl<'de, U: for <'a> Deserialize<'a>, T: From<Vec<U>>> Visitor<'de> for Respons
         formatter.write_str("Expected multiple responses")
     }
 
-    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
         where A: MapAccess<'de> {
         let mut responses = Vec::new();
         while let Some((_, value)) = map.next_entry::<String, Value>()? {

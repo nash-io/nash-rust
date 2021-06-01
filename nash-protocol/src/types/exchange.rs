@@ -282,6 +282,7 @@ impl Market {
 /// Buy or sell type for Nash protocol. We don't use the one generated automatically
 /// from the GraphQL schema as it does not implement necessary traits like Clone
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BuyOrSell {
     Buy,
     Sell,
@@ -289,6 +290,7 @@ pub enum BuyOrSell {
 
 /// Type of order execution in Nash ME
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderType {
     Market,
     Limit,
@@ -533,7 +535,8 @@ pub struct DateTimeRange {
 }
 
 /// Status of an order on Nash
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderStatus {
     Pending,
     Open,

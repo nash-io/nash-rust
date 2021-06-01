@@ -7,6 +7,7 @@ use crate::graphql::cancel_order;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 use std::sync::Arc;
+use serde::{Serialize, Deserialize};
 
 /// Request to cancel a single order in a given market. Note: to prove orders have been canceled,
 /// the client must sign and sync nonces on the assets in question.
@@ -17,7 +18,8 @@ pub struct CancelOrderRequest {
 }
 
 /// Response contains the order id of the canceled order if successful
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct CancelOrderResponse {
     pub order_id: String,
 }

@@ -9,6 +9,7 @@ use super::traits::TryFromState;
 use super::state::State;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use std::collections::HashMap;
 
 //****************************************//
 //  GraphQL response parsing              //
@@ -165,15 +166,36 @@ impl<T> DataResponse<T> {
     }
 }
 
-/// Inner wrapper on error GraphQL response data
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GraphQLResponse {
+    #[serde(default)]
+    pub data: HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub errors: Vec<Error>
+}
+
+impl TryFrom<serde_json::Value> for GraphQLResponse {
+    type Error = ProtocolError;
+    fn try_from(response: serde_json::Value) -> Result<Self> {
+        serde_json::from_value(response).map_err(|e|
+            ProtocolError::coerce_static_from_str(
+                &format!("Couldn't parse response: {:#?}", e)
+            )
+        )
+    }
+}
+
+/// GraphQL response data errors
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ErrorResponse {
     pub errors: Vec<Error>,
 }
 
+/// Inner wrapper on error GraphQL response data
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Error {
     pub message: String,
+    pub path: Vec<String>
 }
 
 //****************************************//

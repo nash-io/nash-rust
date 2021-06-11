@@ -48,7 +48,11 @@ impl<T: for<'de> Deserialize<'de>> TryFrom<serde_json::Value> for MultiResponse<
             .data
             .into_iter()
             .collect();
-        responses.sort_by(|(a, _), (b, _)| a.cmp(b));
+        responses.sort_by(|(a, _), (b, _)| {
+            let a: i32 = a[8..].parse().unwrap();
+            let b: i32 = b[8..].parse().unwrap();
+            a.partial_cmp(&b).unwrap()
+        });
         let responses = responses
             .into_iter()
             .map(|(path, value)| {

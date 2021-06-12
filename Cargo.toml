@@ -9,4 +9,5 @@ exclude = [
 "mpc-wallet/mpc-wallet-wasm",
 "mpc-wallet/mpc-wallet-elixir",
 "mpc-wallet/mpc-wallet-nodejs/native",
+"mpc-wallet/mpc-wallet-nodejs-win/native",
 ]

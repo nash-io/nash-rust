@@ -3,15 +3,17 @@
  */
 
 use crate::common::{
-    correct_key_proof_rho, publickey_from_secretkey, CorrectKeyProof, Curve, CORRECT_KEY_M,
+    correct_key_proof_rho, eddsa_s_hash, eddsa_signingkey_from_secretkey, publickey_from_secretkey,
+    CorrectKeyProof, Curve, CORRECT_KEY_M,
 };
+use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
 use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
-use chrono::prelude::{DateTime, Utc};
+use crate::NashMPCError;
 use crossbeam_queue::SegQueue;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
@@ -28,8 +30,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rust_bigint::traits::{Converter, Modulo, Samplable, ZeroizeBN};
 use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct APIchildkeyCreator {
@@ -72,7 +73,7 @@ impl APIchildkeyCreator {
         self,
         paillier_pk: &EncryptionKey,
         correct_key_proof: &CorrectKeyProof,
-    ) -> Result<APIchildkeyCreator, ()> {
+    ) -> Result<APIchildkeyCreator, NashMPCError> {
         verify_correct_key_proof(correct_key_proof, &paillier_pk.n)?;
         Ok(APIchildkeyCreator {
             secret_key: self.secret_key,
@@ -85,35 +86,31 @@ impl APIchildkeyCreator {
     ///        - the client is trusted, and
     ///        - we don't allow rekeying.
     /// we do this to facilitate fast api childkey creation (as we can skip the range proof entirely).
-    pub fn create_api_childkey(self, curve: Curve) -> Result<APIchildkey, ()> {
-        match self.paillier_pk.clone() {
-            Some(val) => val,
-            None => return Err(()),
+    pub fn create_api_childkey(self, curve: Curve) -> Result<APIchildkey, NashMPCError> {
+        if self.paillier_pk.is_none() {
+            return Err(NashMPCError::PaillierVerification);
         };
         if curve == Curve::Secp256k1 {
             let random = match Secp256k1Scalar::new_random() {
                 Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::Random),
             };
             // client's secret share is set to the full secret key
             let secret_key = match ECScalar::from(&self.secret_key) {
                 Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarInvalid),
             };
-            let rand_inv = match random.invert() {
-                Ok(v) => v,
-                Err(_) => return Err(()),
-            };
+            let rand_inv = random.invert()?;
             let client_secret_share = match rand_inv * secret_key.deref() {
                 Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarArithmetic),
             };
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_bigint();
             let public_key =
                 publickey_from_secretkey(&self.secret_key, curve).expect("Invalid curve");
             let server_secret_share_encrypted =
-                encrypt_secret_share(&self.paillier_pk.clone().unwrap(), &server_secret_share);
+                encrypt_secret_share(&self.paillier_pk.as_ref().unwrap(), &server_secret_share);
             server_secret_share.zeroize_bn();
             Ok(APIchildkey {
                 paillier_pk: self.paillier_pk.unwrap(),
@@ -124,27 +121,24 @@ impl APIchildkeyCreator {
         } else if curve == Curve::Secp256r1 {
             let random = match Secp256r1Scalar::new_random() {
                 Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::Random),
             };
             // client's secret share is set to the full secret key
             let secret_key = match ECScalar::from(&self.secret_key) {
                 Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarInvalid),
             };
-            let rand_inv = match random.invert() {
-                Ok(v) => v,
-                Err(_) => return Err(()),
-            };
+            let rand_inv = random.invert()?;
             let client_secret_share = match rand_inv * secret_key.deref() {
                 Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-                Err(_) => return Err(()),
+                Err(_) => return Err(NashMPCError::ScalarArithmetic),
             };
             // server's secret share is set to random * 1
             let mut server_secret_share = random.to_bigint();
             let public_key =
                 publickey_from_secretkey(&self.secret_key, curve).expect("Invalid curve");
             let server_secret_share_encrypted =
-                encrypt_secret_share(&self.paillier_pk.clone().unwrap(), &server_secret_share);
+                encrypt_secret_share(&self.paillier_pk.as_ref().unwrap(), &server_secret_share);
             server_secret_share.zeroize_bn();
             Ok(APIchildkey {
                 paillier_pk: self.paillier_pk.unwrap(),
@@ -152,78 +146,123 @@ impl APIchildkeyCreator {
                 client_secret_share: client_secret_share.to_bigint(),
                 server_secret_share_encrypted,
             })
+        // EdDSA/Ed25519 API keys could be generated without any Paillier key at all, but we
+        // decided to encrypt the server secret share. This makes key generation slower, but
+        // facilitates to generate API keys on an air-gapped, trusted device and move that
+        // keys to some untrusted device without risking to leak secret key material.
+        } else if curve == Curve::Curve25519 {
+            let signing_key = match eddsa_signingkey_from_secretkey(&self.secret_key) {
+                Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+                Err(_) => return Err(NashMPCError::ScalarInvalid),
+            };
+            let public_key = publickey_from_secretkey(&self.secret_key, Curve::Curve25519)
+                .expect("Invalid curve");
+            // client's secret share is just some random value
+            let client_secret_share = match Ed25519Scalar::new_random() {
+                Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+                Err(_) => return Err(NashMPCError::Random),
+            };
+            // compute additive server secret share, i.e., full secret = client secret share + server secret share % L
+            let mut server_secret_share_bytes =
+                *(signing_key.fe - client_secret_share.fe).as_bytes();
+            server_secret_share_bytes.reverse();
+            let server_secret_share_encrypted = encrypt_secret_share(
+                &self.paillier_pk.as_ref().unwrap(),
+                &BigInt::from_bytes(&server_secret_share_bytes),
+            );
+            server_secret_share_bytes.zeroize();
+            // FIXME: we don't need paillier_pk at all, and server_secret_share_encrypted does not need to be part of the api key
+            Ok(APIchildkey {
+                paillier_pk: self.paillier_pk.unwrap(),
+                public_key,
+                client_secret_share: client_secret_share.to_bigint(),
+                server_secret_share_encrypted,
+            })
         } else {
-            Err(())
+            Err(NashMPCError::CurveInvalid)
         }
     }
 }
 
-/// compute presignature
+/// compute presignature. in case of ECDSA msg = hash of message, in case of EdDSA/Ed25519 msg = full message
 pub fn compute_presig(
     api_childkey: &APIchildkey,
-    msg_hash: &BigInt,
+    msg: &BigInt,
     curve: Curve,
-) -> Result<(BigInt, BigInt), ()> {
-    let rx: BigInt;
-    let q: BigInt;
-    let mut k: BigInt;
-    let r: BigInt;
+) -> Result<(BigInt, BigInt), NashMPCError> {
     if curve == Curve::Secp256k1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256K1.pop() {
             Option::Some(val) => val,
-            Option::None => return Err(()),
+            Option::None => return Err(NashMPCError::Pool),
         };
-        k = (pool_entry.1).1.clone();
-        (pool_entry.1).1.zeroize_bn();
-        r = pool_entry.0;
-        let r_point = match Secp256k1Point::from_bigint(&r) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        q = Secp256k1Scalar::q();
-        rx = r_point.x_coor().mod_floor(&q);
+        let k = (pool_entry.1).clone();
+        (pool_entry.1).zeroize_bn();
+        let r = pool_entry.0;
+        let r_point = Secp256k1Point::from_bigint(&r)?;
+        let q = Secp256k1Scalar::q();
+        let rx = r_point.x_coor().mod_floor(&q);
+        let c3 = compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k)?;
+        Ok((c3, r))
     } else if curve == Curve::Secp256r1 {
         // get and remove random value r and k from rpool
         let mut pool_entry = match RPOOL_SECP256R1.pop() {
             Option::Some(val) => val,
-            Option::None => return Err(()),
+            Option::None => return Err(NashMPCError::Pool),
         };
-        k = (pool_entry.1).1.clone();
-        (pool_entry.1).1.zeroize_bn();
-        r = pool_entry.0;
-        let r_point = match Secp256r1Point::from_bigint(&r) {
-            Ok(v) => v,
-            Err(_) => return Err(()),
+        let k = (pool_entry.1).clone();
+        (pool_entry.1).zeroize_bn();
+        let r = pool_entry.0;
+        let r_point = Secp256r1Point::from_bigint(&r)?;
+        let q = Secp256r1Scalar::q();
+        let rx = r_point.x_coor().mod_floor(&q);
+        let c3 = compute_ecdsa_presig_curveindependent(api_childkey, msg, &rx, &q, k)?;
+        Ok((c3, r))
+    } else if curve == Curve::Curve25519 {
+        // fetch and remove random value R and r_client from pool
+        let mut pool_entry = match RPOOL_CURVE25519.pop() {
+            Option::Some(val) => val,
+            Option::None => return Err(NashMPCError::Pool),
         };
-        q = Secp256r1Scalar::q();
-        rx = r_point.x_coor().mod_floor(&q);
+        let mut r_client: Ed25519Scalar = ECScalar::from(&pool_entry.1)?;
+        (pool_entry.1).zeroize_bn();
+        let r = Ed25519Point::from_bigint(&pool_entry.0)?;
+
+        let pk = Ed25519Point::from_hex(&api_childkey.public_key)?;
+        let mut client_secret_share: Ed25519Scalar =
+            ECScalar::from(&api_childkey.client_secret_share)?;
+        let hash: Ed25519Scalar = eddsa_s_hash(&r, &pk, msg)?;
+
+        // compute client part of S
+        let mut tmp = (&hash * &client_secret_share)?;
+        client_secret_share.zeroize();
+        let s_client = (&r_client + &tmp)?;
+        tmp.zeroize();
+        r_client.zeroize();
+        Ok((s_client.to_bigint(), r.to_bigint()))
     } else {
-        return Err(());
+        Err(NashMPCError::CurveInvalid)
     }
-    // get and remove random value for Paillier from pool
-    let mut rn = match POOL_PAILLIER.pop() {
-        Option::Some(val) => val,
-        Option::None => return Err(()),
-    };
-    let c3 = compute_presig_curveindependent(api_childkey, msg_hash, &rx, &q, &k, &rn);
-    k.zeroize_bn();
-    rn.zeroize_bn();
-    Ok((c3, r))
 }
 
-fn compute_presig_curveindependent(
+fn compute_ecdsa_presig_curveindependent(
     api_childkey: &APIchildkey,
     msg_hash: &BigInt,
     rx: &BigInt,
     q: &BigInt,
-    k: &BigInt,
-    rn: &BigInt,
-) -> BigInt {
+    mut k: BigInt,
+) -> Result<BigInt, NashMPCError> {
     let rho = BigInt::sample_below(&q.pow(2u32));
-    let mut k_inv = BigInt::mod_inv(k, q);
+    let mut k_inv = BigInt::mod_inv(&k, q);
+    k.zeroize_bn();
     let partial_sig = rho * q + BigInt::mod_mul(&k_inv, msg_hash, q);
+    // get and remove random value for Paillier from pool
+    let mut rn = match POOL_PAILLIER.pop() {
+        Option::Some(val) => val,
+        Option::None => return Err(NashMPCError::Pool),
+    };
     let mut rn_ = PrecomputedRandomness(rn.clone());
+    rn.zeroize_bn();
     let c1 = Paillier::encrypt_with_chosen_randomness(
         &api_childkey.paillier_pk,
         RawPlaintext::from(partial_sig),
@@ -241,16 +280,17 @@ fn compute_presig_curveindependent(
         RawCiphertext::from(&api_childkey.server_secret_share_encrypted),
         RawPlaintext::from(v),
     );
-    Paillier::add(&api_childkey.paillier_pk, c2, c1)
+    Ok(Paillier::add(&api_childkey.paillier_pk, c2, c1)
         .0
-        .into_owned()
+        .into_owned())
 }
 
-// two pools of r-values (one for each curve) and one pool of random values for Paillier.
+// four pools of r-values (one for each curve) and one pool of random values for Paillier.
 // mutex is essential for security (helps us ensuring that no value is used twice).
 lazy_static! {
-    static ref RPOOL_SECP256R1: SegQueue<(BigInt, (DateTime<Utc>, BigInt))> = SegQueue::new();
-    static ref RPOOL_SECP256K1: SegQueue<(BigInt, (DateTime<Utc>, BigInt))> = SegQueue::new();
+    static ref RPOOL_SECP256R1: SegQueue<(BigInt, BigInt)> = SegQueue::new();
+    static ref RPOOL_SECP256K1: SegQueue<(BigInt, BigInt)> = SegQueue::new();
+    static ref RPOOL_CURVE25519: SegQueue<(BigInt, BigInt)> = SegQueue::new();
     static ref POOL_PAILLIER: SegQueue<BigInt> = SegQueue::new();
 }
 
@@ -278,21 +318,21 @@ pub fn fill_rpool_secp256r1(
     mut own_dh_secrets: Vec<Secp256r1Scalar>,
     other_dh_publics: &[Secp256r1Point],
     paillier_pk: &EncryptionKey,
-) -> Result<(), ()> {
+) -> Result<(), NashMPCError> {
     if own_dh_secrets.len() != other_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
         if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            RPOOL_SECP256R1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+            RPOOL_SECP256R1.push((r.to_bigint(), own_dh_secrets[i].to_bigint()));
         }
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
         if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            RPOOL_SECP256R1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+            RPOOL_SECP256R1.push((r.to_bigint(), own_dh_secrets[i].to_bigint()));
         }
     });
     for i in &mut own_dh_secrets {
@@ -307,21 +347,21 @@ pub fn fill_rpool_secp256k1(
     mut own_dh_secrets: Vec<Secp256k1Scalar>,
     other_dh_publics: &[Secp256k1Point],
     paillier_pk: &EncryptionKey,
-) -> Result<(), ()> {
+) -> Result<(), NashMPCError> {
     if own_dh_secrets.len() != other_dh_publics.len() {
-        return Err(());
+        return Err(NashMPCError::DHlen);
     }
     // sequentially for wasm, else parallel
     #[cfg(feature = "wasm")]
     for i in 0..own_dh_secrets.len() {
         if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            RPOOL_SECP256K1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+            RPOOL_SECP256K1.push((r.to_bigint(), own_dh_secrets[i].to_bigint()));
         }
     }
     #[cfg(not(feature = "wasm"))]
     (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
         if let Ok(r) = other_dh_publics[i].scalar_mul(&own_dh_secrets[i].fe) {
-            RPOOL_SECP256K1.push((r.to_bigint(), (Utc::now(), own_dh_secrets[i].to_bigint())));
+            RPOOL_SECP256K1.push((r.to_bigint(), own_dh_secrets[i].to_bigint()));
         };
     });
     for i in &mut own_dh_secrets {
@@ -331,32 +371,61 @@ pub fn fill_rpool_secp256k1(
     Ok(())
 }
 
+/// fill pool of random and nonce values for curve25519
+pub fn fill_rpool_curve25519(
+    mut own_dh_secrets: Vec<Ed25519Scalar>,
+    other_dh_publics: &[Ed25519Point],
+) -> Result<(), NashMPCError> {
+    if own_dh_secrets.len() != other_dh_publics.len() {
+        return Err(NashMPCError::DHlen);
+    }
+    // sequentially for wasm, else parallel
+    #[cfg(feature = "wasm")]
+    for i in 0..own_dh_secrets.len() {
+        let own_dh_public = (&Ed25519Point::generator() * &own_dh_secrets[i])?;
+        if let Ok(r) = own_dh_public + other_dh_publics[i] {
+            RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint()))
+        };
+    }
+    #[cfg(not(feature = "wasm"))]
+    (0..own_dh_secrets.len()).into_par_iter().for_each(|i| {
+        if let Ok(v) = Ed25519Point::generator() * &own_dh_secrets[i] {
+            if let Ok(r) = v + other_dh_publics[i] {
+                RPOOL_CURVE25519.push((r.to_bigint(), own_dh_secrets[i].to_bigint()))
+            }
+        }
+    });
+    for i in &mut own_dh_secrets {
+        i.zeroize();
+    }
+    Ok(())
+}
+
 /// get number of r-values in pool
-pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
-    // FIXME: Talk to Ethan about this
+pub fn get_rpool_size(curve: Curve) -> Result<usize, NashMPCError> {
+    // We decided to use crossbeam-queue instead of IndexMap/IndexSet for performance reasons.
+    // The server expires pool values after some time. IndexMap/IndexSet provides a retain()
+    // function that allows the client to delete old values as well. Unfortunately, crossbeam-queue
+    // does not provide such functionality. So long-time idling clients, if those exist at all,
+    // may try to use invalid pool values if they decided to wake up at some point. In that case
+    // the server would fail to complete a signature (because it cannot find the pool value
+    // because it has deleted it already).
     if curve == Curve::Secp256k1 {
-        // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
-        /*RPOOL_SECP256K1
-            .lock()
-            .unwrap()
-            .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
-        Ok(RPOOL_SECP256K1.lock().unwrap().len())*/
         Ok(RPOOL_SECP256K1.len())
     } else if curve == Curve::Secp256r1 {
-        // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
-        /*RPOOL_SECP256R1
-            .lock()
-            .unwrap()
-            .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
-        Ok(RPOOL_SECP256R1.len())*/
         Ok(RPOOL_SECP256R1.len())
+    } else if curve == Curve::Curve25519 {
+        Ok(RPOOL_CURVE25519.len())
     } else {
-        Err(())
+        Err(NashMPCError::CurveInvalid)
     }
 }
 
 /// encrypt server secret share under paillier public key
-pub fn encrypt_secret_share(paillier_pk: &EncryptionKey, server_secret_share: &BigInt) -> BigInt {
+pub fn encrypt_secret_share(
+    paillier_pk: &EncryptionKey,
+    server_secret_share: &BigInt,
+) -> BigInt {
     let mut paillier_randomness = Randomness::sample(paillier_pk);
     let server_encrypted_secret_share = Paillier::encrypt_with_chosen_randomness(
         paillier_pk,
@@ -371,26 +440,29 @@ pub fn encrypt_secret_share(paillier_pk: &EncryptionKey, server_secret_share: &B
 
 /// verify proof of correct paillier key generation
 /// see paper "Efficient Noninteractive Certification of RSA Moduli and Beyond" by Goldberg et al. 2019 Section 3.2 and Appendix C.4
-fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> Result<(), ()> {
+fn verify_correct_key_proof(
+    correct_key_proof: &CorrectKeyProof,
+    n: &BigInt,
+) -> Result<(), NashMPCError> {
     let sigma = &correct_key_proof.sigma_vec;
     // product of all primes < 6370 (alpha)
     let primorial = BigInt::from_hex("4ddec772c2ee9fb11e7b9ed0e5f6b7de5b83a0f20cfad9f37ec2ad151341ebbe75cb190441855d0d9014efd683716ac93e5e5369e8f72854979e198ba184ad4e7a4ff76b9eff3cd6533e8c5b2c2a5d8bb62ed86d280d2f0fa1666a5454d0e10b5e67c96e809fd3daddab1f77ba6d5dace62a1939d3c729e9f131f84190aa3407d5f02cf23a90a6c50acefbd123c66c5cc78c935883c0cee1435437811496b10a13900f4f59794d67b494c52279e3159330f1d076d623a8b0b59322559d16c68dc6f3d1d377a1668b7f80f945e7407cee358e9a02bb6b983a56e3199156eb40214b098bf3d301bdd132487f1354db3771885772f49fe86f8890668dfb5e5f9b1b677431081875f91cc019461b9cae2825226ae7ffe870658e573401005f331db99eb66ca6c7fa31b6e2838f1a7da59fb7935a619ffab6d0586431993b6a4c32861141d3139015562ea824550e1a26dfcc53085ebd0885742832c4542fc6436591b3f973d6f9cd7235094738734d082ef51af29824940809d660c8d322d4a44fcf43071b8b473d12d36019fee110aa59aaee6ab7426889bfd07073d9ce03476fdbd04cc6479f73500676f2832c6a0a00ad6c832f5309e9803598e41ffb325e6c403f35730887ef0f6e5a91fdc147ce022ef9ab1851550f9ff93115a626b4f9af82c4eabebafe3b52380d0f9f28f2f5961689807934b9e58d1956314334dc71088a6bd907712a38104fd5ad523efcb10d02c76fdb846594e094b3200b3c3956b17d2d555b6375c1c65c3b19fee9f1e8726f9f6f0c4128f2dd4d5fdd7be1261371bc538b2015e4d3d0ce147bcdc0cd561d5fe21a9f0bf91b5804fca0e41d17f5e5bc6d53e94220ebec6816b020306b7dbd9c6320859de0771f89e76c5af81f45aa29086e82148cbbbc6fbe69929288daa640bbb8d01d995e0218b12d70f83b556f0584fb17740a21f12bbd7894790b7d4bbc58f01844c40cb887e6d1817e8254243884a82443fcb9d9c95e3422e2a8b9810c1309d743e8ff2d82de816fea1e13744a40b54da01035e426405cecb4ba960d60ccb2529ae6627f1fe98ce9307eadae3b74f90c57a6a6b0779be0a1fd953a780c46ba19a09a6bdfbb659d42cb7ec1e9917dfbe7da508db6924a0c99acc7b3b40763d7207ebb07f25f21c410726ed1d0a1244346687bbb310a14a6a68edb3843069a987699f9f20a6da72576fa14fbe8f4ed35a6cd8475bed9c70b51a5fd99bbbe1a2ab43df1e51fda1c701e7823db06544545752b927f16fef58b1109ff0c945dfce0a3e7111896eb49b470f37a3326f3a985b00b747bdce7fb5f38812c2973bac4d75218e0fcb1bb8be4ecdf099fb09741e3171ef4ef3ac9f5a05e4fa2baa6b440c99b433ca98afca73b58d9e4088aafc4f95c2277605d172471fd3f745315ef1ab8a17b52b48bad7d28b08081560a6d06fc558c96f3f70694ce26f81a41786b12cfbd79c5e3f99a879ada2d4e79480de14e8b15924777246ef90d210bfec6941a430827d05a0a66b3d6ef95521f114ad7054f369724de2ac44976136285b6f99348cfe802ca6e70470e2d21b3f6645eb6a23b0b98a177201fa3fb87b89312247e").unwrap();
     // check that N is > 0 and not divisable by all the primes < alpha
     if n <= &BigInt::zero() || primorial.gcd(n) != BigInt::one() {
-        return Err(());
+        return Err(NashMPCError::CorrectKeyVerification);
     }
     // check that sigma indeed consists of m elements
     if sigma.len() != CORRECT_KEY_M {
-        return Err(());
+        return Err(NashMPCError::CorrectKeyVerification);
     }
     // check that each sigma element is > 0 and that rho_i == sigma_i ^ N mod N
     let rho = correct_key_proof_rho(n);
     for i in 0..sigma.len() {
         if sigma[i] <= BigInt::zero() {
-            return Err(());
+            return Err(NashMPCError::CorrectKeyVerification);
         }
         if rho[i] != BigInt::mod_pow(&sigma[i], n, n) {
-            return Err(());
+            return Err(NashMPCError::CorrectKeyVerification);
         }
     }
     Ok(())
@@ -400,16 +472,17 @@ fn verify_correct_key_proof(correct_key_proof: &CorrectKeyProof, n: &BigInt) -> 
 mod tests {
     use crate::client::POOL_PAILLIER;
     use crate::client::{
-        compute_presig, encrypt_secret_share, fill_rpool_secp256k1, fill_rpool_secp256r1,
-        get_rpool_size, verify_correct_key_proof, APIchildkeyCreator,
+        compute_presig, encrypt_secret_share, fill_rpool_curve25519, fill_rpool_secp256k1,
+        fill_rpool_secp256r1, get_rpool_size, verify_correct_key_proof, APIchildkeyCreator,
     };
-    use crate::common::{CorrectKeyProof, Curve};
+    use crate::common::{dh_init_curve25519, CorrectKeyProof, Curve};
+    use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar};
     #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
     #[cfg(feature = "k256")]
     use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
     use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-    use crate::curves::traits::ECScalar;
+    use crate::curves::traits::{ECPoint, ECScalar};
     use paillier_common::{EncryptionKey, MinimalEncryptionKey};
     use rust_bigint::traits::Converter;
     use rust_bigint::BigInt;
@@ -528,6 +601,30 @@ mod tests {
     }
 
     #[test]
+    fn test_api_childkey_creation_ed_ok() {
+        let secret_key =
+            BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap();
+        let mut api_childkey_creator = APIchildkeyCreator::init(&secret_key);
+        let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129").unwrap()});
+        let correct_key_proof: CorrectKeyProof = serde_json::from_str(&"{\"sigma_vec\":[\"14f21d17357e5d0d8d2cb3cf6d0b9439323473be7e1f68db541b77450f87a20941640bf8a317d4ea6272b12923449e73ea5598a6197219fb6c7ca416a3552301c9cc5b47580ce35e4c9e37a97ec0bdbe2b48c2db21cde5bcef9fc04c6e767c59c0500929b76f87901e5a4d8adb38097c44ed790a0ae2e9f6985823f1789aa47a8298d02763751b73942bbee79c4544f9bd2b82e405f15d801cb41d4831012f99172ef49fee6ea33599caadcdb89c1eb768e30b11878f37e12d232b624cbe589a7767af46d958632574535893c0337858399aed65638b97bcaddee45e40fe79a5014fcd1e398b19807439f58236373197653a8ea82ab3a84173d5a8d45bcae823\",\"32beda264c7fde6cb41d48ce44e6e93af5ed0e1cb5c7cd29f7fa3cbf72b78b9bc3e5267c4f9a75de40eb95a4bdc73dd1d8a435799daf2365f9377aed3c4524016d2ea58002c66fd0a8bcb8e74bac9923b723bc9f8752f82d9cba8bec4f414f314a40842031427b0bb8cdc514bfb61a5f85a51d8b7a290ccbd1000af937a6a7fd7a6070ba40a6801a2909e11d71a773958195d82f72995e69b989ab91207b68ac891e6585848f7aea80e1a0693427a0a512c0cbfbfe5d9ffe02462856ca918af9ebd2ad2f9b44a84b628ec7a7ed4d7232e72c52f2af5ef8988e3c09715fbe1a0af871109028335fb95370ae3e7ecf646063c1914ceeff8cf22ca06d250f02904c\",\"27236e62e810849d58c24b57d2061be4223a175224a89b94ce1261ae9f7a61ec058a43589c83aa3029e61c488fa33b0ea8fb72c36f4b3f962f858f4b0dd822a2810124cba42c8c2a42046b324a3c0712799979be7da1e6dff82c466149484246769f43683231ba8a89185587086cef1de589a4d59b74ac20fcbe0310403f9347417a4c8a8b90b78671d265471fe5ca839e509d4b6f5c2ec33ae255abf54aa12700772a174074048bc4edecc142c268b765f8bf4c0ab7b253882f77c1cb0e410e8e21a23ba364ec37adee59e0395920ab403ab77f095ed8bda39fad9b00886c9e2682a8314bd71fc2db9d2b2a8476ac295c262ba16d4657c62af9bb6a4729c214\",\"974e6e3a63e90275733cbf0b1516d940f0b0c8bd6140f16abb22988289b88b327c5a3e2a1de6d00f03e6f78ee934da02590ee45c6b4c0c8f53ccf6adc35cd0e9ee73f5ad88c8b8bc5b2a489c6e2b900cdc5c2b8ef0aaeb4a99dae6bac9a4bbeb12ceacbafc181a43f9176e503d71100b39b71e5f3975daffd3735b8d26c0b3ae43a92737373730bb22bdc3c06b8b281da79a6994c4c21dda8b89e2a0c9767efa559c895da05e127935b4d33eb1e2acab29cd096e5ed73a4812f86f8839aff7ab8e0baff3535098f1cdddb4ae14e1e7eb702674b4bd8253fefe3bd4245afd6dcb365de617df815ff0cc761415f7001a4149825c50626ebbd0aeeb92172be401e2\",\"43e75be1f60bc68a05aaceea143aa14498880ce8ab1417621f7041d8dd76a80e16484e07580060033bb6eeb67a516215f2bdbdcf2bbbe327ae22000b342a51cafe49ea50ce0b459d5e8334b84de284227a3d504d5fcde913b08b27c6997a27b9a307d132379e0688ce6c38f418b1e94ad87b85e86ab48374d736a7c2f402016255b728c258d945591760a314ebc0e98411fdf3c73e6ed8fd7e23cb1cab8a0517d79a33c27de6548be0ab506db1c2b4b573faf7bcb817cbf0d489da9c168a8c8e6bb4ba0edbfcd1fd01f5eddb89ac84d7a218d83635e354e77619725be00426aaaae90221b65c063ef479184599036182098f3e623a57567ff52172fcd0463e23\",\"70ab52b4bde2f26ba9603b1d211ab94ce95d84a8f09fbb1817700897bc1beb4b3bfe24850f61751204cec784ddd182e5a4432a8d6f48ff475a58d4e63ddc70de5b68a4ee392384031d2b3f352a74c5b8b9fe6f8113a046dcab29b6a168203031d783a4321a7d3f2e971761164454af67367c51a4d46218f817034705c3b013162b83b609647944dd7173e37d02f04b0aef42d1ad2f53902b3e88ccf2523c8526b50b3e47a9d51673992d69ed1f0ac39849b473c1ca0fdb5c34c9b344cf820a3b6566d3db80fb0d6646646080e19bf1448f8859ac1c0275c863950779cd22d248a358a3edb4e60676b4ec353d62c25f7b8c836293108be03a353ea8815c3dba9c\",\"84fb3dcc1348efc024c59df79e69c33d0d67d3f7af328cf0af6048d0080862f0ad0eae3bb676851b58b22db6e7c46474cb6aed94a73b35caf65e0c9f36743f55853bbc1d895649435edfeff25977e8130133078577d547c67c8d31236e1dbcac18252f71fac884078e229f97a7b451391f501b85266252137674f898ab9afb505d4f1ca7455e2339ee992395afd3c9a5cb8724733bdb40ed625932106b47dfe890bdea045178a46dffa1608a1ef01b4dda7a7381ee24f4c10fd63b84b1ece8c425435992f567c709d21324aa50a751042fc4cd2afc283ddb8b2867a694945337fe985a2090e45a8df28c68c828a0e6bae3d18f9a8251dbf46e4e7898feb23ca6\",\"23346102965ad3e6d474ac60f0fb4154dff2bf4250204390db22560f1ffcf47047489c38f02708c9776ed349078bcf7822c2bf50e0af9999a610d69e6f14e3d2ff138e706fbad8359bf496d2519ee900a04ac69eaa7e26bb11e4f302288221889bc58ce20608829db11fbc0a64ad066d7cd1704ae730d954dd84a1a35fb03dfab608b8e483d05ad71c2f6e2e38f59afe3005b60d508383ef160f23aed233bf76e108e3d0e3e6a87032b5b6b7b14f50c5b40aeefde5811ea5fa8a601124370b3d58ebca0906fa0ce72e90a23d713d3d74f2d59256d043011c6b350ebb664ba0a96ae7a5611d71f03d60b60d75e328f6a086aa1932f58026a20c3c3ac4f797587e\",\"12786ce1db47ed46d0bd326d844d3c611f9816b59817fb32a0729d4eb7c3975442410b86f5054d3de4be3f9ba442f0750aa0f284269c57e73ad7c644d3182a3ed26f46462ac687287260117abca70255461dc728adced54b9da10206a88fd213dc423ecc7db4842c3b4ff031ee8eb16304178f4e8eaed9db3e2f6c150dca1532a0a6d8e455cf13e7b4beed736ac8525b84b213ba96fced8ab8a9f47d5cdc8fe02e7eede3f417d2dc07ea10eea71486d3b1f9a0b9d6612efc83908702e6b77499a4861d770d136440962c0b35148b4a1af55989b94509a0ca765bdf1fee850eb175be5676581be779c94192a0326513a768c326fa67a202e66d0eaa70a91932d6\",\"354fd63ff01cf79fd2c90928231e364195a4b6c1d7874011ab6440b583f7027990c37eb4a9bd0125c31a61c31bbed0e36850261df09d5395a1885e5faf9f7bbdff0e545495f7e4761894493ace3de65ca7135a2a751aa2f40d21907bdcf65cec2fa896e457eb02889b0e3e8a5bcfdf133847ccec39c886823aef9f7f2ef9650345324efd55d0fc2e349cebffd6b7a542d4b9db9a4353e30da8f4e9aacd35ff5023180d34488261ba80413fd0cb56257db3e543f72e6d2bd82776e24d2db62107f83d6169fbf63eecfb1b33e58058bff6c0a04a6605d14f3ea77c4959293a19c3309e55d86d1ce1d308967bd2b550fbe2df0219444801d842fab7f6b0f26436e4\",\"61186ef51490cf59e822d5e3f84561ffb4f0b921c205581540ac13d8f978765791ab43942dcf470eac454dc13ce375df68bee5e152ee048fd14c5b6edfc053c2d548008e29a50fcf392069e9fe851fcc58c0f3f4ecd14d2885b9940b2a7bc7cc2818910fef3800a7dcf7e7f5a58905fcaedbf7fcd0dbff40293a403148cffedf1a5730554a10a1eed001cfbad38c4051b2a640a79271e43aae09e7733fe3b881fdba14cd397af91a1499f40069f47f65a0bc167d4c66ab5d8c0fcde37383911f75b4d3207a8a5c4dfa6ecf610c6ac20da6e96c0cd691c0642c8bb7a6be2837785774f4bbaac2529bf5291c94ab49961373e8991eb2018aa9d93529f66dd7695a\"]}".to_string()).unwrap();
+        api_childkey_creator = api_childkey_creator
+            .verify_paillier(&paillier_pk, &correct_key_proof)
+            .unwrap();
+        let api_childkey_creator_verified =
+            APIchildkeyCreator::init_with_verified_paillier(&secret_key, &paillier_pk);
+        assert_eq!(api_childkey_creator, api_childkey_creator_verified);
+        assert_ne!(
+            api_childkey_creator
+                .create_api_childkey(Curve::Curve25519)
+                .unwrap(),
+            api_childkey_creator_verified
+                .create_api_childkey(Curve::Curve25519)
+                .unwrap()
+        );
+    }
+
+    #[test]
     fn test_compute_presig_k1() {
         // need a mutex around the paillier pool to allow our assertions to hold
         let _shared = PAILLIER_POOL_LOCK.lock();
@@ -616,7 +713,76 @@ mod tests {
     }
 
     #[test]
-    fn test_encrypt_secrate_share() {
+    fn test_compute_presig_ed() {
+        // need a mutex around the paillier pool to allow our assertions to hold
+        let _shared = PAILLIER_POOL_LOCK.lock();
+        let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129").unwrap()});
+        assert_eq!(get_rpool_size(Curve::Curve25519).unwrap(), 0);
+        let dh_secret: Ed25519Scalar = ECScalar::from(
+            &BigInt::from_hex("c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410f")
+                .unwrap(),
+        )
+        .unwrap();
+        let dh_public = Ed25519Point::from_bigint(
+            &BigInt::from_hex("8ee9648d2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1")
+                .unwrap(),
+        )
+        .unwrap();
+        let dh_secret_vec = vec![dh_secret];
+        let dh_public_vec = vec![dh_public];
+        fill_rpool_curve25519(dh_secret_vec.clone(), &dh_public_vec).unwrap();
+        assert_eq!(get_rpool_size(Curve::Curve25519).unwrap(), 1);
+        let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+        let secret_key =
+            BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
+                .unwrap();
+        let api_childkey_creator =
+            APIchildkeyCreator::init_with_verified_paillier(&secret_key, &paillier_pk);
+        let api_childkey = api_childkey_creator
+            .create_api_childkey(Curve::Curve25519)
+            .unwrap();
+        let (presig1, r) = compute_presig(&api_childkey, &msg, Curve::Curve25519).unwrap();
+        assert_eq!(
+            r,
+            BigInt::from_hex("4d1c3e82c22ada0b5303ed2e5d62b619dc96fb4745afe03af88cf1ca0a7ee2e5")
+                .unwrap()
+        );
+        let (dh_secret_rand, _) = dh_init_curve25519(1).unwrap();
+        let (_, dh_public_rand) = dh_init_curve25519(1).unwrap();
+        fill_rpool_curve25519(dh_secret_rand, &dh_public_rand).unwrap();
+        let (presig2, _) = compute_presig(&api_childkey, &msg, Curve::Curve25519).unwrap();
+        assert_ne!(presig1, presig2);
+    }
+
+    #[test]
+    fn test_fill_rpool_ed() {
+        let paillier_pk = EncryptionKey::from(MinimalEncryptionKey{n: BigInt::from_hex("9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129").unwrap()});
+        let secret_key = Ed25519Scalar::new_random().unwrap().to_bigint();
+        let api_childkey_creator =
+            APIchildkeyCreator::init_with_verified_paillier(&secret_key, &paillier_pk);
+        let api_childkey = api_childkey_creator
+            .create_api_childkey(Curve::Curve25519)
+            .unwrap();
+        let dh_secret: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("1").unwrap()).unwrap();
+        let dh_public = Ed25519Point::generator();
+        let dh_secret_vec = vec![dh_secret.clone()];
+        let dh_public_vec = vec![dh_public];
+        fill_rpool_curve25519(dh_secret_vec, &dh_public_vec).unwrap();
+
+        let msg = BigInt::from_hex("1").unwrap();
+        let (_, r) = compute_presig(&api_childkey, &msg, Curve::Curve25519).unwrap();
+        let two: Ed25519Scalar = ECScalar::from(&BigInt::from_hex("2").unwrap()).unwrap();
+        assert_eq!(
+            r.to_hex(),
+            (Ed25519Point::generator() * two)
+                .unwrap()
+                .to_bigint()
+                .to_hex()
+        );
+    }
+
+    #[test]
+    fn test_encrypt_secret_share() {
         let secret_key =
             BigInt::from_hex("4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1")
                 .unwrap();

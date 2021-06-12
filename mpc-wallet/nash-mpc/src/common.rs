@@ -2,12 +2,14 @@
  * Functions for MPC-based API keys used by both server and client
  */
 
+use crate::curves::curve25519::{Ed25519Point, Ed25519Scalar, EdwardsPoint};
 #[cfg(feature = "secp256k1")]
 use crate::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
 use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
+use crate::NashMPCError;
 #[cfg(feature = "k256")]
 use k256::elliptic_curve::sec1::{
     FromEncodedPoint as FromEncodedPoint_k256, ToEncodedPoint as ToEncodedPoint_k256,
@@ -17,6 +19,8 @@ use k256::AffinePoint as AffinePoint_k256;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
 use num_integer::Integer;
+#[cfg(feature = "num_bigint")]
+use num_traits::Zero;
 #[cfg(feature = "secp256k1")]
 use p256::elliptic_curve::sec1::{
     FromEncodedPoint as FromEncodedPoint_p256, ToEncodedPoint as ToEncodedPoint_p256,
@@ -25,18 +29,20 @@ use p256::{AffinePoint as AffinePoint_p256, EncodedPoint as EncodedPoint_p256};
 use rust_bigint::traits::{Converter, NumberTests};
 use rust_bigint::BigInt;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
+use std::convert::TryInto;
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 /// paillier key size is 2048 bit (minimum recommended key length as of 02/2020)
 pub const PAILLIER_KEY_SIZE: usize = 2048;
 
-/// supported curves
+/// supported elliptic curves
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Curve {
     Secp256k1,
     Secp256r1,
+    Curve25519,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -49,23 +55,19 @@ pub struct CorrectKeyProof {
 pub(crate) const CORRECT_KEY_M: usize = 11;
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve secp256r1)
-pub fn dh_init_secp256r1(n: u32) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1Point>), ()> {
+pub fn dh_init_secp256r1(
+    n: usize,
+) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1Point>), NashMPCError> {
     // don't allow creating too many values at once.
     if n > 100 {
-        return Err(());
+        return Err(NashMPCError::IntegerInvalid);
     }
     let base: Secp256r1Point = ECPoint::generator();
     let mut dh_secrets: Vec<Secp256r1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256r1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = match Secp256r1Scalar::new_random() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        let dh_public = match &base * &dh_secret {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let dh_secret = Secp256r1Scalar::new_random()?;
+        let dh_public = (&base * &dh_secret)?;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
@@ -73,178 +75,219 @@ pub fn dh_init_secp256r1(n: u32) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1P
 }
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve secp256k1)
-pub fn dh_init_secp256k1(n: u32) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k1Point>), ()> {
+pub fn dh_init_secp256k1(
+    n: usize,
+) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k1Point>), NashMPCError> {
     // don't allow creating too many values at once.
     if n > 100 {
-        return Err(());
+        return Err(NashMPCError::IntegerInvalid);
     }
     let base: Secp256k1Point = ECPoint::generator();
     let mut dh_secrets: Vec<Secp256k1Scalar> = Vec::new();
     let mut dh_publics: Vec<Secp256k1Point> = Vec::new();
     for _ in 0..n {
-        let dh_secret = match Secp256k1Scalar::new_random() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        let dh_public = match &base * &dh_secret {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let dh_secret = Secp256k1Scalar::new_random()?;
+        let dh_public = (&base * &dh_secret)?;
         dh_secrets.push(dh_secret);
         dh_publics.push(dh_public);
     }
     Ok((dh_secrets, dh_publics))
 }
 
-/// verify an ECDSA signature
-pub fn verify(r: &BigInt, s: &BigInt, pubkey_str: &str, msg_hash: &BigInt, curve: Curve) -> bool {
-    // convert pubkey string format as used by ME to bigint
-    let pk_int = match BigInt::from_hex(pubkey_str) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    let pk_vec = BigInt::to_vec(&pk_int);
-    let q: BigInt;
-    let u1_plus_u2: BigInt;
-    if curve == Curve::Secp256k1 {
-        let pk = match Secp256k1Point::from_bytes(&pk_vec) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let s_fe: Secp256k1Scalar = match ECScalar::from(&s) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let rx_fe: Secp256k1Scalar = match ECScalar::from(&r) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        q = Secp256k1Scalar::q();
-        let s_inv_fe = match s_fe.invert() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let e_fe: Secp256k1Scalar = match ECScalar::from(&msg_hash.mod_floor(&q)) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1_ = match Secp256k1Point::generator() * &e_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1 = match u1_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2_ = match pk * &rx_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2 = match u2_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        u1_plus_u2 = match u1 + u2 {
-            Ok(v) => v.x_coor(),
-            Err(_) => return false,
-        };
-    } else if curve == Curve::Secp256r1 {
-        let pk = match Secp256r1Point::from_bytes(&pk_vec) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let s_fe: Secp256r1Scalar = match ECScalar::from(&s) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let rx_fe: Secp256r1Scalar = match ECScalar::from(&r) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        q = Secp256r1Scalar::q();
-        let s_inv_fe = match s_fe.invert() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let e_fe: Secp256r1Scalar = match ECScalar::from(&msg_hash.mod_floor(&q)) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1_ = match Secp256r1Point::generator() * &e_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u1 = match u1_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2_ = match pk * &rx_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        let u2 = match u2_ * &s_inv_fe {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        u1_plus_u2 = match u1 + u2 {
-            Ok(v) => v.x_coor(),
-            Err(_) => return false,
-        };
-    } else {
-        return false;
+/// Diffie-Hellman: create a set of secret values and a set of public values (using curve25519)
+pub fn dh_init_curve25519(
+    n: usize,
+) -> Result<(Vec<Ed25519Scalar>, Vec<Ed25519Point>), NashMPCError> {
+    // don't allow creating too many values at once.
+    if n > 100 {
+        return Err(NashMPCError::IntegerInvalid);
     }
-    let rx_bytes = &BigInt::to_vec(&r)[..];
-    let u1_plus_u2_bytes = &BigInt::to_vec(&u1_plus_u2)[..];
-    // second condition is against malleability
-    rx_bytes.ct_eq(&u1_plus_u2_bytes).unwrap_u8() == 1 && s < &(q - s.clone())
+    let base: Ed25519Point = ECPoint::generator();
+    let mut dh_secrets: Vec<Ed25519Scalar> = Vec::new();
+    let mut dh_publics: Vec<Ed25519Point> = Vec::new();
+    for _ in 0..n {
+        let dh_secret = Ed25519Scalar::new_random()?;
+        let dh_public = (base * &dh_secret)?;
+        dh_secrets.push(dh_secret);
+        dh_publics.push(dh_public);
+    }
+    Ok((dh_secrets, dh_publics))
+}
+
+/// verify an ECDSA or EdDSA signature. full message in case of EdDSA/Ed25519 and hash of a message otherwise.
+pub fn verify(r: &BigInt, s: &BigInt, pubkey_str: &str, msg: &BigInt, curve: Curve) -> bool {
+    // we want to hide the actual error and only return true | false
+    verify_wrapper(r, s, pubkey_str, msg, curve).is_ok()
+}
+
+fn verify_wrapper(
+    r: &BigInt,
+    s: &BigInt,
+    pubkey_str: &str,
+    msg: &BigInt,
+    curve: Curve,
+) -> Result<(), NashMPCError> {
+    if curve == Curve::Secp256k1 {
+        // convert pubkey string format as used by ME to bigint
+        let pk_int = BigInt::from_hex(pubkey_str)?;
+        let pk = Secp256k1Point::from_bytes(&BigInt::to_vec(&pk_int))?;
+        let s_fe: Secp256k1Scalar = ECScalar::from(&s)?;
+        let rx_fe: Secp256k1Scalar = ECScalar::from(&r)?;
+        let s_inv_fe = s_fe.invert()?;
+        let e_fe: Secp256k1Scalar = ECScalar::from(&msg.mod_floor(&Secp256k1Scalar::q()))?;
+        let u1_ = (Secp256k1Point::generator() * &e_fe)?;
+        let u1 = (u1_ * &s_inv_fe)?;
+        let u2_ = (pk * &rx_fe)?;
+        let u2 = (u2_ * &s_inv_fe)?;
+        let u1_plus_u2 = (u1 + u2)?;
+        let rx_bytes = &BigInt::to_vec(&r)[..];
+        // second condition is against malleability
+        if rx_bytes
+            .ct_eq(&BigInt::to_vec(&u1_plus_u2.x_coor())[..])
+            .unwrap_u8()
+            == 1
+            && s < &(Secp256k1Scalar::q() - s.clone())
+        {
+            Ok(())
+        } else {
+            Err(NashMPCError::SignatureVerification)
+        }
+    } else if curve == Curve::Secp256r1 {
+        // convert pubkey string format as used by ME to bigint
+        let pk_int = BigInt::from_hex(pubkey_str)?;
+        let pk = Secp256r1Point::from_bytes(&BigInt::to_vec(&pk_int))?;
+        let s_fe: Secp256r1Scalar = ECScalar::from(&s)?;
+        let rx_fe: Secp256r1Scalar = ECScalar::from(&r)?;
+        let s_inv_fe = s_fe.invert()?;
+        let e_fe: Secp256r1Scalar = ECScalar::from(&msg.mod_floor(&Secp256r1Scalar::q()))?;
+        let u1_ = (Secp256r1Point::generator() * &e_fe)?;
+        let u1 = (u1_ * &s_inv_fe)?;
+        let u2_ = (pk * &rx_fe)?;
+        let u2 = (u2_ * &s_inv_fe)?;
+        let u1_plus_u2 = (u1 + u2)?;
+        let rx_bytes = &BigInt::to_vec(&r)[..];
+        // second condition is against malleability
+        if rx_bytes
+            .ct_eq(&BigInt::to_vec(&u1_plus_u2.x_coor())[..])
+            .unwrap_u8()
+            == 1
+            && s < &(Secp256r1Scalar::q() - s.clone())
+        {
+            Ok(())
+        } else {
+            Err(NashMPCError::SignatureVerification)
+        }
+    // verify EdDSA signature
+    // strict version based on https://docs.rs/ed25519-dalek/1.0.1/src/ed25519_dalek/public.rs.html#283
+    } else if curve == Curve::Curve25519 {
+        let r_point = Ed25519Point::from_bigint(r)?;
+        let s_bytes: [u8; 32] = match s.to_bytes().try_into() {
+            Ok(v) => v,
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
+        };
+        let s_ = Ed25519Scalar::from_bytes32(s_bytes)?;
+        let pk = Ed25519Point::from_hex(pubkey_str)?;
+        if r_point.ge.is_small_order() || pk.ge.is_small_order() {
+            return Err(NashMPCError::SignatureVerification);
+        };
+        let hash: Ed25519Scalar = eddsa_s_hash(&r_point, &pk, msg)?;
+        if r_point.ge
+            == EdwardsPoint::vartime_double_scalar_mul_basepoint(&hash.fe, &(-&pk).ge, &s_.fe)
+        {
+            Ok(())
+        } else {
+            Err(NashMPCError::SignatureVerification)
+        }
+    } else {
+        Err(NashMPCError::CurveInvalid)
+    }
+}
+
+/// compute the hash-part of S in an EdDSA signature
+pub(crate) fn eddsa_s_hash(
+    r_point: &Ed25519Point,
+    pk: &Ed25519Point,
+    msg: &BigInt,
+) -> Result<Ed25519Scalar, NashMPCError> {
+    let mut h = Sha512::new();
+    h.update(&r_point.ge.compress().as_bytes());
+    h.update(&pk.ge.compress().as_bytes());
+    h.update(&msg.to_bytes());
+    // unwrap is safe since sha512 output is always 64 byte
+    let hash_bytes: [u8; 64] = h.finalize().as_slice().try_into().unwrap();
+    let hash = Ed25519Scalar::from_bytes64(&hash_bytes)?;
+    // check for hash == 0 as that might (theoretically) allow a brute-force attack on the secret key by the server
+    if hash.to_bigint() == BigInt::zero() {
+        return Err(NashMPCError::ScalarInvalid);
+    }
+    Ok(hash)
+}
+
+/// derive EdDSA signing key from secret key.
+/// the secret key is hashed with a 512-bit hash function (SHA-512 in case of EdDSA/ed25519)
+/// and the output is split in half. The first half is the signing key (after some bit fiddling)
+/// and we ignore the second half (which is usually used for generating nonces).
+pub(crate) fn eddsa_signingkey_from_secretkey(
+    secret_key_int: &BigInt,
+) -> Result<Ed25519Scalar, NashMPCError> {
+    let mut signing_key_bytes: [u8; 32] = [0u8; 32];
+    signing_key_bytes.copy_from_slice(&Sha512::digest(&secret_key_int.to_bytes())[0..32]);
+    // bit fiddling
+    signing_key_bytes[0] &= 0b11111000;
+    signing_key_bytes[31] &= 0b00111111;
+    signing_key_bytes[31] |= 0b01000000;
+    Ed25519Scalar::from_bytes32(signing_key_bytes)
 }
 
 #[cfg(feature = "secp256k1")]
-fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
-    Ok("0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_hex())
+fn publickey_from_secretkey_k1(pk: &Secp256k1Point) -> String {
+    "0".to_string() + &BigInt::from_bytes(&pk.ge.serialize_uncompressed()).to_hex()
 }
 #[cfg(feature = "k256")]
-fn publickey_from_secretkey_r1(pk: &Secp256k1Point) -> Result<String, ()> {
+fn publickey_from_secretkey_k1(pk: &Secp256k1Point) -> String {
     // unwrap() is safe because pk has been validated in publickey_from_secretkey()
     let tmp = AffinePoint_k256::from_encoded_point(&pk.ge.to_encoded_point(false)).unwrap();
-    Ok("0".to_string()
-        + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes())
-            .to_hex())
+    "0".to_string() + &BigInt::from_bytes(&tmp.to_encoded_point(false).as_bytes()).to_hex()
 }
 
 /// derive public key from secret key, in uncompressed format as expected by ME
-pub fn publickey_from_secretkey(secret_key_int: &BigInt, curve: Curve) -> Result<String, ()> {
+pub fn publickey_from_secretkey(
+    secret_key_int: &BigInt,
+    curve: Curve,
+) -> Result<String, NashMPCError> {
     if curve == Curve::Secp256k1 {
         let secret_key = match ECScalar::from(secret_key_int) {
             Ok(v) => Zeroizing::<Secp256k1Scalar>::new(v),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
         let base: Secp256k1Point = ECPoint::generator();
-        let pk = match base * secret_key.deref() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
-        publickey_from_secretkey_r1(&pk)
+        let pk = (base * secret_key.deref())?;
+        Ok(publickey_from_secretkey_k1(&pk))
     } else if curve == Curve::Secp256r1 {
         let secret_key = match ECScalar::from(secret_key_int) {
             Ok(v) => Zeroizing::<Secp256r1Scalar>::new(v),
-            Err(_) => return Err(()),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
         };
-        let pk = match Secp256r1Point::generator() * secret_key.deref() {
-            Ok(v) => v,
-            Err(_) => return Err(()),
-        };
+        let pk = (Secp256r1Point::generator() * secret_key.deref())?;
         let tmp = AffinePoint_p256::from_encoded_point(&EncodedPoint_p256::from(&pk.ge));
-        if bool::from(tmp.is_none()) {
-            return Err(());
+        if tmp.is_none() {
+            return Err(NashMPCError::PointInvalid);
         }
         // add leading zeros if necessary
         Ok(format!(
             "{:0>130}",
             BigInt::from_bytes(&tmp.unwrap().to_encoded_point(false).as_bytes()).to_hex()
         ))
+    } else if curve == Curve::Curve25519 {
+        let signing_key = match eddsa_signingkey_from_secretkey(secret_key_int) {
+            Ok(v) => Zeroizing::<Ed25519Scalar>::new(v),
+            Err(_) => return Err(NashMPCError::IntegerInvalid),
+        };
+        let pk = (Ed25519Point::generator() * signing_key.deref())?;
+        // add leading zeros if necessary
+        Ok(format!("{:0>64}", pk.to_hex()))
     } else {
-        Err(())
+        Err(NashMPCError::CurveInvalid)
     }
 }
 
@@ -325,8 +368,8 @@ fn create_hash(int: &BigInt) -> BigInt {
 #[cfg(test)]
 mod tests {
     use crate::common::{
-        correct_key_proof_rho, create_hash, dh_init_secp256k1, dh_init_secp256r1, i2osp,
-        publickey_from_secretkey, verify, Curve,
+        correct_key_proof_rho, create_hash, dh_init_curve25519, dh_init_secp256k1,
+        dh_init_secp256r1, i2osp, publickey_from_secretkey, verify, Curve,
     };
     #[cfg(feature = "secp256k1")]
     use crate::curves::secp256_k1::Secp256k1Point;
@@ -396,6 +439,14 @@ mod tests {
     }
 
     #[test]
+    fn test_dh_init_ed() {
+        let (secret1, public1) = dh_init_curve25519(1).unwrap();
+        let (secret2, public2) = dh_init_curve25519(1).unwrap();
+        assert_ne!(secret1, secret2);
+        assert_ne!(public1, public2);
+    }
+
+    #[test]
     #[should_panic]
     fn test_dh_init_k1_fail() {
         dh_init_secp256k1(101).unwrap();
@@ -405,6 +456,12 @@ mod tests {
     #[should_panic]
     fn test_dh_init_r1_fail() {
         dh_init_secp256r1(101).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_dh_init_ed_fail() {
+        dh_init_curve25519(101).unwrap();
     }
 
     #[test]
@@ -719,6 +776,92 @@ mod tests {
         ));
     }
 
+    // test vectors from https://tools.ietf.org/html/rfc8032#page-24 (https://ed25519.cr.yp.to/python/sign.input)
+    #[test]
+    fn test_verify_ed_ok() {
+        let r =
+            BigInt::from_hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da")
+                .unwrap();
+        let s =
+            BigInt::from_hex("085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+                .unwrap();
+        let pk_str = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string();
+        let msg = BigInt::from_hex("72").unwrap();
+        assert!(verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+
+        let r =
+            BigInt::from_hex("6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac")
+                .unwrap();
+        let s =
+            BigInt::from_hex("18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a")
+                .unwrap();
+        let pk_str = "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025".to_string();
+        let msg = BigInt::from_hex("af82").unwrap();
+        assert!(verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+
+        let r =
+            BigInt::from_hex("0aab4c900501b3e24d7cdf4663326a3a87df5e4843b2cbdb67cbf6e460fec350")
+                .unwrap();
+        let s =
+            BigInt::from_hex("aa5371b1508f9f4528ecea23c436d94b5e8fcd4f681e30a6ac00a9704a188a03")
+                .unwrap();
+        let pk_str = "278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e".to_string();
+        let msg = BigInt::from_hex("08b8b2b733424243760fe426a4b54908632110a66c2f6591eabd3345e3e4eb98fa6e264bf09efe12ee50f8f54e9f77b1e355f6c50544e23fb1433ddf73be84d879de7c0046dc4996d9e773f4bc9efe5738829adb26c81b37c93a1b270b20329d658675fc6ea534e0810a4432826bf58c941efb65d57a338bbd2e26640f89ffbc1a858efcb8550ee3a5e1998bd177e93a7363c344fe6b199ee5d02e82d522c4feba15452f80288a821a579116ec6dad2b3b310da903401aa62100ab5d1a36553e06203b33890cc9b832f79ef80560ccb9a39ce767967ed628c6ad573cb116dbefefd75499da96bd68a8a97b928a8bbc103b6621fcde2beca1231d206be6cd9ec7aff6f6c94fcd7204ed3455c68c83f4a41da4af2b74ef5c53f1d8ac70bdcb7ed185ce81bd84359d44254d95629e9855a94a7c1958d1f8ada5d0532ed8a5aa3fb2d17ba70eb6248e594e1a2297acbbb39d502f1a8c6eb6f1ce22b3de1a1f40cc24554119a831a9aad6079cad88425de6bde1a9187ebb6092cf67bf2b13fd65f27088d78b7e883c8759d2c4f5c65adb7553878ad575f9fad878e80a0c9ba63bcbcc2732e69485bbc9c90bfbd62481d9089beccf80cfe2df16a2cf65bd92dd597b0707e0917af48bbb75fed413d238f5555a7a569d80c3414a8d0859dc65a46128bab27af87a71314f318c782b23ebfe808b82b0ce26401d2e22f04d83d1255dc51addd3b75a2b1ae0784504df543af8969be3ea7082ff7fc9888c144da2af58429ec96031dbcad3dad9af0dcbaaaf268cb8fcffead94f3c7ca495e056a9b47acdb751fb73e666c6c655ade8297297d07ad1ba5e43f1bca32301651339e22904cc8c42f58c30c04aafdb038dda0847dd988dcda6f3bfd15c4b4c4525004aa06eeff8ca61783aacec57fb3d1f92b0fe2fd1a85f6724517b65e614ad6808d6f6ee34dff7310fdc82aebfd904b01e1dc54b2927094b2db68d6f903b68401adebf5a7e08d78ff4ef5d63653a65040cf9bfd4aca7984a74d37145986780fc0b16ac451649de6188a7dbdf191f64b5fc5e2ab47b57f7f7276cd419c17a3ca8e1b939ae49e488acba6b965610b5480109c8b17b80e1b7b750dfc7598d5d5011fd2dcc5600a32ef5b52a1ecc820e308aa342721aac0943bf6686b64b2579376504ccc493d97e6aed3fb0f9cd71a43dd497f01f17c0e2cb3797aa2a2f256656168e6c496afc5fb93246f6b1116398a346f1a641f3b041e989f7914f90cc2c7fff357876e506b50d334ba77c225bc307ba537152f3f1610e4eafe595f6d9d90d11faa933a15ef1369546868a7f3a45a96768d40fd9d03412c091c6315cf4fde7cb68606937380db2eaaa707b4c4185c32eddcdd306705e4dc1ffc872eeee475a64dfac86aba41c0618983f8741c5ef68d3a101e8a3b8cac60c905c15fc910840b94c00a0b9d0").unwrap();
+        assert!(verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+    }
+
+    #[test]
+    fn test_verify_ed_wrong_r() {
+        let r =
+            BigInt::from_hex("6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac")
+                .unwrap();
+        let s =
+            BigInt::from_hex("085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+                .unwrap();
+        let pk_str = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string();
+        let msg = BigInt::from_hex("72").unwrap();
+        assert!(!verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+    }
+
+    #[test]
+    fn test_verify_ed_wrong_s() {
+        let r =
+            BigInt::from_hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da")
+                .unwrap();
+        let s =
+            BigInt::from_hex("18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a")
+                .unwrap();
+        let pk_str = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string();
+        let msg = BigInt::from_hex("72").unwrap();
+        assert!(!verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+    }
+
+    #[test]
+    fn test_verify_ed_wrong_pk() {
+        let r =
+            BigInt::from_hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da")
+                .unwrap();
+        let s =
+            BigInt::from_hex("085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+                .unwrap();
+        let pk_str = "4d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string();
+        let msg = BigInt::from_hex("72").unwrap();
+        assert!(!verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+    }
+
+    #[test]
+    fn test_verify_ed_wrong_msg() {
+        let r =
+            BigInt::from_hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da")
+                .unwrap();
+        let s =
+            BigInt::from_hex("085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+                .unwrap();
+        let pk_str = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string();
+        let msg = BigInt::from_hex("82").unwrap();
+        assert!(!verify(&r, &s, &pk_str, &msg, Curve::Curve25519));
+    }
+
     #[test]
     fn test_pk_from_sk_k1_ok() {
         let sk =
@@ -753,5 +896,65 @@ mod tests {
                 .unwrap();
         let pk = publickey_from_secretkey(&sk, Curve::Secp256r1).unwrap();
         assert_ne!(pk, "04b0c36f4c3c2ee418e73bae21518226efbbdb526a6f87c2ed4d5d271c7bcd397e4c4a71a6e72c775c22ab5a356c9186717f3f90f0821d9abe427ed1462e74427e".to_string());
+    }
+
+    #[test]
+    fn test_pk_from_sk_ed_ok() {
+        assert_eq!(
+            publickey_from_secretkey(
+                &BigInt::from_hex(
+                    "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+                )
+                .unwrap(),
+                Curve::Curve25519
+            )
+            .unwrap(),
+            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a".to_string()
+        );
+        assert_eq!(
+            publickey_from_secretkey(
+                &BigInt::from_hex(
+                    "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+                )
+                .unwrap(),
+                Curve::Curve25519
+            )
+            .unwrap(),
+            "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string()
+        );
+        assert_eq!(
+            publickey_from_secretkey(
+                &BigInt::from_hex(
+                    "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7"
+                )
+                .unwrap(),
+                Curve::Curve25519
+            )
+            .unwrap(),
+            "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025".to_string()
+        );
+        assert_eq!(
+            publickey_from_secretkey(
+                &BigInt::from_hex(
+                    "f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5"
+                )
+                .unwrap(),
+                Curve::Curve25519
+            )
+            .unwrap(),
+            "278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e".to_string()
+        );
+    }
+
+    #[test]
+    fn test_pk_from_sk_ed_wrong() {
+        let sk =
+            BigInt::from_hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+                .unwrap();
+        let pk = publickey_from_secretkey(&sk, Curve::Curve25519).unwrap();
+        assert_ne!(
+            pk,
+            "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c".to_string()
+        );
     }
 }

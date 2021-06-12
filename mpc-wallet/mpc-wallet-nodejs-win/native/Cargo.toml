@@ -14,7 +14,7 @@ neon-build = "0.4"
 [dependencies]
 neon = "0.4"
 neon-serde = "0.4"
-mpc-wallet-lib = { version = "*", path = '../../mpc-wallet-lib', features = ["num_bigint"] }
+nash-mpc = { version = "*", default-features = false, path = '../../nash-mpc', features = ["num_bigint", "k256"] }
 serde_json = "1.0"
 
 [profile.release]

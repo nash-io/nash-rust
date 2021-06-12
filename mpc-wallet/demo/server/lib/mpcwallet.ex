@@ -6,12 +6,12 @@ defmodule Server.MPCwallet do
       - MPC: Multi-party computation. A method to have multiple parties compute a function while keeping their inputs private. For our case, the function is creating a digital signature and the (private) inputs are secret shares.
       - DH: Diffie-Hellman key exchange. A method to derive a shared secret key over an insecure channel.
       - Paillier: A public-key, additive homomorphic cryptosystem. Allows the client to conduct operations on the ciphertext.
-      - r: Random value shared between client and server (derived via DH), from which the r value of the ECDSA signature is derived.
+      - r: Random value shared between client and server (derived via DH), from which the r value of the ECDSA or EdDSA signature is derived.
       - k: Server part of the nonce used in the signature. This should be handled like a secret key, i.e., store securely, delete/zeroize after use, ..
-      - curve: Elliptic curve to be used in an ECDSA signature. Currently we support secp256k1 (for BTC and ETH) and secp256r1 (for NEO).
+      - curve: Elliptic curve to be used in an ECDSA or EdDSA signature. Currently we support secp256k1 (for BTC and ETH) and secp256r1 (for NEO) in ECSDA and Curve25519 in EdDSA.
       - presig: A presignature generated on the client that can be finalized to a conventional signature by the server.
       - rpool: Pool of random values shared between client and server that allows to generate signatures with a single message.
-      - r, s: a conventional ECDSA signature.
+      - r, s: a conventional ECDSA or EdDSA signature.
       - recovery_id: 2 bits that help recovering the public key from a signature, used in Ethereum to save space.
       - correct_key_proof: ZK proof that the Paillier public key was generated correctly.
   """
@@ -39,7 +39,7 @@ defmodule Server.MPCwallet do
   ## Parameters
 
       - client_dh_publics: list of DH public keys received from the client
-      - curve: Secp256k1 or Secp256r1 curve
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -70,19 +70,39 @@ defmodule Server.MPCwallet do
       - recovery_id: 2 bits that help recovering the public key from a signature
 
   """
-  def complete_sig(_paillier_sk, _presig, _r, _k, _curve, _pubkey, _msg_hash), do: :erlang.nif_error(:nif_not_loaded)
-
+  def complete_sig_ecdsa(_paillier_sk, _presig, _r, _k, _curve, _pubkey, _msg_hash), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc ~S"""
-  Verify conventional ECDSA signature.
+  Complete presignature to conventional EdDSA signature.
 
   ## Parameters
 
+      - server_secret_share: server secret share
+      - presig: presignature received from client
+      - r: random value shared between server and client
+      - r_server: server part of the nonce used in the signature
+      - pubkey: public key under which the completed signature is (supposed to be) valid
+      - msg: message under which the completed signature is (supposed to be) valid
+
+  ## Returns
+
       - r: r part of a conventional ECDSA signature
       - s: s part of a conventional ECDSA signature
-      - pubkey: ECDSA public key
-      - msg_hash: hash of the message
-      - curve: Secp256k1 or Secp256r1 curve
+
+  """
+  def complete_sig_eddsa(_server_secret_share, _presig, _r, _r_server, _pubkey, _msg), do: :erlang.nif_error(:nif_not_loaded)
+
+
+  @doc ~S"""
+  Verify conventional ECDSA or EdDSA signature.
+
+  ## Parameters
+
+      - r: r part of a conventional ECDSA or EdDSA signature
+      - s: s part of a conventional ECDSA or EdDSA signature
+      - pubkey: ECDSA or EdDSA public key
+      - msg_hash: hash of the message (ECDSA) or entire message (EdDSA)
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -98,7 +118,7 @@ defmodule Server.MPCwallet do
   ## Parameters
 
       - n: number of key pairs to generate
-      - curve: Secp256k1 or Secp256r1 curve
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -116,8 +136,8 @@ defmodule Server.MPCwallet do
   ## Parameters
 
       - apikey: API key struct
-      - msg_hash: hash of the message to be signed
-      - curve: Secp256k1 or Secp256r1 curve
+      - msg_hash: full message or hash of the message to be signed
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -135,8 +155,8 @@ defmodule Server.MPCwallet do
 
       - client_dh_secrets: list of client DH secret keys
       - server_dh_publics: list of DH public keys received from the server
-      - curve: Secp256k1 or Secp256r1 curve
-      - paillier_pk: Paillier public key
+      - curve: Secp256k1, Secp256r1, or Curve25519
+      - paillier_pk: Paillier public key (empty in case of Curve25519)
 
   ## Returns
 
@@ -145,6 +165,20 @@ defmodule Server.MPCwallet do
   """
   def fill_rpool(_client_dh_secrets, _server_dh_publics, _curve, _paillier_pk), do: :erlang.nif_error(:nif_not_loaded)
 
+
+  @doc ~S"""
+  Retrieve number of values in an rpool.
+
+  ## Parameters
+
+      - curve: Secp256k1, Secp256r1, or Curve25519
+
+  ## Returns
+
+      - size: number of values in the rpool.
+
+  """
+  def get_rpool_size(_curve), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc ~S"""
   Initialize API childkey creation by setting the full secret key.
@@ -199,8 +233,8 @@ defmodule Server.MPCwallet do
 
   ## Parameters
 
-      - api_childkey_creator: API childkey creation struct
-      - curve: Secp256k1 or Secp256r1 curve
+      - api_childkey_creator: ECDSA API childkey creation struct
+      - curve: Secp256k1, Secp256r1, or Curve25519
 
   ## Returns
 
@@ -224,4 +258,19 @@ defmodule Server.MPCwallet do
 
   """
   def publickey_from_secretkey(_secret_key, _curve), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc ~S"""
+  Decrypt ciphertext using Paillier
+
+  ## Parameters
+
+      - paillier_sk: Paillier secret key
+      - ciphertext: encrypted server secret share
+
+  ## Returns
+
+      - clear text: server secret share
+
+  """
+  def decrypt(_paillier_sk, _ciphertext), do: :erlang.nif_error(:nif_not_loaded)
 end

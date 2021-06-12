@@ -1,20 +1,20 @@
 /*
- * Node.js client interface to MPC-based API keys
+ * Node.js client interface to MPC-based API keys for Windows
  */
 
+use nash_mpc::curves::curve25519::{Ed25519Point, Ed25519Scalar};
+use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
+use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+use nash_mpc::paillier_common::EncryptionKey;
 use nash_mpc::rust_bigint::traits::Converter;
 use nash_mpc::rust_bigint::BigInt;
-use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
-use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
-use nash_mpc::curves::traits::ECScalar;
-use nash_mpc::paillier_common::EncryptionKey;
 use nash_mpc::{client, common};
 use neon::prelude::register_module;
 use neon_serde::export;
 
 export! {
     /// Generate shared random values using Diffie-Hellman
-    /// Input: n: number of values to generate, curve: Secp256r1 or Secp256k1
+    /// Input: n: number of values to generate, curve: Secp256r1, Secp256k1, or Curve25519
     /// Output: dh_secrets: list of (n) DH secret values, dh_publics: list of (n) DH public values
     fn dh_init(n: usize, curve: common::Curve) -> String {
         if curve == common::Curve::Secp256k1 {
@@ -29,22 +29,28 @@ export! {
                 Err(_) => return serde_json::to_string(&(false, &"error: n is too big.")).unwrap(),
             };
             serde_json::to_string(&(true, &dh_secrets, &dh_publics)).unwrap()
+        } else if curve == common::Curve::Curve25519 {
+            let (dh_secrets, dh_publics) = match common::dh_init_curve25519(n) {
+                Ok(v) => v,
+                Err(_) => return serde_json::to_string(&(false, &"error: n is too big.")).unwrap(),
+            };
+            serde_json::to_string(&(true, &dh_secrets, &dh_publics)).unwrap()
         } else {
             serde_json::to_string(&(false, &"error: invalid curve")).unwrap()
         }
     }
 
     /// Fill pool of random and nonce values to facilitate signature generation with a single message.
-    /// Input: client_dh_secrets: list of client DH secret values, server_dh_publics: list of server DH public values, curve: Secp256k1 or Secp256r1, paillier_pk: Paillier public key
+    /// Input: client_dh_secrets: list of client DH secret values, server_dh_publics: list of server DH public values, curve: Secp256k1, Secp256r1, or Curve25519, paillier_pk: Paillier public key (empty in case of Curve25519)
     /// Output: none
     fn fill_rpool(client_dh_secrets_str: String, server_dh_publics_str: String, curve: common::Curve, paillier_pk_str: String) -> String {
-        let paillier_pk: EncryptionKey = match serde_json::from_str(&paillier_pk_str) {
-            Ok(v) => v,
-            Err(_) => {
-                return serde_json::to_string(&(false, &"error deserializing paillier_pk")).unwrap()
-            }
-        };
         if curve == common::Curve::Secp256k1 {
+            let paillier_pk: EncryptionKey = match serde_json::from_str(&paillier_pk_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return serde_json::to_string(&(false, &"error deserializing paillier_pk")).unwrap()
+                }
+            };
             let client_dh_secrets: Vec<Secp256k1Scalar> =
             match serde_json::from_str(&client_dh_secrets_str) {
                 Ok(v) => v,
@@ -69,6 +75,12 @@ export! {
                 Err(_) => return serde_json::to_string(&(false, &"error filling rpool")).unwrap(),
             };
         } else if curve == common::Curve::Secp256r1 {
+            let paillier_pk: EncryptionKey = match serde_json::from_str(&paillier_pk_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return serde_json::to_string(&(false, &"error deserializing paillier_pk")).unwrap()
+                }
+            };
             let client_dh_secrets: Vec<Secp256r1Scalar> =
             match serde_json::from_str(&client_dh_secrets_str) {
                 Ok(v) => v,
@@ -92,6 +104,33 @@ export! {
                 Ok(v) => v,
                 Err(_) => return serde_json::to_string(&(false, &"error filling rpool")).unwrap(),
             };
+        } else if curve == common::Curve::Curve25519 {
+            let client_dh_secrets: Vec<Ed25519Scalar> =
+                match serde_json::from_str(&client_dh_secrets_str) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return serde_json::to_string(&(
+                            false,
+                            &"error deserializing client_dh_secrets",
+                        ))
+                        .unwrap()
+                    }
+                };
+            let server_dh_publics: Vec<Ed25519Point> =
+                match serde_json::from_str(&server_dh_publics_str) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return serde_json::to_string(&(
+                            false,
+                            &"error deserializing client_dh_publics",
+                        ))
+                        .unwrap()
+                    }
+                };
+            match client::fill_rpool_curve25519(client_dh_secrets, &server_dh_publics) {
+                Ok(v) => v,
+                Err(_) => return serde_json::to_string(&(false, &"error filling rpool")).unwrap(),
+            };
         } else {
             return serde_json::to_string(&(false, &"error: invalid curve")).unwrap();
         }
@@ -99,7 +138,7 @@ export! {
     }
 
     /// Get current size of pool of r-values.
-    /// Input: curve: Secp256k1 or Secp256r1
+    /// Input: curve: Secp256k1, Secp256r1, or Curve25519
     /// Output: size of pool
     fn get_rpool_size(curve: common::Curve) -> String {
         let size = match client::get_rpool_size(curve) {
@@ -110,7 +149,7 @@ export! {
     }
 
     /// Compute presignature.
-    /// Input: api_childkey: API childkey struct, msg_hash: message hash, curve: Secp256k1 or Secp256r1 curve
+    /// Input: api_childkey: API childkey struct, msg_hash: message hash or message, curve: Secp256k1, Secp256r1, or Curve25519
     /// Output: presig: presignature, r: message-independent part of the signature used
     fn compute_presig(api_childkey_str: String, msg_hash_str: String, curve: common::Curve) -> String {
         let api_childkey: client::APIchildkey = match serde_json::from_str(&api_childkey_str) {
@@ -121,7 +160,7 @@ export! {
         };
         let msg_hash = match BigInt::from_hex(&msg_hash_str) {
             Ok(v) => v,
-            Err(_) => return serde_json::to_string(&(false, &"error deserializing msg_hash")).unwrap(),
+            Err(_) => return serde_json::to_string(&(false, &"error deserializing msg_hash / msg")).unwrap(),
         };
         let (presig, r) = match client::compute_presig(&api_childkey, &msg_hash, curve) {
             Ok(v) => v,
@@ -133,42 +172,35 @@ export! {
                 .unwrap()
             }
         };
-        // add leading zeros if necessary
-        serde_json::to_string(&(
-            &true,
-            &format!("{:0>1024}", presig.to_hex()),
-            &format!("{:0>66}", r.to_hex()),
-        ))
-        .unwrap()
-    }
-
-    /// Generate signature for given message hash under given secret key
-    /// Input: secret_key: full secret key, msg_hash: message hash
-    /// Output: (r, s): ECDSA signature
-    fn sign(secret_key_str: String, msg_hash_str: String) -> String {
-        let secret_key_int = match BigInt::from_hex(&secret_key_str) {
-            Ok(v) => v,
-            Err(_) => {
-                return serde_json::to_string(&(false, &"error deserializing secret_key")).unwrap()
-            }
-        };
-        let secret_key: Secp256k1Scalar = ECScalar::from(&secret_key_int);
-        let msg_hash = match BigInt::from_hex(&msg_hash_str) {
-            Ok(v) => v,
-            Err(_) => return serde_json::to_string(&(false, &"error deserializing msg_hash")).unwrap(),
-        };
-        let (r, s) = client::sign(&secret_key, &msg_hash);
-        serde_json::to_string(&(&true, &format!("{:0>64}", r.to_hex()), &format!("{:0>64}", s.to_hex()))).unwrap()
+        if curve == common::Curve::Secp256k1 || curve == common::Curve::Secp256r1 {
+            // add leading zeros if necessary
+            serde_json::to_string(&(
+                &true,
+                &format!("{:0>1024}", presig.to_hex()),
+                &format!("{:0>66}", r.to_hex()),
+            ))
+            .unwrap()
+        } else if curve == common::Curve::Curve25519 {
+            // add leading zeros if necessary
+            serde_json::to_string(&(
+                &true,
+                &format!("{:0>64}", presig.to_hex()),
+                &format!("{:0>64}", r.to_hex()),
+            ))
+            .unwrap()
+        } else {
+            serde_json::to_string(&(false, &"invalid curve")).unwrap()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size, sign};
+    use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size};
     use nash_mpc::common::Curve;
 
     #[test]
-    fn test_dh_init_ok() {
+    fn test_dh_init_k1_ok() {
         let result = dh_init(1, Curve::Secp256k1);
         let (success, _, _): (bool, Vec<String>, Vec<String>) =
             serde_json::from_str(&result).unwrap();
@@ -176,8 +208,38 @@ mod tests {
     }
 
     #[test]
-    fn test_get_rpool_size_ok() {
+    fn test_dh_init_r1_ok() {
+        let result = dh_init(10, Curve::Secp256r1);
+        let (success, _, _): (bool, Vec<String>, Vec<String>) =
+            serde_json::from_str(&result).unwrap();
+        assert!(success);
+    }
+
+    #[test]
+    fn test_dh_init_ed_ok() {
+        let result = dh_init(100, Curve::Curve25519);
+        let (success, _, _): (bool, Vec<String>, Vec<String>) =
+            serde_json::from_str(&result).unwrap();
+        assert!(success);
+    }
+
+    #[test]
+    fn test_get_rpool_size_k1() {
         let result = get_rpool_size(Curve::Secp256k1);
+        let (success, _): (bool, usize) = serde_json::from_str(&result).unwrap();
+        assert!(success);
+    }
+
+    #[test]
+    fn test_get_rpool_size_r1() {
+        let result = get_rpool_size(Curve::Secp256r1);
+        let (success, _): (bool, usize) = serde_json::from_str(&result).unwrap();
+        assert!(success);
+    }
+
+    #[test]
+    fn test_get_rpool_size_ed() {
+        let result = get_rpool_size(Curve::Curve25519);
         let (success, _): (bool, usize) = serde_json::from_str(&result).unwrap();
         assert!(success);
     }
@@ -260,6 +322,44 @@ mod tests {
     }
 
     #[test]
+    fn test_fill_rpool_ed_ok() {
+        let result = fill_rpool(
+            "[\"c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410f\"]".to_string(),
+            "[\"8ee9648d2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1\"]".to_string(),
+            Curve::Curve25519,
+            "".to_string(),
+        );
+        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
+        assert!(success);
+    }
+
+    #[test]
+    fn test_fill_rpool_ed_wrong_dh_secrets() {
+        let result = fill_rpool(
+            "[\"u\"]".to_string(),
+            "[\"8ee9648d2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1\"]".to_string(),
+            Curve::Curve25519,
+            "".to_string(),
+        );
+        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
+        assert_eq!(msg, "error deserializing client_dh_secrets");
+        assert!(!success);
+    }
+
+    #[test]
+    fn test_fill_rpool_ed_wrong_dh_publics() {
+        let result = fill_rpool(
+            "[\"c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410f\"]".to_string(),
+            "[\"fffffffd2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1\"]".to_string(),
+            Curve::Curve25519,
+            "".to_string(),
+        );
+        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
+        assert_eq!(msg, "error deserializing client_dh_publics");
+        assert!(!success);
+    }
+
+    #[test]
     fn test_compute_presig_k1_ok() {
         fill_rpool(
             "[\"aa75ca8a2fd3f8af94976bfaa7aa476dc31f5d78d9fef8fb86a97a775f611ae5\"]".to_string(),
@@ -305,7 +405,7 @@ mod tests {
         "z000000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
         Curve::Secp256k1);
         let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error deserializing msg_hash");
+        assert_eq!(msg, "error deserializing msg_hash / msg");
         assert!(!success);
     }
 
@@ -356,37 +456,57 @@ mod tests {
         Curve::Secp256r1);
 
         let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
-        assert_eq!(msg, "error deserializing msg_hash");
+        assert_eq!(msg, "error deserializing msg_hash / msg");
         assert!(!success);
     }
 
     #[test]
-    fn test_sign_ok() {
-        let result = sign(
-            "4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1".to_string(),
-            "100000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
+    fn test_compute_presig_ed_ok() {
+        fill_rpool(
+            "[\"c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410f\"]".to_string(),
+            "[\"8ee9648d2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1\"]".to_string(),
+            Curve::Curve25519,
+            "".to_string(),
         );
+        let result = compute_presig(
+        "{\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"},\"public_key\":\"51f894ca2e0da37d6d004e8c407d1e48e5f0c84501d34f56532e357f6633b2f0\",\"client_secret_share\":\"5c348e962cd45f2c3e2c55594d712dbba681dfae54889b5e8a384eeb354de94\",\"server_secret_share_encrypted\":\"5bc1720c7ccee4a641912fa71c40dcd62e13d38a3c17bcd9613f1e2db7c3a4b4b6b0ea219ce001ee1dd9a58e30c73df96b2b720126a478f316a0c5737a4ab0bad45cf9b3232fdfea47a655e63d71cb677663b8ec3fcaf4d633ff3ec69baf9b01f5575b4daafb8dd77d19c56400ea250fa9903ce901faeb04b466693cc5de62557f82615c458471dde8fb0a44262cf78b253b775e1bb1b46bf65ceeb14d696a13fdc5cc159f61dc399e07cf9e45672faf4b03c0f796f35f1e73d77d102b1f31c0f69803e5a96da7b4a5917ba5e2f335056752d7c91e591ff65ada15ba45c5c3f8a309b7e00d6f2826e5b6bd15b1e9d36b48d36f598779c04a62c41fc929060cf7f9eeaf18eb6583fcfc2047baeda1323b463af33e13da9de014955246367cb0df5e188ba28f314345643f18e727b4e5f6d881554f5fbab2864fd6505b61767ea34495a7f28981b73dd9c83846f413bc3f6005b2d99477f0ecded6e4d45f566965c058be996a5842999d06e163d7d1ef24f4737114e05296b0f4c45be6fb6434d05bdbb73ddba3b5b6a22b990db28a1c5cdd50c3fa0b4d6114d839304dde8bb9befa88617e975a631fbb2aefbbe1a293cbc5ba10103f2967c5ee076a7937bbde198deebd2d32f111c876a5dd2724303971a182e8bad8b86d4bed9040510e1c5973eb1f351ddc78b73796925f23c27006d34060dc33427d4e178103f0aa365e0274\"}".to_string(),
+        "68656c6c6f2c20776f726c6421".to_string(),
+        Curve::Curve25519);
         let (success, _, _): (bool, String, String) = serde_json::from_str(&result).unwrap();
         assert!(success);
     }
 
     #[test]
-    fn test_sign_wrong_sk() {
-        let result = sign(
-            "z794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1".to_string(),
-            "100000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
+    fn test_compute_presig_ed_wrong_childkey() {
+        fill_rpool(
+            "[\"c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410f\"]".to_string(),
+            "[\"8ee9648d2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1\"]".to_string(),
+            Curve::Curve25519,
+            "".to_string(),
         );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
+        let result = compute_presig(
+        "{\"pillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"},\"public_key\":\"51f894ca2e0da37d6d004e8c407d1e48e5f0c84501d34f56532e357f6633b2f0\",\"client_secret_share\":\"5c348e962cd45f2c3e2c55594d712dbba681dfae54889b5e8a384eeb354de94\",\"server_secret_share_encrypted\":\"5bc1720c7ccee4a641912fa71c40dcd62e13d38a3c17bcd9613f1e2db7c3a4b4b6b0ea219ce001ee1dd9a58e30c73df96b2b720126a478f316a0c5737a4ab0bad45cf9b3232fdfea47a655e63d71cb677663b8ec3fcaf4d633ff3ec69baf9b01f5575b4daafb8dd77d19c56400ea250fa9903ce901faeb04b466693cc5de62557f82615c458471dde8fb0a44262cf78b253b775e1bb1b46bf65ceeb14d696a13fdc5cc159f61dc399e07cf9e45672faf4b03c0f796f35f1e73d77d102b1f31c0f69803e5a96da7b4a5917ba5e2f335056752d7c91e591ff65ada15ba45c5c3f8a309b7e00d6f2826e5b6bd15b1e9d36b48d36f598779c04a62c41fc929060cf7f9eeaf18eb6583fcfc2047baeda1323b463af33e13da9de014955246367cb0df5e188ba28f314345643f18e727b4e5f6d881554f5fbab2864fd6505b61767ea34495a7f28981b73dd9c83846f413bc3f6005b2d99477f0ecded6e4d45f566965c058be996a5842999d06e163d7d1ef24f4737114e05296b0f4c45be6fb6434d05bdbb73ddba3b5b6a22b990db28a1c5cdd50c3fa0b4d6114d839304dde8bb9befa88617e975a631fbb2aefbbe1a293cbc5ba10103f2967c5ee076a7937bbde198deebd2d32f111c876a5dd2724303971a182e8bad8b86d4bed9040510e1c5973eb1f351ddc78b73796925f23c27006d34060dc33427d4e178103f0aa365e0274\"}".to_string(),
+        "68656c6c6f2c20776f726c6421".to_string(),
+        Curve::Curve25519);
+        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
+        assert_eq!(msg, "error deserializing api_childkey");
         assert!(!success);
     }
 
     #[test]
-    fn test_sign_wrong_hash() {
-        let result = sign(
-            "4794853ce9e44b4c7a69c6a3b87db077f8f910f244bb6b966ba5fed83c9756f1".to_string(),
-            "\\00000000000000fffffffffffffffffff00000000000000ffffffffff000000".to_string(),
+    fn test_compute_presig_ed_wrong_msg() {
+        fill_rpool(
+            "[\"c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410f\"]".to_string(),
+            "[\"8ee9648d2486fa6eab6177dfc99c441e4cb41790bae14b2d93bc3a2ae975f0d1\"]".to_string(),
+            Curve::Curve25519,
+            "".to_string(),
         );
-        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
+        let result = compute_presig(
+        "{\"paillier_pk\":{\"n\":\"9e2f24f407914eff43b7c7df083c5cc9765c05386485e9e9aa55e7b039290300ba39e86f399e2b338fad4bb34a4d7a7a0cd14fd28503eeebb73ff38e8164616942113afadaeaba525bd4cfdafc4ddd3b012d3fbcd9f276acbad4379b8b93bc4f4d6ddc0a2b9af36b34771595f0e6cb62987b961d83f49ba6ec4b088a1350b3dbbea3e21033801f6c4b212ecd830b5b81075effd06b47feecf18f3c9093662c918073dd95a525b4f99478512ea3bf085993c9bf65922d42b65b338431711dddb5491c2004548df31ab6092ec58db564c8a88a309b0f734171de1f8f4361d5f883e38d5bf519dc347036910aec3c80f2058fa8945c38787094f3450774e2b23129\"},\"public_key\":\"51f894ca2e0da37d6d004e8c407d1e48e5f0c84501d34f56532e357f6633b2f0\",\"client_secret_share\":\"5c348e962cd45f2c3e2c55594d712dbba681dfae54889b5e8a384eeb354de94\",\"server_secret_share_encrypted\":\"5bc1720c7ccee4a641912fa71c40dcd62e13d38a3c17bcd9613f1e2db7c3a4b4b6b0ea219ce001ee1dd9a58e30c73df96b2b720126a478f316a0c5737a4ab0bad45cf9b3232fdfea47a655e63d71cb677663b8ec3fcaf4d633ff3ec69baf9b01f5575b4daafb8dd77d19c56400ea250fa9903ce901faeb04b466693cc5de62557f82615c458471dde8fb0a44262cf78b253b775e1bb1b46bf65ceeb14d696a13fdc5cc159f61dc399e07cf9e45672faf4b03c0f796f35f1e73d77d102b1f31c0f69803e5a96da7b4a5917ba5e2f335056752d7c91e591ff65ada15ba45c5c3f8a309b7e00d6f2826e5b6bd15b1e9d36b48d36f598779c04a62c41fc929060cf7f9eeaf18eb6583fcfc2047baeda1323b463af33e13da9de014955246367cb0df5e188ba28f314345643f18e727b4e5f6d881554f5fbab2864fd6505b61767ea34495a7f28981b73dd9c83846f413bc3f6005b2d99477f0ecded6e4d45f566965c058be996a5842999d06e163d7d1ef24f4737114e05296b0f4c45be6fb6434d05bdbb73ddba3b5b6a22b990db28a1c5cdd50c3fa0b4d6114d839304dde8bb9befa88617e975a631fbb2aefbbe1a293cbc5ba10103f2967c5ee076a7937bbde198deebd2d32f111c876a5dd2724303971a182e8bad8b86d4bed9040510e1c5973eb1f351ddc78b73796925f23c27006d34060dc33427d4e178103f0aa365e0274\"}".to_string(),
+        "u".to_string(),
+        Curve::Curve25519);
+        let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
+        assert_eq!(msg, "error deserializing msg_hash / msg");
         assert!(!success);
     }
 }

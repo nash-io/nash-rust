@@ -25,8 +25,14 @@ defmodule ServerWeb.Router do
     post "/dh_rpool", MPCController, :dh_rpool
     options "/dh_rpool", MPCController, :nothing # for cors_plug
 
-    post "/complete_sig", MPCController, :complete_sig
-    options "/complete_sig", MPCController, :nothing # for cors_plug
+    post "/complete_sig_ecdsa", MPCController, :complete_sig_ecdsa
+    options "/complete_sig_ecdsa", MPCController, :nothing # for cors_plug
+
+    post "/complete_sig_eddsa", MPCController, :complete_sig_eddsa
+    options "/complete_sig_eddsa", MPCController, :nothing # for cors_plug
+
+    post "/register_apikey", MPCController, :register_apikey
+    options "/register_apikey", MPCController, :nothing # for cors_plug
   end
 
   scope "/", ServerWeb do

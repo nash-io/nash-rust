@@ -3,10 +3,13 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion};
 use nash_mpc::common::{
-    dh_init_secp256k1, dh_init_secp256r1, Curve, publickey_from_secretkey
+    dh_init_curve25519, dh_init_secp256k1, dh_init_secp256r1, publickey_from_secretkey, Curve,
 };
+use nash_mpc::curves::curve25519::Ed25519Scalar;
+use nash_mpc::curves::traits::ECScalar;
 use nash_mpc::server::{
-    complete_sig, compute_rpool_secp256k1, compute_rpool_secp256r1, generate_paillier_proof,
+    complete_sig_ecdsa, complete_sig_eddsa, compute_rpool_curve25519, compute_rpool_secp256k1,
+    compute_rpool_secp256r1, decrypt, generate_paillier_proof,
 };
 use paillier_common::{DecryptionKey, MinimalDecryptionKey};
 use rust_bigint::traits::Converter;
@@ -34,6 +37,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
+    let (dh_secrets_ed, dh_publics_ed) = dh_init_curve25519(10).unwrap();
+    c.bench_function("compute_rpool_curve25519", |b| {
+        b.iter(|| {
+            compute_rpool_curve25519(black_box(&dh_secrets_ed), black_box(&dh_publics_ed)).unwrap();
+        })
+    });
+
     let presig_k1 = BigInt::from_hex("5a955a53b4598601890b70d1c0cba4e4bcf446623cfe529e7e52451932125f880b4139683434ff25f589e7f09441499e97a29227d8fbb484f2be4e9c602f92d411193c7b1c016290524cdbdf94f260959c1d9aacba3955d66ee759335738099902f68201a3a919358f4a2a99b1e61d63a839ad75d681e62b5258f18a4415f40709c8faac80082340cd2b96a8210eb5b1a31f9b0e498a01d985131923ce0b3ac2e874ba1089782db6c667a90c4fb1f5d1b98e133196e533efe8ad2d025806498921d1f89007e6cf013d1ed7683c41d4b07f6b3ff293b9a783043051ef1eaa0d195e706321c2ea6349d61dbf8e053dbe76e8f65d44c96c8b8ede0e69d0bba00def739123e5e5e2adb640d603defd1aa8204df00d0db82155e687e8127e9fcdbfabd2449fb48e11f85903ac9d08b32296085d114e024e677b6ec507fbaad262f4646248e0222588627fda9e20087eec30b1d94cffe9a254678821f7515afd89f5db7801886355cd3bb07493fff73bbf2256dab6b4f79dcbb4ed14adc0a731e2ce781b77728356e62277ce21fe1f4f4190a4b56499738f02bb65df7c71ed9e47fc81e2a23ee8686e921d47e11f3dc3f26eb35faffc41a9e870ab43474d4dfe0a0c1db1ec65837ee7babad54bbbb05b6648aa336f7749a8e0677415d3491431ed58ad922c71cb18c3683a0480eca1e39414ce200d6799d4f17332d647dd7f69c53637").unwrap();
     let r_k1 =
         BigInt::from_hex("02ec71e402771be8e826da22beb05f4eb0a3fb9eefcd06ebd0cb03010c942845ed")
@@ -51,7 +61,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             .unwrap();
     c.bench_function("complete_sig_k1", |b| {
         b.iter(|| {
-            complete_sig(
+            complete_sig_ecdsa(
                 black_box(&paillier_sk),
                 black_box(&presig_k1),
                 black_box(&r_k1),
@@ -79,7 +89,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .unwrap();
     c.bench_function("complete_sig_r1", |b| {
         b.iter(|| {
-            complete_sig(
+            complete_sig_ecdsa(
                 black_box(&paillier_sk),
                 black_box(&presig_r1),
                 black_box(&r_r1),
@@ -89,6 +99,45 @@ fn criterion_benchmark(c: &mut Criterion) {
                 black_box(&msg_hash),
             )
             .unwrap();
+        })
+    });
+
+    let pk = publickey_from_secretkey(
+        &BigInt::from_hex("f445c1855a1cd979572dc650d1611d266291daf4c06c8b5ceec98f0cfba3b65f")
+            .unwrap(),
+        Curve::Curve25519,
+    )
+    .unwrap();
+    let msg = BigInt::from_hex("68656c6c6f2c20776f726c6421").unwrap();
+    let server_secret_share =
+        BigInt::from_hex("6eb9906e008c0d1021119fede0ddfb390993fdd47d346f7ff50cfbc19081f9").unwrap();
+    let presig =
+        BigInt::from_hex("adb68715561e6de95f7df5b2b1347b9b5d1c98d8048ba515085b4c71afebb42")
+            .unwrap();
+    let r = BigInt::from_hex("e7d802e3a9e6feec611953326ac641352f112e6051f6b56eaf968a6c934e3218")
+        .unwrap();
+    let r_server: Ed25519Scalar = ECScalar::from(
+        &BigInt::from_hex("3a906a0e5d730994cc2f953651d3c6dc7f8128e8e6ad7304dc9743b80f94545")
+            .unwrap(),
+    )
+    .unwrap();
+    c.bench_function("complete_sig_ed", |b| {
+        b.iter(|| {
+            complete_sig_eddsa(
+                black_box(server_secret_share.clone()),
+                black_box(&presig),
+                black_box(&r),
+                black_box(r_server.clone()),
+                black_box(&pk),
+                black_box(&msg),
+            )
+            .unwrap();
+        })
+    });
+
+    c.bench_function("decrypt", |b| {
+        b.iter(|| {
+            decrypt(black_box(&paillier_sk), black_box(&server_secret_share));
         })
     });
 }

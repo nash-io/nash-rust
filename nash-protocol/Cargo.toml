@@ -1,6 +1,6 @@
 [package]
 name = "nash-protocol"
-version = "0.1.30-alpha.0"
+version = "0.1.30"
 authors = ["Ethan Fast <ejhfast@gmail.com>", "Robert Annessi <robert@nash.io>", "Jan Kjaergaard <jan@jankjr.dk>", "Danilo Guanabara <danilo@nash.io>"]
 edition = "2018"
 license = "MIT"

@@ -215,12 +215,17 @@ impl PublicKey {
         Ok(Self { inner })
     }
 
+    /// Return the PublicKey as a vector of bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.inner.to_bytes()
+    }
+
     /// generate Neo address from public key
     pub fn to_address(&self) -> Address {
         // 0x21 (PUSHBYTES21 opcode = size of compressed public key) | compressed public key | 0xac (CHECKSIG opcode)
         let addr_script = [
             vec![0x21],
-            self.inner.to_vec(),
+            self.to_bytes(),
             vec![0xac],
         ]
         .concat();
@@ -250,6 +255,14 @@ impl PublicKey {
 #[cfg(test)]
 mod tests {
     use super::{Address, PublicKey};
+
+    #[test]
+    fn inverse_op() {
+        let pk_string = "029ff76d1287091b34c77bd580c631931307631f5538d7f267ea1d8b2ee1cd5bc2";
+        let pk = PublicKey::new(pk_string).expect("Couldn't create public key.");
+        assert_eq!(pk_string, pk.to_hex());
+        assert_eq!(hex::decode(pk_string).unwrap(), pk.to_bytes());
+    }
 
     #[test]
     fn test_pk_to_addr() {

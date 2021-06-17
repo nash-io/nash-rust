@@ -143,7 +143,6 @@ mod tests {
     use futures::executor;
     use tokio::sync::RwLock;
 
-    use crate::protocol::signer::MAX_R_VAL_POOL_SIZE;
     use crate::protocol::{State, MAX_R_VAL_POOL_SIZE};
 
     use super::{Blockchain, DhFillPoolRequest, NashProtocol};

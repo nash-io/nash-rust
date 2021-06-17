@@ -31,7 +31,7 @@ graphql_client = "0.9"
 hex = "0.4"
 Inflector = "0.11"
 k256 = { version = "0.7", features = ["ecdsa", "sha256"], optional = true }
-nash-mpc = { version = "1.2", path = "../mpc-wallet/nash-mpc", default-features = false }
+nash-mpc = { version = "1.2.2", path = "../mpc-wallet/nash-mpc", default-features = false }
 num-traits = "0.2"
 ripemd160 = "0.9"
 rust-bigint = { version = "1.1", default-features = false }

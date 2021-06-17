@@ -64,6 +64,23 @@ async fn init_sandbox_client() -> Client {
         .unwrap()
 }
 
+#[tokio::test]
+async fn neo_order() {
+    let client = init_client().await;
+    let response = client.run(LimitOrderRequest {
+        allow_taker: true,
+        amount: "5.0".into(),
+        price: "1.0".into(),
+        buy_or_sell: BuyOrSell::Buy,
+        cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+        client_order_id: None,
+        market: "neo_usdc".into()
+    })
+        .await
+        .unwrap();
+    println!("{:#?}", response);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn place_order_fill_pool_loop() {
     let client = init_client().await;

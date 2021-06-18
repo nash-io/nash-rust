@@ -45,7 +45,7 @@ impl FillOrder {
         fee_rate: Rate,
         order_nonce: Nonce,
     ) -> Self {
-        Self {
+        let res = Self {
             prefix: Prefix::FillOrder,
             address: public_key.to_address(),
             asset_from,
@@ -58,7 +58,10 @@ impl FillOrder {
             fee_rate,
             order_nonce,
             public_key: public_key.inner,
-        }
+        };
+        println!("{:?}", res.to_bytes());
+        println!("{}", res.to_hex().unwrap());
+        res
     }
 
     /// Serialize FillOrder payload to bytes interpretable by the NEO smart contract

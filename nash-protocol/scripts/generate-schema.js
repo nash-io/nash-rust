@@ -17,7 +17,9 @@ const opts = {
   },
 };
 
-https.request(process.env.BACKEND, opts, res => {
+let backend = process.env.BACKEND || "https://app.nash.io/api/graphql";
+
+https.request(backend, opts, res => {
   let body = '';
   res.setEncoding ('utf8')
   .on ('data', chunk => { body += chunk; })

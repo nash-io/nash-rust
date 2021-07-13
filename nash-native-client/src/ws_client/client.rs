@@ -17,10 +17,7 @@ use tracing::{error, trace, trace_span, warn, Instrument};
 
 use nash_protocol::errors::{ProtocolError, Result};
 use nash_protocol::protocol::subscriptions::SubscriptionResponse;
-use nash_protocol::protocol::{
-    ErrorResponse, NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError,
-    State,
-};
+use nash_protocol::protocol::{ErrorResponse, NashProtocol, NashProtocolPipeline, NashProtocolSubscription, ResponseOrError, State, MAX_R_VAL_POOL_SIZE};
 use nash_protocol::types::Blockchain;
 
 use crate::http_extension::HttpClientState;
@@ -709,9 +706,10 @@ impl Client {
             global_subscription_receiver,
         };
         // Grab market data upon initial setup
-        let _ = client
-            .run(nash_protocol::protocol::list_markets::ListMarketsRequest)
-            .await?;
+        client.run(nash_protocol::protocol::list_markets::ListMarketsRequest).await?;
+        client.run(nash_protocol::protocol::dh_fill_pool::DhFillPoolRequest::new(Blockchain::NEO, MAX_R_VAL_POOL_SIZE)?).await?;
+        // Bitcoin and Ethereum shares the same R values pool.
+        client.run(nash_protocol::protocol::dh_fill_pool::DhFillPoolRequest::new(Blockchain::Bitcoin, MAX_R_VAL_POOL_SIZE)?).await?;
         Ok(client)
     }
 

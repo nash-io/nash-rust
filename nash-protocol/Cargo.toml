@@ -23,7 +23,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 async-recursion = "0.3"
 rand = "0.8"
-bigdecimal = { git = "https://github.com/dpbriggs/bigdecimal-rs", rev="02ba26b", features = ["serde"] }
+bigdecimal = { package = "bigdecimal-rs", version = "0.2.1", features = ["serde"] }
 base64 = "0.13"
 bs58 = { version = "0.3", features = ["check"] }
 byteorder = "1.3"

@@ -635,14 +635,15 @@ pub struct OrderbookOrder {
 #[cfg(test)]
 mod tests {
     use super::{BigDecimal, FromStr, OrderRate};
+    use std::convert::TryInto;
 
     #[test]
     fn fee_rate_conversion_precision() {
         let rate = OrderRate::new("150").unwrap();
         let inverted_rate = rate.invert_rate(None);
         let minus_fee = inverted_rate.subtract_fee(BigDecimal::from_str("0.0025").unwrap());
-        let payload = minus_fee.to_be_bytes().unwrap();
-        assert_eq!(665000, u64::from_be_bytes(payload));
+        let payload = minus_fee.to_be_bytes(8).unwrap();
+        assert_eq!(665000, u64::from_be_bytes(payload.try_into().unwrap()));
     }
 
     #[test]

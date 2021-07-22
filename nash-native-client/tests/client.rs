@@ -65,38 +65,46 @@ async fn init_sandbox_client() -> Client {
 }
 
 #[tokio::test]
-async fn neo_usdc_buy_order() {
-    let client = init_client().await;
-    let response = client.run(LimitOrderRequest {
-        allow_taker: true,
-        amount: "5.0".into(),
-        price: "1.0".into(),
-        buy_or_sell: BuyOrSell::Buy,
-        cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
-        client_order_id: None,
-        market: "neo_usdc".into()
-    })
-        .await
-        .unwrap();
-    println!("{:#?}", response);
-}
-
-#[tokio::test]
 async fn eth_btc_buy_order() {
     let client = init_client().await;
-    let response = client.run(LimitOrderRequest {
-        allow_taker: false,
-        amount: "1.0".into(),
-        price: "0.1".into(),
+    println!("{:#?}", client.run(CancelAllOrders {market: "eth_btc".into()}).await);
+    let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0));
+    let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
+        price,
+        allow_taker: true,
+        amount: "0.1".into(),
         buy_or_sell: BuyOrSell::Buy,
         cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
         client_order_id: None,
         market: "eth_btc".into()
-    })
-        .await
-        .unwrap();
-    println!("{:#?}", response);
+    }).collect();
+    for order in orders {
+        let response = client.run(order.clone()).await.unwrap();
+        if response.is_error() { println!("Price: {}\n{:#?}", order.price, response); }
+    }
     println!("{:#?}", client.run(CancelAllOrders {market: "eth_btc".into()}).await);
+}
+
+#[tokio::test]
+async fn neo_usdc_buy_order() {
+    let client = init_client().await;
+    println!("{:#?}", client.run(CancelAllOrders {market: "neo_usdc".into()}).await);
+    // let orders = ["0.069", "0.035", "0.424", "0.074"].iter().map(|value| String::from(*value));
+    let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0 + 5.0));
+    let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
+        price,
+        allow_taker: true,
+        amount: "1.065".into(),
+        buy_or_sell: BuyOrSell::Buy,
+        cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+        client_order_id: None,
+        market: "neo_usdc".into()
+    }).collect();
+    for order in orders {
+        let response = client.run(order.clone()).await.unwrap();
+        if response.is_error() { println!("Price: {}\n{:#?}", order.price, response); }
+    }
+    println!("{:#?}", client.run(CancelAllOrders {market: "neo_usdc".into()}).await);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

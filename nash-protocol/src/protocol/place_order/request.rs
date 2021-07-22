@@ -122,6 +122,7 @@ impl LimitOrderConstructor {
         chain: Blockchain,
         pub_key: &PublicKey,
         nonces: &PayloadNonces,
+        order_precision: u32
     ) -> Result<FillOrder> {
         // Rate is in "dest per source", so a higher rate is always beneficial to a user
         // Here we insure the minimum rate is the rate they specified
@@ -129,9 +130,9 @@ impl LimitOrderConstructor {
         let max_order = Rate::MaxOrderRate;
         // Amount is specified in the "source" asset
         let amount = self.source.amount.clone();
-
         let min_order = min_order
             .subtract_fee(Rate::MaxFeeRate.to_bigdecimal()?)?
+            .round(order_precision as i64 + 2)
             .into();
         let fee_rate = Rate::MinFeeRate; // 0
 
@@ -178,14 +179,16 @@ impl LimitOrderConstructor {
         &self,
         signer: &Signer,
         nonces: &[PayloadNonces],
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<LimitBlockchainSignatures> {
         let mut order_payloads = Vec::new();
         let blockchains = self.market.blockchains();
         for blockchain in blockchains {
             let pub_key = signer.child_public_key(blockchain)?;
             for nonce_group in nonces {
-                let fill_order = self.make_fill_order(blockchain, &pub_key, nonce_group)?;
-                order_payloads.push(Some(fill_order.to_blockchain_signature(signer)?))
+                let fill_order = self.make_fill_order(blockchain, &pub_key, nonce_group, order_precision)?;
+                order_payloads.push(Some(fill_order.to_blockchain_signature(signer, order_precision, fee_precision)?))
             }
         }
         Ok(order_payloads)
@@ -235,9 +238,11 @@ impl LimitOrderConstructor {
         &self,
         mut variables: place_limit_order::Variables,
         nonces: Vec<PayloadNonces>,
-        signer: &Signer) -> Result<place_limit_order::Variables>
+        signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32) -> Result<place_limit_order::Variables>
     {
-        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
+        let bc_sigs = self.blockchain_signatures(signer, &nonces, order_precision, fee_precision)?;
         variables.payload.blockchain_signatures = bc_sigs;
         // now compute overall request payload signature
         let canonical_string = limit_order_canonical_string(&variables)?;
@@ -255,8 +260,10 @@ impl LimitOrderConstructor {
         current_time: i64,
         affiliate: Option<String>,
         signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<LimitOrderMutation> {
-        let request = self.sign_graphql_request(self.graphql_request(current_time, affiliate)?, nonces, signer)?;
+        let request = self.sign_graphql_request(self.graphql_request(current_time, affiliate)?, nonces, signer, order_precision, fee_precision)?;
         Ok(graphql::PlaceLimitOrder::build_query(request))
     }
 
@@ -367,6 +374,8 @@ impl MarketOrderConstructor {
         &self,
         signer: &Signer,
         nonces: &[PayloadNonces],
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<MarketBlockchainSignatures> {
         let mut order_payloads = Vec::new();
         let blockchains = self.market.blockchains();
@@ -374,7 +383,7 @@ impl MarketOrderConstructor {
             let pub_key = signer.child_public_key(blockchain)?;
             for nonce_group in nonces {
                 let fill_order = self.make_fill_order(blockchain, &pub_key, nonce_group)?;
-                order_payloads.push(Some(fill_order.to_market_blockchain_signature(signer)?))
+                order_payloads.push(Some(fill_order.to_market_blockchain_signature(signer, order_precision, fee_precision)?))
             }
         }
         Ok(order_payloads)
@@ -410,10 +419,12 @@ impl MarketOrderConstructor {
         &self,
         mut variables: place_market_order::Variables,
         nonces: Vec<PayloadNonces>,
-        signer: &Signer) -> Result<place_market_order::Variables>
-    {
+        signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
+    ) -> Result<place_market_order::Variables> {
         // compute and add blockchain signatures
-        let bc_sigs = self.blockchain_signatures(signer, &nonces)?;
+        let bc_sigs = self.blockchain_signatures(signer, &nonces, order_precision, fee_precision)?;
         variables.payload.blockchain_signatures = bc_sigs;
         // now compute overall request payload signature
         let canonical_string = market_order_canonical_string(&variables)?;
@@ -431,8 +442,10 @@ impl MarketOrderConstructor {
         current_time: i64,
         affiliate: Option<String>,
         signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<MarketOrderMutation> {
-        let request = self.sign_graphql_request(self.graphql_request(current_time, affiliate)?, nonces, signer)?;
+        let request = self.sign_graphql_request(self.graphql_request(current_time, affiliate)?, nonces, signer, order_precision, fee_precision)?;
         Ok(graphql::PlaceMarketOrder::build_query(request))
     }
 

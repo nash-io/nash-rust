@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tokio::sync::{Mutex, RwLock};
 use tracing::error;
 
-use crate::errors::Result;
+use crate::errors::{Result, ProtocolError};
 use crate::protocol::ErrorResponse;
 use crate::protocol::{
     asset_nonces::AssetNoncesRequest, list_markets::ListMarketsRequest, serializable_to_json,
@@ -95,11 +95,18 @@ impl NashProtocol for LimitOrdersRequest {
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
-        let builder = self.make_constructor(state.clone()).await?;
-        let time = current_time_as_i64();
-        let affiliate = state.read().await.affiliate_code.clone();
-        let query = builder.signed_graphql_request(time, affiliate, state).await?;
-        serializable_to_json(&query)
+        if let Some(request) = self.requests.first() {
+            let builder = self.make_constructor(state.clone()).await?;
+            let time = current_time_as_i64();
+            let affiliate = state.read().await.affiliate_code.clone();
+            let market = state.read().await.get_market(&request.market)?;
+            let order_precision = 8;
+            let fee_precision = market.min_trade_size_b.asset.precision;
+            let query = builder.signed_graphql_request(time, affiliate, state, order_precision, fee_precision).await?;
+            serializable_to_json(&query)
+        } else {
+            Err(ProtocolError("Empty request."))
+        }
     }
 
     async fn response_from_json(
@@ -164,11 +171,22 @@ impl NashProtocol for MarketOrdersRequest {
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
-        let builder = self.make_constructor(state.clone()).await?;
-        let time = current_time_as_i64();
-        let affiliate = state.read().await.affiliate_code.clone();
-        let query = builder.signed_graphql_request(time, affiliate, state).await?;
-        serializable_to_json(&query)
+        if let Some(request) = self.requests.first() {
+            let builder = self.make_constructor(state.clone()).await?;
+            let time = current_time_as_i64();
+            let (affiliate, market) = {
+                let state_read = state.read().await;
+                let affiliate = state_read.affiliate_code.clone();
+                let market = state_read.get_market(&request.market)?;
+                (affiliate, market)
+            };
+            let order_precision = 8;
+            let fee_precision = market.min_trade_size_b.asset.precision;
+            let query = builder.signed_graphql_request(time, affiliate, state, order_precision, fee_precision).await?;
+            serializable_to_json(&query)
+        } else {
+            Err(ProtocolError("Empty request."))
+        }
     }
 
     async fn response_from_json(

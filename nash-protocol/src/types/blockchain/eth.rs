@@ -13,14 +13,15 @@ use sha3::{Digest, Keccak256};
 
 impl Rate {
     /// Convert any Rate into bytes for encoding in a Ethereum payload
-    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
+    pub fn to_be_bytes(&self, order_precision: u32, fee_precision: u32) -> Result<Vec<u8>> {
         let zero_bytes = (0 as f64).to_be_bytes();
         let bytes = match self {
-            Self::OrderRate(rate) | Self::FeeRate(rate) => rate.to_be_bytes()?,
-            Self::MinOrderRate | Self::MinFeeRate => zero_bytes,
-            Self::MaxOrderRate => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+            Self::OrderRate(rate) => rate.to_be_bytes(order_precision)?.to_vec(),
+            Self::FeeRate(rate) => rate.to_be_bytes(fee_precision)?.to_vec(),
+            Self::MinOrderRate | Self::MinFeeRate => zero_bytes.to_vec(),
+            Self::MaxOrderRate => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF].to_vec(),
             // 0.0025 * 10^8 = 250,000
-            Self::MaxFeeRate => [0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xD0, 0x90],
+            Self::MaxFeeRate => [0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xD0, 0x90].to_vec(),
         };
         Ok(bytes)
     }
@@ -34,8 +35,10 @@ impl Rate {
 impl OrderRate {
     /// Serialize the OrderRate to bytes for payload creation. We always use a
     /// precision of 8 and multiplication factor of 10^8
-    pub fn to_be_bytes(&self) -> Result<[u8; 8]> {
-        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), 8)?.to_be_bytes();
+    pub fn to_be_bytes(&self, precision: u32) -> Result<Vec<u8>> {
+        let precision = precision.max(8);
+        let bytes = bigdecimal_to_nash_u64(&self.to_bigdecimal(), precision)?.to_be_bytes();
+        let bytes = bytes.iter().cloned().take(precision as usize).collect();
         Ok(bytes)
     }
 

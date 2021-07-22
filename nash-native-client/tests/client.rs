@@ -89,7 +89,6 @@ async fn eth_btc_buy_order() {
 async fn neo_usdc_buy_order() {
     let client = init_client().await;
     println!("{:#?}", client.run(CancelAllOrders {market: "neo_usdc".into()}).await);
-    // let orders = ["0.069", "0.035", "0.424", "0.074"].iter().map(|value| String::from(*value));
     let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0 + 5.0));
     let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
         price,

@@ -242,6 +242,8 @@ impl LimitOrderConstructor {
         order_precision: u32,
         fee_precision: u32) -> Result<place_limit_order::Variables>
     {
+        let client_order_id = variables.payload.client_order_id;
+        variables.payload.client_order_id = None;
         let bc_sigs = self.blockchain_signatures(signer, &nonces, order_precision, fee_precision)?;
         variables.payload.blockchain_signatures = bc_sigs;
         // now compute overall request payload signature
@@ -249,6 +251,7 @@ impl LimitOrderConstructor {
         let sig: place_limit_order::Signature =
             signer.sign_canonical_string(&canonical_string).into();
         variables.signature = sig;
+        variables.payload.client_order_id = client_order_id;
         Ok(variables)
     }
 

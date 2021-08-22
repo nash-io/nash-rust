@@ -59,6 +59,8 @@ impl LimitOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
         state: Arc<RwLock<State>>,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<DynamicQueryBody> {
         let variables = self.graphql_request(current_time, affiliate)?;
         let mut map = HashMap::new();
@@ -69,7 +71,7 @@ impl LimitOrdersConstructor {
             let nonces = constructor.make_payload_nonces(state.clone(), current_time + index as i64).await?;
             let state = state.read().await;
             let signer = state.signer()?;
-            let variable = constructor.sign_graphql_request(variable, nonces, signer)?;
+            let variable = constructor.sign_graphql_request(variable, nonces, signer, order_precision, fee_precision)?;
 
             // FIXME: This is also replicated in MarketOrdersConstructor::signed_graphql_request
             let payload = format!("payload{}", index);
@@ -129,6 +131,8 @@ impl MarketOrdersConstructor {
         current_time: i64,
         affiliate: Option<String>,
         state: Arc<RwLock<State>>,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<DynamicQueryBody> {
         let variables = self.graphql_request(current_time, affiliate)?;
         let mut map = HashMap::new();
@@ -139,7 +143,7 @@ impl MarketOrdersConstructor {
             let nonces = constructor.make_payload_nonces(state.clone(), current_time + index as i64).await?;
             let state = state.read().await;
             let signer = state.signer()?;
-            let variable = constructor.sign_graphql_request(variable, nonces, signer)?;
+            let variable = constructor.sign_graphql_request(variable, nonces, signer, order_precision, fee_precision)?;
 
             let payload = format!("payload{}", index);
             let signature = format!("signature{}", index);

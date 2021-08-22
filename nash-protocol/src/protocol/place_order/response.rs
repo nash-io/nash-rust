@@ -4,6 +4,7 @@ use crate::graphql::place_market_order;
 use crate::types::{BuyOrSell, OrderStatus, OrderType};
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
+use crate::protocol::place_order::types::MarketName;
 
 impl From<place_limit_order::ResponseData> for PlaceOrderResponse {
     fn from(response: place_limit_order::ResponseData) -> Self {
@@ -16,7 +17,9 @@ impl From<place_limit_order::ResponseData> for PlaceOrderResponse {
                 .expect("ME returned invalid placed_at DateTime for PlaceOrderResponse"),
             order_type: response.type_.into(),
             buy_or_sell: response.buy_or_sell.into(),
-            market_name: response.market.name.clone(),
+            market: MarketName {
+                name: response.market.name.clone()
+            }
         }
     }
 }
@@ -71,7 +74,9 @@ impl From<place_market_order::ResponseData> for PlaceOrderResponse {
                 .expect("ME returned invalid placed_at DateTime for PlaceOrderResponse"),
             order_type: OrderType::Market,
             buy_or_sell: response.buy_or_sell.into(),
-            market_name: response.market.name.clone(),
+            market: MarketName {
+                name: response.market.name.clone()
+            },
         }
     }
 }

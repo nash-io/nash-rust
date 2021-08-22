@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, RwLock};
 use tracing::error;
+use serde::{Serialize, Deserialize};
 
 use crate::errors::Result;
 use crate::graphql::place_limit_order;
@@ -107,16 +108,25 @@ pub struct PayloadNonces {
     pub order_nonce: Nonce,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MarketName {
+    pub name: String
+}
+
 /// Response from server once we have placed a limit order
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaceOrderResponse {
+    #[serde(rename = "ordersTillSignState")]
     pub remaining_orders: u64,
+    #[serde(rename = "id")]
     pub order_id: String,
     pub status: OrderStatus,
     pub placed_at: DateTime<Utc>,
+    #[serde(rename = "type")]
     pub order_type: OrderType,
     pub buy_or_sell: BuyOrSell,
-    pub market_name: String,
+    pub market: MarketName,
 }
 
 async fn get_required_hooks(state: Arc<RwLock<State>>, market: &str) -> Result<Vec<ProtocolHook>> {
@@ -189,7 +199,10 @@ impl NashProtocol for LimitOrderRequest {
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
         let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
-        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
+        let market = state.get_market(&self.market)?;
+        let order_precision = 8;
+        let fee_precision = market.min_trade_size_b.asset.precision;
+        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?, order_precision, fee_precision)?;
         let json = serializable_to_json(&query);
         json
     }
@@ -258,7 +271,10 @@ impl NashProtocol for MarketOrderRequest {
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
         let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
-        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
+        let market = state.get_market(&self.market)?;
+        let order_precision = 8;
+        let fee_precision = market.min_trade_size_b.asset.precision;
+        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?, order_precision, fee_precision)?;
         serializable_to_json(&query)
     }
 

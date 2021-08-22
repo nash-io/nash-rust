@@ -18,7 +18,7 @@ use crate::protocol::ErrorResponse;
 /// as state changes on response processing.
 #[async_trait]
 pub trait NashProtocol: Debug + Send + Sync {
-    type Response: Send + Sync;
+    type Response: Debug + Send + Sync;
     /// If you want to limit the amount of concurrency of a protocol return a Semaphore here
     async fn acquire_permit(&self, _state: Arc<RwLock<State>>) -> Option<tokio::sync::OwnedSemaphorePermit> {
         None

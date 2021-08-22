@@ -266,6 +266,7 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
         }
     }
 
+    // FIXME: Some usages of to_vec were broken. An alternative `fn as_bytes(&self) -> Vec<u8>` was implemented to fix it. If all the others to_vec usages are also broken, this should be completely replaced by `as_bytes`.
     fn to_vec(&self) -> Vec<u8> {
         // unwrap() is safe because self has been validated on creation
         let tmp = AffinePoint::from_encoded_point(&EncodedPoint::from(&self.ge)).unwrap();
@@ -370,12 +371,17 @@ impl ECPoint<VerifyingKey, Scalar> for Secp256r1Point {
 }
 
 impl Secp256r1Point {
-    // derive point from BigInt
+    /// derive point from BigInt
     pub fn from_bigint(i: &BigInt) -> Result<Secp256r1Point, ()> {
         match Secp256r1Point::from_bytes(&BigInt::to_vec(i)) {
             Ok(v) => Ok(v),
             Err(_) => Err(()),
         }
+    }
+
+    /// Return the PublicKey as a vector of bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        hex::decode(self.to_hex()).unwrap()
     }
 }
 

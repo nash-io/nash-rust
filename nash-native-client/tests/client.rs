@@ -64,6 +64,48 @@ async fn init_sandbox_client() -> Client {
         .unwrap()
 }
 
+#[tokio::test]
+async fn eth_btc_buy_order() {
+    let client = init_client().await;
+    println!("{:#?}", client.run(CancelAllOrders {market: "eth_btc".into()}).await);
+    let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0));
+    let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
+        price,
+        allow_taker: true,
+        amount: "0.1".into(),
+        buy_or_sell: BuyOrSell::Buy,
+        cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+        client_order_id: None,
+        market: "eth_btc".into()
+    }).collect();
+    for order in orders {
+        let response = client.run(order.clone()).await.unwrap();
+        if response.is_error() { println!("Price: {}\n{:#?}", order.price, response); }
+    }
+    println!("{:#?}", client.run(CancelAllOrders {market: "eth_btc".into()}).await);
+}
+
+#[tokio::test]
+async fn neo_usdc_buy_order() {
+    let client = init_client().await;
+    println!("{:#?}", client.run(CancelAllOrders {market: "neo_usdc".into()}).await);
+    let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0 + 5.0));
+    let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
+        price,
+        allow_taker: true,
+        amount: "1.065".into(),
+        buy_or_sell: BuyOrSell::Buy,
+        cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+        client_order_id: None,
+        market: "neo_usdc".into()
+    }).collect();
+    for order in orders {
+        let response = client.run(order.clone()).await.unwrap();
+        if response.is_error() { println!("Price: {}\n{:#?}", order.price, response); }
+    }
+    println!("{:#?}", client.run(CancelAllOrders {market: "neo_usdc".into()}).await);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn place_order_fill_pool_loop() {
     let client = init_client().await;
@@ -650,6 +692,107 @@ async fn end_to_end_sub_account_balance() {
 }
 
 #[test]
+fn multicall_partial_errors() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let async_block = async {
+        let client = init_client().await;
+        let limit_orders = LimitOrdersRequest {
+            requests: vec![
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.0".to_string(),
+                    price: "0.000213070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.1".to_string(),
+                    price: "0.000203070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.5".to_string(),
+                    price: "0.000210070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+            ]
+        };
+
+        let response = client
+            .run(limit_orders)
+            .await
+            .unwrap()
+            .response()
+            .unwrap()
+            .clone();
+
+        assert_eq!(response.responses.iter().filter(|p| p.is_err()).count(), 1);
+        assert_eq!(response.responses.iter().filter(|p| p.is_ok()).count(), 2);
+    };
+    runtime.block_on(async_block);
+}
+
+#[test]
+fn multicall_all_errors() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let async_block = async {
+        let client = init_client().await;
+        let limit_orders = LimitOrdersRequest {
+            requests: vec![
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.0".to_string(),
+                    price: "0.000213070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.0".to_string(),
+                    price: "0.000203070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+                LimitOrderRequest {
+                    client_order_id: None,
+                    market: "eth_btc".to_string(),
+                    buy_or_sell: BuyOrSell::Buy,
+                    amount: "0.0".to_string(),
+                    price: "0.000210070".to_string(),
+                    cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
+                    allow_taker: true,
+                },
+            ]
+        };
+
+        let response = client
+            .run(limit_orders)
+            .await
+            .unwrap()
+            .response()
+            .unwrap()
+            .clone();
+
+        assert_eq!(response.responses.iter().filter(|p| p.is_err()).count(), 3);
+    };
+    runtime.block_on(async_block);
+}
+
+#[test]
 fn multi_limit_multi_cancel() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let async_block = async {
@@ -695,7 +838,7 @@ fn multi_limit_multi_cancel() {
                     client_order_id: None,
                     market: "eth_btc".to_string(),
                     buy_or_sell: BuyOrSell::Buy,
-                    amount: "0.05".to_string(),
+                    amount: "0.5".to_string(),
                     price: "0.000210070".to_string(),
                     cancellation_policy: OrderCancellationPolicy::GoodTilCancelled,
                     allow_taker: true,
@@ -710,7 +853,7 @@ fn multi_limit_multi_cancel() {
             .response()
             .unwrap()
             .clone();
-        println!("{:#?}", response);
+        println!("Limit Orders: {:#?}", response);
 
         let mut orders = Vec::new();
         while orders.len() < 3 {
@@ -808,12 +951,12 @@ fn multi_market_order() {
         let response = client
             .run(market_orders)
             .await
-            .unwrap()
+            .expect("Couldn't get ResponseOrError")
             .response()
-            .unwrap()
+            .expect("Couldn't get Response")
             .clone();
-        println!("{:#?}", response);
-        assert_eq!(response.responses.len(), 3);
+        println!("Response: {:#?}", response);
+        assert_eq!(response.responses.iter().filter(|response| response.is_ok()).count(), 3);
     };
     runtime.block_on(async_block);
 }

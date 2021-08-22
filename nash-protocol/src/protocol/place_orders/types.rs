@@ -24,8 +24,8 @@ pub type PlaceOrdersResponse = MultiResponse<PlaceOrderResponse>;
 pub type MarketOrdersRequest = MultiRequest<MarketOrderRequest>;
 
 use crate::protocol::place_order::types::{LimitOrderConstructor, MarketOrderConstructor};
-use crate::protocol::place_orders::response::{LimitResponseData, MarketResponseData};
 use crate::protocol::multi_request::{MultiRequest, MultiRequestConstructor, MultiResponse};
+use std::convert::TryInto;
 
 pub type LimitOrdersConstructor = MultiRequestConstructor<LimitOrderConstructor>;
 pub type MarketOrdersConstructor = MultiRequestConstructor<MarketOrderConstructor>;
@@ -95,11 +95,18 @@ impl NashProtocol for LimitOrdersRequest {
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
-        let builder = self.make_constructor(state.clone()).await?;
-        let time = current_time_as_i64();
-        let affiliate = state.read().await.affiliate_code.clone();
-        let query = builder.signed_graphql_request(time, affiliate, state).await?;
-        serializable_to_json(&query)
+        if let Some(request) = self.requests.first() {
+            let builder = self.make_constructor(state.clone()).await?;
+            let time = current_time_as_i64();
+            let affiliate = state.read().await.affiliate_code.clone();
+            let market = state.read().await.get_market(&request.market)?;
+            let order_precision = 8;
+            let fee_precision = market.min_trade_size_b.asset.precision;
+            let query = builder.signed_graphql_request(time, affiliate, state, order_precision, fee_precision).await?;
+            serializable_to_json(&query)
+        } else {
+            Err(ProtocolError("Empty request."))
+        }
     }
 
     async fn response_from_json(
@@ -107,13 +114,7 @@ impl NashProtocol for LimitOrdersRequest {
         response: serde_json::Value,
         _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
-        let data = response.get("data")
-            .ok_or_else(|| ProtocolError("data field not found."))?
-            .clone();
-        let response: LimitResponseData = serde_json::from_value(data).map_err(|x| {
-            ProtocolError::coerce_static_from_str(&format!("{:#?}", x))
-        })?;
-        Ok(ResponseOrError::from_data(response.into()))
+        Ok(ResponseOrError::from_data(response.try_into()?))
     }
 
     /// Update the number of orders remaining before state sync
@@ -122,7 +123,7 @@ impl NashProtocol for LimitOrdersRequest {
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        if let Some(response) = response.responses.last() {
+        if let Some(Ok(response)) = response.responses.iter().rfind(|response| response.is_ok()) {
             let state = state.read().await;
             state.set_remaining_orders(response.remaining_orders);
         }
@@ -170,11 +171,22 @@ impl NashProtocol for MarketOrdersRequest {
     }
 
     async fn graphql(&self, state: Arc<RwLock<State>>) -> Result<serde_json::Value> {
-        let builder = self.make_constructor(state.clone()).await?;
-        let time = current_time_as_i64();
-        let affiliate = state.read().await.affiliate_code.clone();
-        let query = builder.signed_graphql_request(time, affiliate, state).await?;
-        serializable_to_json(&query)
+        if let Some(request) = self.requests.first() {
+            let builder = self.make_constructor(state.clone()).await?;
+            let time = current_time_as_i64();
+            let (affiliate, market) = {
+                let state_read = state.read().await;
+                let affiliate = state_read.affiliate_code.clone();
+                let market = state_read.get_market(&request.market)?;
+                (affiliate, market)
+            };
+            let order_precision = 8;
+            let fee_precision = market.min_trade_size_b.asset.precision;
+            let query = builder.signed_graphql_request(time, affiliate, state, order_precision, fee_precision).await?;
+            serializable_to_json(&query)
+        } else {
+            Err(ProtocolError("Empty request."))
+        }
     }
 
     async fn response_from_json(
@@ -182,13 +194,8 @@ impl NashProtocol for MarketOrdersRequest {
         response: serde_json::Value,
         _state: Arc<RwLock<State>>,
     ) -> Result<ResponseOrError<Self::Response>> {
-        let data = response.get("data")
-            .ok_or_else(|| ProtocolError("data field not found."))?
-            .clone();
-        let response: MarketResponseData = serde_json::from_value(data).map_err(|x| {
-            ProtocolError::coerce_static_from_str(&format!("{:#?}", x))
-        })?;
-        Ok(ResponseOrError::from_data(response.into()))    }
+        Ok(ResponseOrError::from_data(response.try_into()?))
+    }
 
     /// Update the number of orders remaining before state sync
     async fn process_response(
@@ -196,7 +203,7 @@ impl NashProtocol for MarketOrdersRequest {
         response: &Self::Response,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
-        if let Some(response) = response.responses.last() {
+        if let Some(Ok(response)) = response.responses.iter().rfind(|response| response.is_ok()) {
             let state = state.read().await;
             // TODO: Incorporate error into process response
             state.set_remaining_orders(response.remaining_orders);

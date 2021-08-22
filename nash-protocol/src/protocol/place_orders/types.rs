@@ -213,7 +213,7 @@ impl NashProtocol for MarketOrdersRequest {
 
     async fn process_error(
         &self,
-        _response: &ErrorResponse,
+        _response: &    ErrorResponse,
         state: Arc<RwLock<State>>,
     ) -> Result<()> {
         // TODO: Do we need to decrement for errors?

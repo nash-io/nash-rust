@@ -1,12 +1,12 @@
 pub use crate as nash_protocol;
-use exchange::model::{OrderBookRequest, OrderBookResponse, AskBid, CancelOrderRequest, OrderCanceled, CancelAllOrdersRequest, OrderType, Order, TradeHistoryRequest, Trade, Side, Liquidity, GetHistoricRatesRequest, GetHistoricTradesRequest, Interval, Candle, GetOrderHistoryRequest, OrderStatus, GetPriceTickerRequest, Ticker, GetOrderRequest, TimeInForce, Paginator};
+use openlimits_exchange::model::{OrderBookRequest, OrderBookResponse, AskBid, CancelOrderRequest, OrderCanceled, CancelAllOrdersRequest, OrderType, Order, TradeHistoryRequest, Trade, Side, Liquidity, GetHistoricRatesRequest, GetHistoricTradesRequest, Interval, Candle, GetOrderHistoryRequest, OrderStatus, GetPriceTickerRequest, Ticker, GetOrderRequest, TimeInForce, Paginator};
+use openlimits_exchange::{OpenLimitsError, MissingImplementationContent};
+use openlimits_exchange::model::websocket::{AccountOrders, Subscription};
+use openlimits_exchange::shared::{Result, timestamp_to_utc_datetime};
 use rust_decimal::Decimal;
 use std::convert::{TryFrom, TryInto};
-use exchange::{OpenLimitsError, MissingImplementationContent};
 use crate::types::{BuyOrSell, DateTimeRange};
-use exchange::model::websocket::{AccountOrders, Subscription};
 use crate::protocol::subscriptions::updated_account_orders::SubscribeAccountOrders;
-use exchange::shared::{Result, timestamp_to_utc_datetime};
 use chrono::Utc;
 use std::str::FromStr;
 
@@ -130,7 +130,7 @@ impl TryFrom<&TradeHistoryRequest>
 for nash_protocol::protocol::list_account_trades::ListAccountTradesRequest
 {
     type Error = OpenLimitsError;
-    fn try_from(req: &TradeHistoryRequest) -> exchange::shared::Result<Self> {
+    fn try_from(req: &TradeHistoryRequest) -> openlimits_exchange::shared::Result<Self> {
         let (before, limit, range) = try_split_paginator(req.paginator.clone())?;
 
         Ok(Self {
@@ -199,7 +199,7 @@ impl TryFrom<&GetHistoricRatesRequest>
 for nash_protocol::protocol::list_candles::ListCandlesRequest
 {
     type Error = OpenLimitsError;
-    fn try_from(req: &GetHistoricRatesRequest) -> exchange::shared::Result<Self> {
+    fn try_from(req: &GetHistoricRatesRequest) -> openlimits_exchange::shared::Result<Self> {
         let (before, limit, range) = try_split_paginator(req.paginator.clone())?;
 
         Ok(Self {
@@ -221,7 +221,7 @@ impl TryFrom<&GetHistoricTradesRequest>
 for nash_protocol::protocol::list_trades::ListTradesRequest
 {
     type Error = OpenLimitsError;
-    fn try_from(req: &GetHistoricTradesRequest) -> exchange::shared::Result<Self> {
+    fn try_from(req: &GetHistoricTradesRequest) -> openlimits_exchange::shared::Result<Self> {
         let market = req.market_pair.clone();
         let (before, limit, _) = try_split_paginator(req.paginator.clone())?;
         //FIXME: Some issues with the graphql protocol for the market to be non nil
@@ -235,7 +235,7 @@ for nash_protocol::protocol::list_trades::ListTradesRequest
 
 impl TryFrom<Interval> for nash_protocol::types::CandleInterval {
     type Error = OpenLimitsError;
-    fn try_from(interval: Interval) -> exchange::shared::Result<Self> {
+    fn try_from(interval: Interval) -> openlimits_exchange::shared::Result<Self> {
         match interval {
             Interval::OneMinute => Ok(nash_protocol::types::CandleInterval::OneMinute),
             Interval::FiveMinutes => Ok(nash_protocol::types::CandleInterval::FiveMinute),
@@ -283,7 +283,7 @@ impl TryFrom<&GetOrderHistoryRequest>
 for nash_protocol::protocol::list_account_orders::ListAccountOrdersRequest
 {
     type Error = OpenLimitsError;
-    fn try_from(req: &GetOrderHistoryRequest) -> exchange::shared::Result<Self> {
+    fn try_from(req: &GetOrderHistoryRequest) -> openlimits_exchange::shared::Result<Self> {
         let (before, limit, range) = try_split_paginator(req.paginator.clone())?;
 
         Ok(Self {
@@ -346,7 +346,7 @@ impl From<nash_protocol::types::OrderStatus> for OrderStatus {
 
 impl TryFrom<OrderStatus> for nash_protocol::types::OrderStatus {
     type Error = OpenLimitsError;
-    fn try_from(status: OrderStatus) -> exchange::shared::Result<Self> {
+    fn try_from(status: OrderStatus) -> openlimits_exchange::shared::Result<Self> {
         Ok(match status {
             OrderStatus::Filled => nash_protocol::types::OrderStatus::Filled,
             OrderStatus::Open => nash_protocol::types::OrderStatus::Open,
@@ -509,7 +509,7 @@ impl From<TimeInForce> for nash_protocol::types::OrderCancellationPolicy {
     }
 }
 
-impl From<nash_protocol::errors::ProtocolError> for exchange::OpenLimitsError {
+impl From<nash_protocol::errors::ProtocolError> for openlimits_exchange::OpenLimitsError {
     fn from(error: nash_protocol::errors::ProtocolError) -> Self {
         Self::Generic(Box::new(error))
     }

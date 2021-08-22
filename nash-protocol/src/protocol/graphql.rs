@@ -186,9 +186,6 @@ impl TryFrom<serde_json::Value> for GraphQLResponse {
     }
 }
 
-/// GraphQL response data errors
-#[derive(Deserialize, Serialize, Debug)]
-
 /// Inner wrapper on error GraphQL response data
 #[derive(Clone, Deserialize, Serialize, Debug, Error)]
 #[error("")]

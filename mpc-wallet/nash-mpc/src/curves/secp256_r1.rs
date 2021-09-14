@@ -7,6 +7,7 @@ use getrandom::getrandom;
 #[cfg(feature = "num_bigint")]
 use num_traits::identities::Zero;
 use p256::ecdsa::VerifyingKey;
+use p256::elliptic_curve::group::prime::PrimeCurveAffine;
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use p256::{AffinePoint, EncodedPoint, ProjectivePoint, Scalar};
 use rust_bigint::traits::Converter;

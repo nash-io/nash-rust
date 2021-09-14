@@ -5,6 +5,7 @@ use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;
 use k256::ecdsa::VerifyingKey;
+use k256::elliptic_curve::group::prime::PrimeCurveAffine;
 use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use k256::{AffinePoint, EncodedPoint, ProjectivePoint, Scalar};
 #[cfg(feature = "num_bigint")]

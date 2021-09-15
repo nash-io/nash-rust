@@ -49,7 +49,7 @@ pub struct CorrectKeyProof {
 pub(crate) const CORRECT_KEY_M: usize = 11;
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve secp256r1)
-pub fn dh_init_secp256r1(n: u32) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1Point>), ()> {
+pub fn dh_init_secp256r1(n: usize) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1Point>), ()> {
     // don't allow creating too many values at once.
     if n > 100 {
         return Err(());
@@ -73,7 +73,7 @@ pub fn dh_init_secp256r1(n: u32) -> Result<(Vec<Secp256r1Scalar>, Vec<Secp256r1P
 }
 
 /// Diffie-Hellman: create a set of secret values and a set of public values (using curve secp256k1)
-pub fn dh_init_secp256k1(n: u32) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k1Point>), ()> {
+pub fn dh_init_secp256k1(n: usize) -> Result<(Vec<Secp256k1Scalar>, Vec<Secp256k1Point>), ()> {
     // don't allow creating too many values at once.
     if n > 100 {
         return Err(());

@@ -7,6 +7,7 @@ use getrandom::getrandom;
 #[cfg(feature = "num_bigint")]
 use num_traits::identities::Zero;
 use p256::ecdsa::VerifyingKey;
+use p256::elliptic_curve::group::prime::PrimeCurveAffine;
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use p256::{AffinePoint, EncodedPoint, ProjectivePoint, Scalar};
 use rust_bigint::traits::Converter;
@@ -842,10 +843,10 @@ mod tests {
     fn add_sub_point() {
         let g = Secp256r1Point::generator();
         let i: Secp256r1Scalar = ECScalar::from(&BigInt::from(3)).unwrap();
-        assert_eq!(((g + g).unwrap() + g).unwrap().ge, (g * i).unwrap().ge);
+        assert_eq!(((g.clone() + g.clone()).unwrap() + g.clone()).unwrap().ge, (g.clone() * i).unwrap().ge);
         assert_eq!(
-            (g + g).unwrap().ge,
-            (((g + g).unwrap() - g).unwrap() + g).unwrap().ge
+            (g.clone() + g.clone()).unwrap().ge,
+            (((g.clone() + g.clone()).unwrap() - g.clone()).unwrap() + g.clone()).unwrap().ge
         );
     }
 

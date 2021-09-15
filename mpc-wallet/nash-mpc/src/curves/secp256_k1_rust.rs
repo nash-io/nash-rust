@@ -5,6 +5,7 @@ use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use getrandom::getrandom;
 use k256::ecdsa::VerifyingKey;
+use k256::elliptic_curve::group::prime::PrimeCurveAffine;
 use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use k256::{AffinePoint, EncodedPoint, ProjectivePoint, Scalar};
 #[cfg(feature = "num_bigint")]
@@ -836,10 +837,10 @@ mod tests {
     fn add_sub_point() {
         let g = Secp256k1Point::generator();
         let i: Secp256k1Scalar = ECScalar::from(&BigInt::from(3)).unwrap();
-        assert_eq!(((g + g).unwrap() + g).unwrap().ge, (g * i).unwrap().ge);
+        assert_eq!(((g.clone() + g.clone()).unwrap() + g.clone()).unwrap().ge, (g.clone() * i).unwrap().ge);
         assert_eq!(
-            (g + g).unwrap().ge,
-            (((g + g).unwrap() - g).unwrap() + g).unwrap().ge
+            (g.clone() + g.clone()).unwrap().ge,
+            (((g.clone() + g.clone()).unwrap() - g.clone()).unwrap() + g.clone()).unwrap().ge
         );
     }
 

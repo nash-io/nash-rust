@@ -341,6 +341,16 @@ impl Rate {
         Ok(num)
     }
 
+    /// Round in the specified precision.
+    pub fn round(&self, precision: i64) -> Result<Self> {
+        match self {
+            Self::OrderRate(rate) => Ok(Self::OrderRate(rate.round(precision))),
+            _ => Err(ProtocolError(
+                "Cannot round a Rate that is not an OrderRate"
+            ))
+        }
+    }
+
     pub fn invert_rate(&self, precision: Option<u32>) -> Result<Self> {
         match self {
             Self::OrderRate(rate) => Ok(Self::OrderRate(rate.invert_rate(precision))),
@@ -372,7 +382,7 @@ impl Rate {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OrderRate {
-    inner: BigDecimal,
+    inner: BigDecimal
 }
 
 impl OrderRate {
@@ -386,6 +396,12 @@ impl OrderRate {
     /// Create new OrderRate from bigdecimal
     pub fn from_bigdecimal(decimal: BigDecimal) -> Self {
         Self { inner: decimal }
+    }
+
+    /// Round the price in the specified precision.
+    pub fn round(&self, precision: i64) -> Self {
+        let inner = self.inner.round(precision);
+        Self { inner }
     }
 
     /// Invert the price to units of the other market pair. For example, if price is
@@ -619,12 +635,27 @@ pub struct OrderbookOrder {
 #[cfg(test)]
 mod tests {
     use super::{BigDecimal, FromStr, OrderRate};
+    use std::convert::TryInto;
+
     #[test]
     fn fee_rate_conversion_precision() {
         let rate = OrderRate::new("150").unwrap();
         let inverted_rate = rate.invert_rate(None);
         let minus_fee = inverted_rate.subtract_fee(BigDecimal::from_str("0.0025").unwrap());
-        let payload = minus_fee.to_be_bytes().unwrap();
-        assert_eq!(665000, u64::from_be_bytes(payload));
+        let payload = minus_fee.to_be_bytes(8).unwrap();
+        assert_eq!(665000, u64::from_be_bytes(payload.try_into().unwrap()));
+    }
+
+    #[test]
+    fn round() {
+        let n = OrderRate::new("26.249999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999996325").expect("Couldn't create OrderRate.");
+        assert_eq!(n.round(3), OrderRate::new("26.25").unwrap());
+        assert_eq!(n.round(2), OrderRate::new("26.25").unwrap());
+        assert_eq!(n.round(1), OrderRate::new("26.2").unwrap());
+        assert_eq!(n.round(0), OrderRate::new("26.0").unwrap());
+        let n = OrderRate::new("14.45652173").unwrap();
+        assert_eq!(n.round(7), OrderRate::new("14.4565217").unwrap());
+        assert_eq!(n.round(6), OrderRate::new("14.456522").unwrap());
+        assert_eq!(n.round(0), OrderRate::new("14.0").unwrap());
     }
 }

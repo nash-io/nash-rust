@@ -59,7 +59,7 @@ impl FillOrder {
     }
 
     /// Serialize FillOrder payload to bytes interpretable by the Ethereum smart contract
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+    pub fn to_bytes(&self, order_precision: u32, fee_precision: u32) -> Result<Vec<u8>> {
         Ok([
             &self.prefix.to_bytes()[..],
             &self.address.to_bytes()[..],
@@ -68,17 +68,17 @@ impl FillOrder {
             &self.nonce_from.to_be_bytes()[..],
             &self.nonce_to.to_be_bytes()[..],
             &self.amount.to_be_bytes()?[..],
-            &self.min_order.to_be_bytes()?[..],
-            &self.max_order.to_be_bytes()?[..],
-            &self.fee_rate.to_be_bytes()?[..],
+            &self.min_order.to_be_bytes(order_precision, fee_precision)?[..],
+            &self.max_order.to_be_bytes(order_precision, fee_precision)?[..],
+            &self.fee_rate.to_be_bytes(order_precision, fee_precision)?[..],
             &self.order_nonce.to_be_bytes()[..],
         ]
         .concat())
     }
 
     /// Serialize FillOrder payload to bytes as a hex string, interpretable by a smart contract
-    pub fn to_hex(&self) -> Result<String> {
-        Ok(hex::encode(self.to_bytes()?).to_uppercase())
+    pub fn to_hex(&self, order_precision: u32, fee_precision: u32) -> Result<String> {
+        Ok(hex::encode(self.to_bytes(order_precision, fee_precision)?).to_uppercase())
     }
 
     pub fn from_hex(hex_str: &str) -> Result<Self> {
@@ -112,8 +112,8 @@ impl FillOrder {
     }
 
     /// Hash a FillOrder for signing with an Ethereum private key or Nash MPC protocol
-    pub fn hash(&self) -> Result<BigInt> {
-        let bytes = self.to_bytes()?;
+    pub fn hash(&self, order_precision: u32, fee_precision: u32) -> Result<BigInt> {
+        let bytes = self.to_bytes(order_precision, fee_precision)?;
         Ok(hash_eth_message(&bytes))
     }
 
@@ -121,8 +121,10 @@ impl FillOrder {
     pub fn to_blockchain_signature(
         &self,
         signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<place_limit_order::BlockchainSignature> {
-        let payload_hash = self.hash()?;
+        let payload_hash = self.hash(order_precision, fee_precision)?;
         let (sig, r, pub_key) = signer.sign_child_key(payload_hash, Blockchain::Ethereum)?;
         let graphql_output = place_limit_order::BlockchainSignature {
             blockchain: place_limit_order::Blockchain::ETH,
@@ -138,8 +140,10 @@ impl FillOrder {
     pub fn to_market_blockchain_signature(
         &self,
         signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<place_market_order::BlockchainSignature> {
-        let payload_hash = self.hash()?;
+        let payload_hash = self.hash(order_precision, fee_precision)?;
         let (sig, r, pub_key) = signer.sign_child_key(payload_hash, Blockchain::Ethereum)?;
         let graphql_output = place_market_order::BlockchainSignature {
             blockchain: place_market_order::Blockchain::ETH,
@@ -171,9 +175,9 @@ mod tests {
             Rate::MaxFeeRate,
             Nonce::Value(23),
         );
-        let order_hex = order.to_hex().unwrap();
+        let order_hex = order.to_hex(8, 8).unwrap();
         let parsed_order = FillOrder::from_hex(&order_hex).unwrap();
-        let to_hex_again = parsed_order.to_hex().unwrap();
+        let to_hex_again = parsed_order.to_hex(8, 8).unwrap();
         println!("{:?}", order);
         println!("{:?}", parsed_order);
         assert_eq!(order_hex, to_hex_again);

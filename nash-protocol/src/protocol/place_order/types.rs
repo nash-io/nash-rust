@@ -199,7 +199,10 @@ impl NashProtocol for LimitOrderRequest {
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
         let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
-        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
+        let market = state.get_market(&self.market)?;
+        let order_precision = 8;
+        let fee_precision = market.min_trade_size_b.asset.precision;
+        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?, order_precision, fee_precision)?;
         let json = serializable_to_json(&query);
         json
     }
@@ -268,7 +271,10 @@ impl NashProtocol for MarketOrderRequest {
         let nonces = builder.make_payload_nonces(state.clone(), time).await?;
         let state = state.read().await;
         let affiliate = state.affiliate_code.clone();
-        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?)?;
+        let market = state.get_market(&self.market)?;
+        let order_precision = 8;
+        let fee_precision = market.min_trade_size_b.asset.precision;
+        let query = builder.signed_graphql_request(nonces, time, affiliate, state.signer()?, order_precision, fee_precision)?;
         serializable_to_json(&query)
     }
 

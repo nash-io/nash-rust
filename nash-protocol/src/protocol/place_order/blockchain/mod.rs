@@ -17,9 +17,9 @@ pub enum FillOrder {
 }
 
 impl FillOrder {
-    pub fn to_hex(&self) -> Result<String> {
+    pub fn to_hex(&self, order_precision: u32, fee_precision: u32) -> Result<String> {
         match self {
-            Self::Ethereum(fill_order) => fill_order.to_hex(),
+            Self::Ethereum(fill_order) => fill_order.to_hex(order_precision, fee_precision),
             Self::Bitcoin(_) => Ok("".to_string()),
             Self::NEO(fill_order) => fill_order.to_hex(),
         }
@@ -28,9 +28,11 @@ impl FillOrder {
     pub fn to_blockchain_signature(
         &self,
         signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<place_limit_order::BlockchainSignature> {
         match self {
-            Self::Ethereum(fill_order) => fill_order.to_blockchain_signature(signer),
+            Self::Ethereum(fill_order) => fill_order.to_blockchain_signature(signer, order_precision, fee_precision),
             Self::Bitcoin(fill_order) => fill_order.to_blockchain_signature(signer),
             Self::NEO(fill_order) => fill_order.to_blockchain_signature(signer),
         }
@@ -39,9 +41,11 @@ impl FillOrder {
     pub fn to_market_blockchain_signature(
         &self,
         signer: &Signer,
+        order_precision: u32,
+        fee_precision: u32
     ) -> Result<place_market_order::BlockchainSignature> {
         match self {
-            Self::Ethereum(fill_order) => fill_order.to_market_blockchain_signature(signer),
+            Self::Ethereum(fill_order) => fill_order.to_market_blockchain_signature(signer, order_precision, fee_precision),
             Self::Bitcoin(fill_order) => fill_order.to_market_blockchain_signature(signer),
             Self::NEO(fill_order) => fill_order.to_market_blockchain_signature(signer),
         }

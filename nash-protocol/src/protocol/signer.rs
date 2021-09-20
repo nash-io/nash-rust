@@ -70,7 +70,7 @@ impl Signer {
             ECScalar::from(&self.api_keys.keys.payload_signing_key).expect("Invalid key");
         let key = SigningKey::from_bytes(&signing_key.to_vec()).expect("invalid secret key");
         let sig_pre: Signature = key.try_sign(request.as_bytes()).expect("signing failed");
-        let sig = sig_pre.to_asn1();
+        let sig = sig_pre.to_der();
         RequestPayloadSignature {
             signed_digest: hex::encode(sig),
             public_key: self.request_payload_public_key(),

@@ -1,12 +1,12 @@
 [workspace]
 members = [
-"nash-protocol",
-"nash-native-client",
-"mpc-wallet/nash-mpc",
+    "nash-protocol",
+    "nash-native-client",
+    "mpc-wallet/nash-mpc",
 ]
 
 exclude = [
-"mpc-wallet/mpc-wallet-wasm",
-"mpc-wallet/mpc-wallet-elixir",
-"mpc-wallet/mpc-wallet-nodejs/native",
+    "mpc-wallet/mpc-wallet-wasm",
+    "mpc-wallet/mpc-wallet-elixir",
+    "mpc-wallet/mpc-wallet-nodejs",
 ]

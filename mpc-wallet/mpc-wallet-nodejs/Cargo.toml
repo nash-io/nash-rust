@@ -1,0 +1,26 @@
+[package]
+name = "mpc-wallet-nodejs"
+version = "1.1.4"
+license = "ISC"
+edition = "2018"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["secp256k1"]
+k256 = ["nash-mpc/k256"]
+secp256k1 = ["nash-mpc/secp256k1"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nash-mpc = { version = "1.2.5-alpha.0", path = '../nash-mpc', default-features = false, features = ["rust_gmp"] }
+serde_json = "1.0"
+
+[dependencies.neon]
+version = "0.9"
+default-features = false
+features = ["napi-6"]
+

@@ -33,7 +33,7 @@ use zeroize::Zeroizing;
 pub const PAILLIER_KEY_SIZE: usize = 2048;
 
 /// supported curves
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Curve {
     Secp256k1,
     Secp256r1,

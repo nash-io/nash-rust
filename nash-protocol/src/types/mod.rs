@@ -3,6 +3,7 @@
 pub mod blockchain;
 pub mod exchange;
 pub mod keys;
+pub mod market_pair;
 
 pub use blockchain::{eth, neo, AssetOrCrosschain, Prefix, PublicKey};
 pub use self::exchange::{

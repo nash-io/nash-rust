@@ -25,7 +25,7 @@ pub enum SubscriptionRequest {
 
 /// Wrapper for incoming subscription data supported on Nash. Required only for current version
 /// of openlimits subscription logic
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SubscriptionResponse {
     Orderbook(updated_orderbook::SubscribeOrderbookResponse),
     Ticker(updated_ticker::SubscribeTickerResponse),

@@ -9,6 +9,7 @@ use crate::types::{BuyOrSell, DateTimeRange};
 use crate::protocol::subscriptions::updated_account_orders::SubscribeAccountOrders;
 use chrono::Utc;
 use std::str::FromStr;
+use crate::types::market_pair::MarketPair;
 
 pub fn try_split_paginator(
     paginator: Option<Paginator>,
@@ -44,6 +45,7 @@ pub fn try_split_paginator(
 impl From<&OrderBookRequest> for nash_protocol::protocol::orderbook::OrderbookRequest {
     fn from(req: &OrderBookRequest) -> Self {
         let market = req.market_pair.clone();
+        let market = MarketPair::from(market).0;
         Self { market }
     }
 }
@@ -93,6 +95,7 @@ impl From<&CancelAllOrdersRequest> for nash_protocol::protocol::cancel_all_order
             .market_pair
             .clone()
             .expect("Market pair is a required param for Nash");
+        let market = MarketPair::from(market).0;
         Self { market }
     }
 }
@@ -132,13 +135,9 @@ for nash_protocol::protocol::list_account_trades::ListAccountTradesRequest
     type Error = OpenLimitsError;
     fn try_from(req: &TradeHistoryRequest) -> openlimits_exchange::shared::Result<Self> {
         let (before, limit, range) = try_split_paginator(req.paginator.clone())?;
-
-        Ok(Self {
-            market: req.market_pair.clone(),
-            before,
-            limit,
-            range,
-        })
+        let market = req.market_pair.clone();
+        let market = market.map(|market| MarketPair::from(market).0);
+        Ok(Self { market, before, limit, range })
     }
 }
 
@@ -164,7 +163,7 @@ impl From<nash_protocol::types::Trade> for Trade {
 
         Self {
             id: resp.id,
-            created_at: resp.executed_at.timestamp_millis() as u64,
+            created_at: (resp.executed_at.timestamp_millis() as u64).to_string(),
             fees: Some(fees),
             liquidity: Some(resp.account_side.into()),
             market_pair: resp.market.clone(),
@@ -201,9 +200,11 @@ for nash_protocol::protocol::list_candles::ListCandlesRequest
     type Error = OpenLimitsError;
     fn try_from(req: &GetHistoricRatesRequest) -> openlimits_exchange::shared::Result<Self> {
         let (before, limit, range) = try_split_paginator(req.paginator.clone())?;
+        let market = req.market_pair.clone();
+        let market = MarketPair::from(market).0;
 
         Ok(Self {
-            market: req.market_pair.clone(),
+            market,
             chronological: None,
             before,
             interval: Some(
@@ -285,9 +286,11 @@ for nash_protocol::protocol::list_account_orders::ListAccountOrdersRequest
     type Error = OpenLimitsError;
     fn try_from(req: &GetOrderHistoryRequest) -> openlimits_exchange::shared::Result<Self> {
         let (before, limit, range) = try_split_paginator(req.paginator.clone())?;
+        let market = req.market_pair.clone();
+        let market = market.map(|market| MarketPair::from(market).0);
 
         Ok(Self {
-            market: req.market_pair.clone(),
+            market,
             before,
             limit,
             range,
@@ -364,6 +367,7 @@ impl TryFrom<OrderStatus> for nash_protocol::types::OrderStatus {
 impl From<&GetPriceTickerRequest> for nash_protocol::protocol::get_ticker::TickerRequest {
     fn from(req: &GetPriceTickerRequest) -> Self {
         let market = req.market_pair.clone();
+        let market = MarketPair::from(market).0;
 
         Self { market }
     }
@@ -435,8 +439,9 @@ impl TryFrom<OrderType> for nash_protocol::types::OrderType {
 
 impl From<AccountOrders> for SubscribeAccountOrders {
     fn from(account_orders: AccountOrders) -> Self {
+        let market = account_orders.market.map(|market| MarketPair::from(market.clone()).0);
         Self {
-            market: account_orders.market.clone(),
+            market,
             order_type: account_orders.order_type.map(|x| {
                 x.iter()
                     .cloned()
@@ -465,28 +470,36 @@ impl From<AccountOrders> for SubscribeAccountOrders {
 impl From<Subscription> for nash_protocol::protocol::subscriptions::SubscriptionRequest {
     fn from(sub: Subscription) -> Self {
         match sub {
-            Subscription::OrderBookUpdates(market) => Self::Orderbook(
-                nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook {
-                    market,
-                },
-            ),
-            Subscription::Trades(market) => Self::Trades(
-                nash_protocol::protocol::subscriptions::trades::SubscribeTrades { market },
-            ),
-            Subscription::AccountOrders(account_orders) => Self::AccountOrders(
-                account_orders.into()
-            ),
-            Subscription::AccountTrades(market_name) => Self::AccountTrades(
-                nash_protocol::protocol::subscriptions::new_account_trades::SubscribeAccountTrades {
-                    market_name
-                }
-            ),
-            Subscription::AccountBalance(symbol) => Self::AccountBalances(
-                nash_protocol::protocol::subscriptions::updated_account_balances::SubscribeAccountBalances {
-                    symbol
-                }
-            ),
-            _ => panic!("Not supported Subscription"),
+            Subscription::OrderBookUpdates(market) => {
+                let market = MarketPair::from(market).0;
+                Self::Orderbook(
+                    nash_protocol::protocol::subscriptions::updated_orderbook::SubscribeOrderbook {
+                        market,
+                    },
+                )
+            },
+            Subscription::Trades(market) => {
+                let market = MarketPair::from(market).0;
+                Self::Trades(
+                    nash_protocol::protocol::subscriptions::trades::SubscribeTrades { market },
+                )
+            },
+            // Subscription::AccountOrders(account_orders) => Self::AccountOrders(
+            //     account_orders.into()
+            // ),
+            // Subscription::AccountTrades(market_name) => {
+            //     let market = MarketPair::from(market).0;
+            //     Self::AccountTrades(
+            //         nash_protocol::protocol::subscriptions::new_account_trades::SubscribeAccountTrades {
+            //             market_name
+            //         }
+            //     )
+            // },
+            // Subscription::AccountBalance(symbol) => Self::AccountBalances(
+            //     nash_protocol::protocol::subscriptions::updated_account_balances::SubscribeAccountBalances {
+            //         symbol
+            //     }
+            // ),
         }
     }
 }

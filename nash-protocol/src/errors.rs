@@ -26,6 +26,7 @@ impl std::fmt::Display for ProtocolError {
 }
 
 use bigdecimal::ParseBigDecimalError;
+
 impl From<ParseBigDecimalError> for ProtocolError {
     fn from(_err: ParseBigDecimalError) -> Self {
         ProtocolError("Error converting to BigDecimal")

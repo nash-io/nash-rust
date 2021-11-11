@@ -68,7 +68,7 @@ async fn init_sandbox_client() -> Client {
 async fn eth_btc_buy_order() {
     let client = init_client().await;
     println!("{:#?}", client.run(CancelAllOrders {market: "eth_btc".into()}).await);
-    let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0));
+    let orders = (1..10).into_iter().map(|i| format!("{}", (i as f64)/1000.0));
     let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
         price,
         allow_taker: true,
@@ -89,7 +89,7 @@ async fn eth_btc_buy_order() {
 async fn neo_usdc_buy_order() {
     let client = init_client().await;
     println!("{:#?}", client.run(CancelAllOrders {market: "neo_usdc".into()}).await);
-    let orders = (1..1000).into_iter().map(|i| format!("{}", (i as f64)/1000.0 + 5.0));
+    let orders = (1..10).into_iter().map(|i| format!("{}", (i as f64)/1000.0 + 5.0));
     let orders: Vec<_> = orders.map(|price| LimitOrderRequest {
         price,
         allow_taker: true,

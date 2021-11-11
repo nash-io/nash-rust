@@ -1,7 +1,7 @@
 pub use crate as nash_protocol;
 use openlimits_exchange::model::{OrderBookRequest, OrderBookResponse, AskBid, CancelOrderRequest, OrderCanceled, CancelAllOrdersRequest, OrderType, Order, TradeHistoryRequest, Trade, Side, Liquidity, GetHistoricRatesRequest, GetHistoricTradesRequest, Interval, Candle, GetOrderHistoryRequest, OrderStatus, GetPriceTickerRequest, Ticker, GetOrderRequest, TimeInForce, Paginator};
 use openlimits_exchange::{OpenLimitsError, MissingImplementationContent};
-use openlimits_exchange::model::websocket::{AccountOrders, Subscription};
+use openlimits_exchange::model::websocket::{AccountOrders, Subscription, WebSocketResponse, OpenLimitsWebSocketMessage};
 use openlimits_exchange::shared::{Result, timestamp_to_utc_datetime};
 use rust_decimal::Decimal;
 use std::convert::{TryFrom, TryInto};
@@ -10,6 +10,9 @@ use crate::protocol::subscriptions::updated_account_orders::SubscribeAccountOrde
 use chrono::Utc;
 use std::str::FromStr;
 use crate::types::market_pair::MarketPair;
+use crate::protocol::subscriptions::SubscriptionResponse;
+use crate::protocol::subscriptions::updated_orderbook::SubscribeOrderbookResponse;
+use crate::protocol::subscriptions::trades::TradesResponse;
 
 pub fn try_split_paginator(
     paginator: Option<Paginator>,
@@ -464,6 +467,40 @@ impl From<AccountOrders> for SubscribeAccountOrders {
                     .collect()
             }),
         }
+    }
+}
+
+impl TryFrom<SubscriptionResponse> for WebSocketResponse<SubscriptionResponse> {
+    type Error = OpenLimitsError;
+
+    fn try_from(value: SubscriptionResponse) -> Result<Self> {
+        match value {
+            SubscriptionResponse::Orderbook(orders) => {
+                Ok(WebSocketResponse::Generic(orders.into()))
+            },
+            SubscriptionResponse::Trades(trades) => {
+                Ok(WebSocketResponse::Generic(trades.into()))
+            },
+            _ => Ok(WebSocketResponse::Raw(value))
+        }
+    }
+}
+
+impl From<TradesResponse> for OpenLimitsWebSocketMessage {
+    fn from(from: TradesResponse) -> Self {
+        let trades = from.trades.into_iter().map(|x| x.into()).collect();
+        Self::Trades(trades)
+    }
+}
+
+impl From<SubscribeOrderbookResponse> for OpenLimitsWebSocketMessage {
+    fn from(from: SubscribeOrderbookResponse) -> Self {
+        let asks = from.asks.into_iter().map(|orderbook| orderbook.into()).collect();
+        let bids = from.bids.into_iter().map(|orderbook| orderbook.into()).collect();
+        let last_update_id = Some(from.last_update_id as u64);
+        let update_id = Some(from.update_id as u64);
+        let orderbook = OrderBookResponse { asks, bids, last_update_id, update_id };
+        Self::OrderBook(orderbook)
     }
 }
 

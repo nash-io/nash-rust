@@ -24,8 +24,7 @@ rand = "0.8"
 async-recursion = "0.3"
 async-trait = "0.1"
 openlimits-exchange = "0.3.0"
-#nash-protocol = { version = "0.2.0", default-features = false }
-nash-protocol = { path = "../nash-protocol", default-features = false }
+nash-protocol = { version = "0.3.0", default-features = false }
 tokio = { version = "1.0", features = ["full"] }
 tokio-native-tls = { version = "0.3" }
 tokio-tungstenite = { version = "0.13", features = ["tls"] }

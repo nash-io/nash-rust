@@ -12,6 +12,7 @@ use crate::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use crate::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
 use crate::curves::traits::{ECPoint, ECScalar};
 use chrono::prelude::{DateTime, Utc};
+use chrono::Duration;
 use crossbeam_queue::SegQueue;
 use lazy_static::__Deref;
 #[cfg(feature = "num_bigint")]
@@ -333,22 +334,29 @@ pub fn fill_rpool_secp256k1(
 
 /// get number of r-values in pool
 pub fn get_rpool_size(curve: Curve) -> Result<usize, ()> {
-    // FIXME: Talk to Ethan about this
     if curve == Curve::Secp256k1 {
         // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
-        /*RPOOL_SECP256K1
-            .lock()
-            .unwrap()
-            .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
-        Ok(RPOOL_SECP256K1.lock().unwrap().len())*/
+        for _ in 0..RPOOL_SECP256K1.len() {
+            let pool_entry = match RPOOL_SECP256K1.pop() {
+                Option::Some(val) => val,
+                Option::None => continue,
+            };
+            if Utc::now() - pool_entry.1.0 < Duration::hours(48) {
+                RPOOL_SECP256K1.push(pool_entry);
+            }
+        }
         Ok(RPOOL_SECP256K1.len())
     } else if curve == Curve::Secp256r1 {
         // remove all entries that are older than 48 hours. The server expires values after 72 hours, so 24 hours safety margin should be fine.
-        /*RPOOL_SECP256R1
-            .lock()
-            .unwrap()
-            .retain(|_, v| Utc::now() - v.0 < Duration::hours(48));
-        Ok(RPOOL_SECP256R1.len())*/
+        for _ in 0..RPOOL_SECP256R1.len() {
+            let pool_entry = match RPOOL_SECP256R1.pop() {
+                Option::Some(val) => val,
+                Option::None => continue,
+            };
+            if Utc::now() - pool_entry.1.0 < Duration::hours(48) {
+                RPOOL_SECP256R1.push(pool_entry);
+            }
+        }
         Ok(RPOOL_SECP256R1.len())
     } else {
         Err(())

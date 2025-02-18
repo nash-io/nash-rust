@@ -19,6 +19,7 @@ wasm = ["chrono/wasmbind", "getrandom/js"]
 
 [dependencies]
 chrono = "0.4"
+curve25519-dalek = "3"
 generic-array = "0.14"
 getrandom = "0.2"
 crossbeam-queue = "0.3"

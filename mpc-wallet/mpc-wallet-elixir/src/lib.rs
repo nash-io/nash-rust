@@ -1,12 +1,15 @@
 /*
  * Elixir NIFs to MPC-based API keys
  */
+use nash_mpc::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 
 #[cfg(feature = "secp256k1")]
 use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
 use nash_mpc::curves::secp256_k1_rust::{Secp256k1Point, Secp256k1Scalar};
 use nash_mpc::curves::secp256_r1::{Secp256r1Point, Secp256r1Scalar};
+use nash_mpc::curves::traits::ECScalar;
+
 use nash_mpc::paillier_common::{DecryptionKey, EncryptionKey};
 use nash_mpc::rust_bigint::traits::Converter;
 use nash_mpc::rust_bigint::BigInt;
@@ -15,7 +18,7 @@ use rustler::{Encoder, Env, Error, Term};
 
 rustler::init!(
     "Elixir.Server.MPCwallet",
-    [generate_paillier_keypair_and_proof, dh_rpool, complete_sig, verify, compute_presig, fill_rpool, dh_init, init_api_childkey_creator, init_api_childkey_creator_with_verified_paillier, verify_paillier, create_api_childkey, publickey_from_secretkey]
+    [generate_paillier_keypair_and_proof, dh_rpool, complete_sig, complete_sig_eddsa, verify, compute_presig, fill_rpool, dh_init, init_api_childkey_creator, init_api_childkey_creator_with_verified_paillier, verify_paillier, create_api_childkey, publickey_from_secretkey]
 );
 
 mod atoms {
@@ -110,8 +113,34 @@ fn dh_rpool<'a>(env: Env<'a>, client_dh_publics_str: String, curve_str: String) 
                     return Ok((
                         atoms::error(),
                         &"error: server_dh_secrets and client_dh_publics have different lengths",
+                    ).encode(env))
+                }
+            };
+        server_dh_publics_json = serde_json::to_string(&server_dh_publics).unwrap();
+        rpool_new_json = serde_json::to_string(&rpool_new).unwrap();
+    } else if curve == common::Curve::Curve25519 {
+        let client_dh_publics: Vec<Ed25519Point> =
+            match serde_json::from_str(&client_dh_publics_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Ok(
+                        (atoms::error(), &"error deserializing client_dh_publics").encode(env)
                     )
-                        .encode(env))
+                }
+            };
+        let (server_dh_secrets, server_dh_publics) =
+            match common::dh_init_curve25519(client_dh_publics.len()) {
+                Ok(v) => v,
+                Err(_) => return Ok((atoms::error(), &"error: n too big").encode(env)),
+            };
+        let rpool_new =
+            match server::compute_rpool_curve25519(&server_dh_secrets, &client_dh_publics) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Ok((
+                        atoms::error(),
+                        &"error: server_dh_secrets and client_dh_publics have different lengths",
+                    ).encode(env))
                 }
             };
         server_dh_publics_json = serde_json::to_string(&server_dh_publics).unwrap();
@@ -169,6 +198,101 @@ fn complete_sig<'a>(env: Env<'a>, paillier_sk_str: String, presig_str: String, r
         .encode(env))
 }
 
+
+/// finalize presignature to normal EdDSA signature
+/// input: server_secret_share, presig, r, r_server, pubkey, msg
+/// output: r, s
+/// 
+/// 
+#[rustler::nif]
+fn complete_sig_eddsa<'a>(env: Env<'a>, server_secret_share_str: String, presig_str: String, r_str: String, r_server_str: String, pubkey: String, msg_str: String) -> Result<Term<'a>, Error> {
+    let server_secret_share_str: String = match serde_json::from_str(&server_secret_share_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing server secret share string").encode(env)),
+    };
+    let server_secret_share = match BigInt::from_hex(&server_secret_share_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing server_secret_share").encode(env)),
+    };
+
+
+    let presig_str: String = match serde_json::from_str(&presig_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing presig string").encode(env)),
+    };
+    let presig = match BigInt::from_hex(&presig_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing presig_str").encode(env)),
+    };
+
+
+
+    let r_str: String = match serde_json::from_str(&r_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing r string").encode(env)),
+    };
+    let r = match BigInt::from_hex(&r_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing r").encode(env)),
+    };
+
+
+
+    let r_server_str: String = match serde_json::from_str(&r_server_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing r_server string").encode(env)),
+    };
+    let r_server_int = match BigInt::from_hex(&r_server_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing r_server_str").encode(env)),
+    };    
+    let r_server: Ed25519Scalar = match ECScalar::from(&r_server_int) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing r_server").encode(env)),
+    };
+
+
+    let pubkey: String = match serde_json::from_str(&pubkey) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing pubkey string").encode(env)),
+    };
+
+
+    let msg_str: String = match serde_json::from_str(&msg_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing msg string").encode(env)),
+    };
+    let msg = match BigInt::from_hex(&msg_str) {
+        Ok(v) => v,
+        Err(_) => return Ok((atoms::error(), &"error deserializing msg").encode(env)),
+    };
+
+
+
+    let s =
+        match server::complete_sig_eddsa(server_secret_share, &presig, &r, r_server, &pubkey, &msg)
+        {
+            Ok(v) => v,
+            Err(_) => return Ok((atoms::error(), &"error: completing signature failed").encode(env)),
+        };
+    // add leading zeros if necessary
+    // (
+    //     atoms::ok(),
+    //     &format!("{:0>64}", r.to_hex()),
+    //     &format!("{:0>64}", s.to_hex()),
+    // )
+    //     .encode(env)
+
+    // add leading zeros if necessary
+    Ok((
+        atoms::ok(),
+        &format!("{:0>64}", r.to_hex()),
+        &format!("{:0>64}", s.to_hex()),
+    )
+        .encode(env))
+}
+
+
 /// verify signature for a message under given public key
 /// input: r, s, pubkey, msg_hash, curve
 /// output: ok|error
@@ -224,6 +348,13 @@ fn dh_init<'a>(env: Env<'a>, n: usize, curve_str: String) -> Result<Term<'a>, Er
         };
         dh_secrets_json = serde_json::to_string(&dh_secrets).unwrap();
         dh_publics_json = serde_json::to_string(&dh_publics).unwrap();
+    } else if curve == common::Curve::Curve25519 {
+        let (dh_secrets, dh_publics) = match common::dh_init_curve25519(n) {
+            Ok(v) => v,
+            Err(_) => return Ok((atoms::error(), &"error: n too big").encode(env)),
+        };
+        dh_secrets_json = serde_json::to_string(&dh_secrets).unwrap();
+        dh_publics_json = serde_json::to_string(&dh_publics).unwrap();
     } else {
         return Ok((atoms::error(), &"error: invalid curve").encode(env));
     }
@@ -252,13 +383,24 @@ fn compute_presig<'a>(env: Env<'a>, api_childkey_str: String, msg_hash_str: Stri
         Ok(v) => v,
         Err(_) => return Ok((atoms::error(), &"error getting value from rpool").encode(env)),
     };
-    // add leading zeros if necessary
-    Ok((
-        atoms::ok(),
-        &format!("{:0>1024}", presig.to_hex()),
-        &format!("{:0>66}", r.to_hex()),
-    )
-        .encode(env))
+    if curve == common::Curve::Secp256k1 || curve == common::Curve::Secp256r1 {
+        // add leading zeros if necessary
+	    Ok((
+    		atoms::ok(),
+                &format!("{:0>1024}", presig.to_hex()),
+                &format!("{:0>66}", r.to_hex()),
+	    ).encode(env))
+        
+    } else if curve == common::Curve::Curve25519 {
+        // add leading zeros if necessary
+        Ok((
+            atoms::ok(),
+                &format!("{:0>64}", presig.to_hex()),
+                &format!("{:0>64}", r.to_hex()),
+            ).encode(env))    
+    } else {
+        Ok((atoms::error(), &"invalid curve").encode(env))
+    }
 }
 
 /// fill pool of r-values from dh secret and public values
@@ -318,6 +460,29 @@ fn fill_rpool<'a>(env: Env<'a>, server_dh_secrets_str: String, client_dh_publics
                 }
             };
         match client::fill_rpool_secp256r1(server_dh_secrets, &client_dh_publics, &paillier_pk) {
+            Ok(v) => v,
+            Err(_) => return Ok((atoms::error(), &"error filling rpool").encode(env)),
+        };
+    } else if curve == common::Curve::Curve25519 {
+        let server_dh_secrets: Vec<Ed25519Scalar> =
+            match serde_json::from_str(&server_dh_secrets_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Ok(
+                        (atoms::error(), &"error deserializing server_dh_secrets").encode(env)
+                    )
+                }
+            };
+        let client_dh_publics: Vec<Ed25519Point> =
+            match serde_json::from_str(&client_dh_publics_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Ok(
+                        (atoms::error(), &"error deserializing client_dh_publics").encode(env)
+                    )
+                }
+            };
+        match client::fill_rpool_curve25519(server_dh_secrets, &client_dh_publics) {
             Ok(v) => v,
             Err(_) => return Ok((atoms::error(), &"error filling rpool").encode(env)),
         };

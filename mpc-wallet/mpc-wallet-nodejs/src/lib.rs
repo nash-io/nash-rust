@@ -16,11 +16,13 @@ use nash_mpc::rust_bigint::BigInt;
 use nash_mpc::{client, common};
 use neon::result::Throw;
 
+
 fn get_curve(cx: &mut FunctionContext, argument: i32) -> NeonResult<common::Curve> {
     let curve = cx.argument::<JsString>(argument)?.value(cx);
     match curve.as_str() {
         "Secp256k1" => Ok(common::Curve::Secp256k1),
         "Secp256r1" => Ok(common::Curve::Secp256r1),
+        "Curve25519" => Ok(common::Curve::Curve25519),
         _ => Err(Throw)
     }
 }

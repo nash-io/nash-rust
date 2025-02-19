@@ -2,6 +2,7 @@
  * WASM client interface to MPC-based API keys
  */
 
+ use nash_mpc::curves::curve25519::{Ed25519Point, Ed25519Scalar};
 #[cfg(feature = "secp256k1")]
 use nash_mpc::curves::secp256_k1::{Secp256k1Point, Secp256k1Scalar};
 #[cfg(feature = "k256")]
@@ -30,6 +31,12 @@ pub fn dh_init(n: usize, curve_str: &str) -> String {
         serde_json::to_string(&(true, &dh_secrets, &dh_publics)).unwrap()
     } else if curve == common::Curve::Secp256r1 {
         let (dh_secrets, dh_publics) = match common::dh_init_secp256r1(n) {
+            Ok(v) => v,
+            Err(_) => return serde_json::to_string(&(false, &"error: n is too big.")).unwrap(),
+        };
+        serde_json::to_string(&(true, &dh_secrets, &dh_publics)).unwrap()
+    } else if curve == common::Curve::Curve25519 {
+        let (dh_secrets, dh_publics) = match common::dh_init_curve25519(n) {
             Ok(v) => v,
             Err(_) => return serde_json::to_string(&(false, &"error: n is too big.")).unwrap(),
         };
@@ -221,6 +228,33 @@ pub fn fill_rpool(
             Ok(v) => v,
             Err(_) => return serde_json::to_string(&(false, &"error filling rpool")).unwrap(),
         };
+    } else if curve == common::Curve::Curve25519 {
+        let client_dh_secrets: Vec<Ed25519Scalar> =
+            match serde_json::from_str(&client_dh_secrets_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return serde_json::to_string(&(
+                        false,
+                        &"error deserializing client_dh_secrets",
+                    ))
+                    .unwrap()
+                }
+            };
+        let server_dh_publics: Vec<Ed25519Point> =
+            match serde_json::from_str(&server_dh_publics_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    return serde_json::to_string(&(
+                        false,
+                        &"error deserializing client_dh_publics",
+                    ))
+                    .unwrap()
+                }
+            };
+        match client::fill_rpool_curve25519(client_dh_secrets, &server_dh_publics) {
+            Ok(v) => v,
+            Err(_) => return serde_json::to_string(&(false, &"error filling rpool")).unwrap(),
+        };
     } else {
         return serde_json::to_string(&(false, &"error: invalid curve")).unwrap();
     }
@@ -272,13 +306,25 @@ pub fn compute_presig(api_childkey_str: &str, msg_hash_str: &str, curve_str: &st
             .unwrap()
         }
     };
-    // add leading zeros if necessary
-    serde_json::to_string(&(
-        &true,
-        &format!("{:0>1024}", presig.to_hex()),
-        &format!("{:0>66}", r.to_hex()),
-    ))
-    .unwrap()
+    if curve == common::Curve::Secp256k1 || curve == common::Curve::Secp256r1 {
+        // add leading zeros if necessary
+        serde_json::to_string(&(
+            &true,
+            &format!("{:0>1024}", presig.to_hex()),
+            &format!("{:0>66}", r.to_hex()),
+        ))
+        .unwrap()
+    } else if curve == common::Curve::Curve25519 {
+        // add leading zeros if necessary
+        serde_json::to_string(&(
+            &true,
+            &format!("{:0>64}", presig.to_hex()),
+            &format!("{:0>64}", r.to_hex()),
+        ))
+        .unwrap()
+    } else {
+        serde_json::to_string(&(false, &"invalid curve", curve_str)).unwrap()
+    }
 }
 
 /// Verify signature.

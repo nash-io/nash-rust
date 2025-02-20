@@ -1,3 +1,4 @@
+pub mod curve25519;
 #[cfg(feature = "secp256k1")]
 pub mod secp256_k1;
 #[cfg(feature = "k256")]

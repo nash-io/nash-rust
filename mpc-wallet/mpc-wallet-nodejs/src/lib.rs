@@ -210,6 +210,25 @@ fn compute_presig(api_childkey_str: String, msg_hash_str: String, curve: common:
     }
 }
 
+
+
+/// Derive public key from given secret key.
+/// Input: secret_key: full secret key, curve: Secp256k1 or Secp256r1 curve
+/// Output: public_key
+fn pubkey_from_secretkey(secret_key_str: String, curve: common::Curve) -> String {
+    let secret_key = match BigInt::from_hex(&secret_key_str) {
+        Ok(v) => v,
+        Err(_) => {
+            return serde_json::to_string(&(false, &"error deserializing secret_key")).unwrap()
+        }
+    };
+    let public_key = match common::publickey_from_secretkey(&secret_key, curve) {
+        Ok(v) => v,
+        Err(_) => return serde_json::to_string(&(false, &"error: invalid curve?")).unwrap(),
+    };
+    serde_json::to_string(&(&true, &public_key)).unwrap()
+}
+
 // EXPORTS
 
 fn dh_init_export(mut cx: FunctionContext) -> JsResult<JsString> {
@@ -243,18 +262,28 @@ fn compute_presig_export(mut cx: FunctionContext) -> JsResult<JsString> {
     Ok(cx.string(result))
 }
 
+fn pubkey_from_secretkey_export(mut cx: FunctionContext) -> JsResult<JsString> {
+    let secret_key_str = cx.argument::<JsString>(0)?.value(&mut cx);
+    let curve = get_curve(&mut cx, 1)?;
+    let result = pubkey_from_secretkey(secret_key_str, curve);
+    Ok(cx.string(result))
+}
+
+
+
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("dh_init", dh_init_export)?;
     cx.export_function("fill_rpool", fill_rpool_export)?;
     cx.export_function("get_rpool_size", get_rpool_size_export)?;
     cx.export_function("compute_presig", compute_presig_export)?;
+    cx.export_function("publickey_from_secretkey", pubkey_from_secretkey_export)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size};
+    use crate::{compute_presig, dh_init, fill_rpool, get_rpool_size,pubkey_from_secretkey};
     use nash_mpc::common::Curve;
 
     #[test]
@@ -555,6 +584,17 @@ mod tests {
         let (success, msg): (bool, String) = serde_json::from_str(&result).unwrap();
         assert_eq!(msg, "error deserializing msg_hash");
         assert!(!success);
+    }
+
+
+    #[test]
+    fn test_pubkey_from_secret_key_ed() {
+        let result = pubkey_from_secretkey(
+            "c788ac499227d0c9329e9e006b216290150cc99d41a174521f999930041410fa".to_string(),
+            Curve::Curve25519,
+        );
+        let (success, _): (bool, String) = serde_json::from_str(&result).unwrap();
+        assert!(success);
     }
     
 }
